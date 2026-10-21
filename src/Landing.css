@@ -1,0 +1,240 @@
+.site {
+  min-height: 100%;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.site-header,
+.site-footer,
+.hero,
+.panel {
+  width: min(1080px, calc(100% - 40px));
+  margin-inline: auto;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 0 8px;
+}
+
+.site-logo {
+  color: inherit;
+  font-weight: 700;
+  font-size: 18px;
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+
+.site-header .theme-control {
+  margin-left: 0;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  gap: 36px;
+  align-items: center;
+  padding: 48px 0 28px;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(40px, 5vw, 64px);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+
+.lede {
+  margin: 18px 0 0;
+  max-width: 46ch;
+  color: var(--label);
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.dropzone {
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px;
+  text-align: center;
+  border: 1.5px dashed var(--brand);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.06);
+}
+
+.dropzone.dragging {
+  background: var(--accent-soft);
+}
+
+.drop-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 680;
+  letter-spacing: -0.03em;
+}
+
+.dropzone p {
+  margin: 0;
+  max-width: 32ch;
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+
+.panel {
+  padding: 28px 0;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.panel > p {
+  margin: 0 0 18px;
+  max-width: 62ch;
+  color: var(--label);
+  line-height: 1.5;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.feature-grid article,
+.steps,
+.faq details,
+.session-list li {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.feature-grid article {
+  padding: 18px 18px 16px;
+}
+
+.feature-grid h3,
+.faq summary {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.feature-grid p,
+.faq p,
+.steps span {
+  margin: 0;
+  color: var(--label);
+  line-height: 1.5;
+}
+
+.steps {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 8px;
+  display: grid;
+  gap: 0;
+}
+
+.steps li {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+}
+
+.steps li + li {
+  border-top: 1px solid var(--line);
+}
+
+.faq {
+  display: grid;
+  gap: 10px;
+}
+
+.faq details {
+  padding: 14px 16px;
+}
+
+.faq summary {
+  cursor: pointer;
+}
+
+.faq p {
+  margin-top: 8px;
+}
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.session-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 16px;
+}
+
+.session-list a {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: inherit;
+  text-decoration: none;
+  padding: 8px 0;
+}
+
+.session-list a span,
+.site-footer {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.site-footer {
+  padding: 12px 0 40px;
+}
+
+.site .error {
+  margin: 14px 0 0;
+}
+
+@media (max-width: 800px) {
+  .hero,
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding-top: 28px;
+  }
+}

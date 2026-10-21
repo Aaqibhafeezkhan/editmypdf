@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Editor — Annotate, draw, and type on a PDF in your browser</title>
+    <meta
+      name="description"
+      content="Free browser PDF editor. Add text, draw with a pencil, mark shapes, and download the annotated PDF. Each file stays in this browser and opens at its own link."
+    />
+    <meta name="robots" content="index, follow" />
+    <meta property="og:title" content="PDF Editor — Annotate, draw, and type on a PDF in your browser" />
+    <meta
+      property="og:description"
+      content="Add text, drawings, and shapes to a PDF in the browser. Files stay on your device, and each document has its own link."
+    />
+    <meta property="og:type" content="website" />
+    <script>
+      try {
+        var stored = localStorage.getItem("pdf-editor:theme");
+        var theme = stored === "light" || stored === "dark" ? stored : "system";
+        var dark =
+          theme === "dark" ||
+          (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.appearance = dark ? "dark" : "light";
+        document.documentElement.style.colorScheme = dark ? "dark" : "light";
+      } catch (error) {}
+    </script>
+  </head>
+  <body>
+    <noscript>
+      <h1>PDF Editor</h1>
+      <p>
+        Annotate, draw, and type on a PDF in your browser. Add text and drawings, then download a
+        new PDF. Files stay on your device, and each document opens at its own link.
+      </p>
+    </noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
