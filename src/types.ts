@@ -215,6 +215,15 @@ export type PatchAnnotation = Base & {
   // Extra advance after every character, in page units, as the PDF set the run (character
   // spacing, or glyph advances wider than the converted font's own).
   letterSpacing: number;
+  // Extra advance after every space, in page units (the PDF's word spacing).
+  wordSpacing: number;
+  // Offsets of newlines in `text` that only exist because the page's column ran out of room. They
+  // keep the page's own line breaks until the text is edited, when they become spaces and the text
+  // flows again. Empty once edited.
+  softBreaks: number[];
+  // Extra advance after every space on each of the page's own lines, in page units, for as long
+  // as that line is untouched: a generator may stretch a line only part of the way to the column.
+  lineGaps: number[];
   wrap: boolean;
   // Styled runs when the text mixes faces (a bold or italic word inside a paragraph); empty for a
   // single-face patch, whose face is the fields above.

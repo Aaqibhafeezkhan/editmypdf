@@ -5,13 +5,25 @@ import { domText, offsetAt, placeCaret, selectionOffsets } from "./spanDom.ts";
 import { spansText } from "./textLayout.ts";
 import type { PatchAnnotation, TextSpan } from "./types.ts";
 
-// Editor for a text patch that mixes faces: a contentEditable block whose children are one <span>
-// per styled run. The DOM is owned here, not by React: every edit is intercepted before the browser
-// applies it, mapped into the span under the caret, and the spans are drawn again from the model.
+// Editor for a text patch: a contentEditable block with one <div> per line and one <span> per
+// styled run. The DOM is owned here, not by React: every edit is intercepted before the browser
+// applies it, mapped into the span under the caret, and the lines are drawn again from the model.
+// A block opens with the page's own line breaks; the ones it only broke for room are flagged soft
+// and, in a justified block, stretched to the column like the page did.
 
 type Model = { text: string; spans: TextSpan[] };
 
 type Snapshot = Model & { caret: number };
+
+type View = {
+  face: TextSpan;
+  align: PatchAnnotation["align"];
+  indent: number;
+  softBreaks: number[];
+  lineGaps: number[];
+  scale: number;
+  showLive: boolean;
+};
 
 type Props = {
   patch: PatchAnnotation;
@@ -29,28 +41,70 @@ type Props = {
 
 const HISTORY_LIMIT = 200;
 
-// Everything about the spans that decides how they are drawn.
-function spanKey(spans: TextSpan[]): string {
-  return spans
+type LineView = { pieces: { text: string; span: TextSpan }[]; soft: boolean };
+
+// Everything that decides how the editor is drawn.
+function viewKey(model: Model, view: View): string {
+  const face = view.face;
+  const spans = model.spans
     .map((span) => `${span.text}\u0000${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${span.fontSize}|${span.color}`)
     .join("\u0001");
+  return [
+    model.text,
+    spans,
+    `${face.fontFamily}|${face.fontWeight}|${face.fontStyle}|${face.fontSize}|${face.color}`,
+    view.align,
+    view.indent,
+    view.softBreaks.join(","),
+    view.lineGaps.join(","),
+    view.scale,
+    view.showLive,
+  ].join("\u0002");
 }
 
-function render(root: HTMLElement, model: Model, scale: number, showLive: boolean): void {
-  root.replaceChildren();
-  for (const span of model.spans) {
-    const node = document.createElement("span");
-    node.style.fontFamily = span.fontFamily;
-    node.style.fontWeight = String(span.fontWeight);
-    node.style.fontStyle = span.fontStyle;
-    node.style.fontSize = `${span.fontSize * scale}px`;
-    node.style.color = showLive ? span.color : "transparent";
-    node.textContent = span.text;
-    root.append(node);
+// The lines of the model: spans cut at every newline, each line knowing whether its break is soft.
+function splitLines(model: Model, face: TextSpan, softBreaks: number[]): LineView[] {
+  const spans = model.spans.length > 0 ? model.spans : [{ ...face, text: model.text }];
+  const soft = new Set(softBreaks);
+  const lines: LineView[] = [{ pieces: [], soft: false }];
+  let offset = 0;
+  for (const span of spans) {
+    span.text.split("\n").forEach((part, index) => {
+      if (index > 0) {
+        const current = lines[lines.length - 1];
+        if (current) current.soft = soft.has(offset);
+        offset += 1;
+        lines.push({ pieces: [], soft: false });
+      }
+      if (part) lines[lines.length - 1]?.pieces.push({ text: part, span });
+      offset += part.length;
+    });
   }
-  if (model.spans.length === 0 && model.text) root.append(document.createTextNode(model.text));
-  // A block that ends in a newline needs a <br> for its empty last line to exist.
-  if (model.text.endsWith("\n")) root.append(document.createElement("br"));
+  return lines;
+}
+
+function render(root: HTMLElement, model: Model, view: View): void {
+  root.replaceChildren();
+  splitLines(model, view.face, view.softBreaks).forEach((line, index) => {
+    const block = document.createElement("div");
+    if (index === 0 && view.indent) block.style.textIndent = `${view.indent * view.scale}px`;
+    if (view.align === "justify" && line.soft) block.style.textAlignLast = "justify";
+    const gap = view.lineGaps[index];
+    if (gap != null) block.style.wordSpacing = `${gap * view.scale}px`;
+    for (const piece of line.pieces) {
+      const node = document.createElement("span");
+      node.style.fontFamily = piece.span.fontFamily;
+      node.style.fontWeight = String(piece.span.fontWeight);
+      node.style.fontStyle = piece.span.fontStyle;
+      node.style.fontSize = `${piece.span.fontSize * view.scale}px`;
+      node.style.color = view.showLive ? piece.span.color : "transparent";
+      node.textContent = piece.text;
+      block.append(node);
+    }
+    // An empty line needs a <br> to have any height.
+    if (line.pieces.length === 0) block.append(document.createElement("br"));
+    root.append(block);
+  });
 }
 
 // Length of the character before or after an offset, so a surrogate pair is deleted whole.
@@ -92,21 +146,38 @@ export function SpanEditor({
   const ref = useRef<HTMLDivElement | null>(null);
   // What the editor currently shows, which runs ahead of the props while an edit is on its way back.
   const model = useRef<Model>({ text: patch.text, spans: patch.spans });
-  const drawn = useRef<{ model: Model; scale: number; showLive: boolean } | null>(null);
+  const drawn = useRef<string | null>(null);
   const past = useRef<Snapshot[]>([]);
   const future = useRef<Snapshot[]>([]);
   const lineHeight = patch.lineHeight * scale;
   const wrap = patch.wrap;
+  const view: View = {
+    face: {
+      text: "",
+      fontFamily: patch.fontFamily,
+      fontWeight: patch.fontWeight,
+      fontStyle: patch.fontStyle,
+      fontSize: patch.fontSize,
+      color: patch.color,
+      pdfFont: "",
+    },
+    align: patch.align,
+    indent: patch.indent,
+    // Patches made before these fields existed may still be in memory without them.
+    softBreaks: patch.softBreaks ?? [],
+    lineGaps: patch.lineGaps ?? [],
+    scale,
+    showLive,
+  };
 
-  const latest = useRef({ onEdit, lineHeight, wrap, scale, showLive });
-  latest.current = { onEdit, lineHeight, wrap, scale, showLive };
+  const latest = useRef({ onEdit, lineHeight, wrap, view });
+  latest.current = { onEdit, lineHeight, wrap, view };
 
   const draw = (next: Model, caret: number | null) => {
     const root = ref.current;
     if (!root) return;
-    const { scale: currentScale, showLive: live } = latest.current;
-    render(root, next, currentScale, live);
-    drawn.current = { model: next, scale: currentScale, showLive: live };
+    render(root, next, latest.current.view);
+    drawn.current = viewKey(next, latest.current.view);
     if (caret != null && document.activeElement === root) placeCaret(root, caret);
   };
 
@@ -123,6 +194,11 @@ export function SpanEditor({
     past.current.push({ ...current, caret: caretBefore });
     if (past.current.length > HISTORY_LIMIT) past.current.shift();
     future.current = [];
+    if (current.spans.length === 0) {
+      const text = current.text.slice(0, start) + insert + current.text.slice(end);
+      commit({ text, spans: [] }, start + insert.length);
+      return;
+    }
     const spans = editSpans(current.spans, start, end, insert);
     commit({ text: spansText(spans), spans }, start + insert.length);
   };
@@ -138,21 +214,16 @@ export function SpanEditor({
     commit({ text: entry.text, spans: entry.spans }, entry.caret);
   };
 
-  // Something outside the editor changed the text (undo, a face refresh, zoom): draw it again.
+  // Something outside the editor changed what it shows (undo, a face refresh, zoom, a soft break
+  // turning into a space): draw it again, keeping the caret where it was.
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root) return;
-    const shown = drawn.current;
-    const same =
-      shown &&
-      shown.scale === scale &&
-      shown.showLive === showLive &&
-      shown.model.text === patch.text &&
-      (shown.model.spans === patch.spans || spanKey(shown.model.spans) === spanKey(patch.spans));
-    if (same) return;
-    const caret = document.activeElement === root ? selectionOffsets(root)?.end ?? null : null;
-    model.current = { text: patch.text, spans: patch.spans };
-    draw(model.current, caret == null ? null : Math.min(caret, patch.text.length));
+    const next = { text: patch.text, spans: patch.spans };
+    if (drawn.current === viewKey(next, view)) return;
+    const caret = document.activeElement === root ? (selectionOffsets(root)?.end ?? null) : null;
+    model.current = next;
+    draw(next, caret == null ? null : Math.min(caret, patch.text.length));
   });
 
   useEffect(() => {
@@ -210,7 +281,7 @@ export function SpanEditor({
       apply(start, end, insert, selectionOffsets(root)?.end ?? start);
     };
     // An edit the browser applied itself (IME composition, or an input type not handled above):
-    // find what changed and move it into the model, which redraws the spans.
+    // find what changed and move it into the model, which redraws the lines.
     const reconcile = () => {
       const text = domText(root);
       const before = model.current.text;
@@ -258,7 +329,7 @@ export function SpanEditor({
       contentEditable={selected}
       suppressContentEditableWarning
       spellCheck={false}
-      style={style}
+      style={{ ...style, textIndent: 0 }}
       onFocus={onFocus}
       onBlur={onBlur}
       onKeyDown={(event) => {

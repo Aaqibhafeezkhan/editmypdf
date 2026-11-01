@@ -107,6 +107,60 @@ function closeColors(a: string, b: string): boolean {
   return first.every((channel, index) => Math.abs(channel - (second[index] ?? 0)) <= 20);
 }
 
+// An edit lets a block's text flow again: the page's soft line breaks from the edit onward become
+// spaces (lines above it are untouched, so their breaks and gaps still hold), and the span texts
+// follow. Offsets are kept, so the caret does not move.
+export function softenBreaks(
+  patch: Pick<PatchAnnotation, "text" | "softBreaks" | "lineGaps">,
+  text: string,
+  spans: TextSpan[],
+): { text: string; spans: TextSpan[]; softBreaks: number[]; lineGaps: number[] } {
+  const before = patch.text;
+  const softBreaks = patch.softBreaks ?? [];
+  const lineGaps = patch.lineGaps ?? [];
+  if (text === before) return { text, spans, softBreaks, lineGaps };
+  let prefix = 0;
+  while (prefix < text.length && prefix < before.length && text[prefix] === before[prefix]) prefix += 1;
+  // Lines wholly above the edit keep the gaps the page gave them.
+  let intact = 0;
+  for (let index = 0; index < prefix; index += 1) if (before[index] === "\n") intact += 1;
+  const keptGaps = lineGaps.slice(0, intact);
+  if (softBreaks.length === 0) return { text, spans, softBreaks: [], lineGaps: keptGaps };
+  let suffix = 0;
+  while (
+    suffix < text.length - prefix &&
+    suffix < before.length - prefix &&
+    text[text.length - 1 - suffix] === before[before.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+  const delta = text.length - before.length;
+  const keep: number[] = [];
+  const soften = new Set<number>();
+  for (const offset of softBreaks) {
+    if (offset < prefix) {
+      if (text[offset] === "\n") keep.push(offset);
+      continue;
+    }
+    if (offset < before.length - suffix) continue;
+    const moved = offset + delta;
+    if (text[moved] === "\n") soften.add(moved);
+  }
+  if (soften.size === 0) return { text, spans, softBreaks: keep, lineGaps: keptGaps };
+  let next = "";
+  for (let index = 0; index < text.length; index += 1) next += soften.has(index) ? " " : text[index];
+  let cursor = 0;
+  const nextSpans = spans.map((span) => {
+    let piece = "";
+    for (let index = 0; index < span.text.length; index += 1) {
+      piece += soften.has(cursor + index) ? " " : span.text[index];
+    }
+    cursor += span.text.length;
+    return { ...span, text: piece };
+  });
+  return { text: next, spans: nextSpans, softBreaks: keep, lineGaps: keptGaps };
+}
+
 // Replaces text[from, to) with `insert` inside a list of spans. The inserted text takes the face of
 // the character before the caret, so typing continues whatever run the caret sits in; a span that
 // loses all its text disappears, except the last one, which stays so typing can continue.
@@ -205,6 +259,9 @@ export function textPatch(element: ContentElement, color: string, capture: EditC
     align: element.align,
     indent: element.indent,
     letterSpacing: element.letterSpacing || 0,
+    wordSpacing: element.wordSpacing || 0,
+    softBreaks: wrap ? [...element.softBreaks] : [],
+    lineGaps: wrap ? [...element.lineGaps] : [],
     wrap,
     spans,
     image: "",
@@ -242,6 +299,9 @@ export function graphicPatch(element: ContentElement, image: string): PatchAnnot
     align: "left",
     indent: 0,
     letterSpacing: 0,
+    wordSpacing: 0,
+    softBreaks: [],
+    lineGaps: [],
     wrap: false,
     spans: [],
     image,

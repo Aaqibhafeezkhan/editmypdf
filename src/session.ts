@@ -244,6 +244,15 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
           patch.align === "center" || patch.align === "right" || patch.align === "justify" ? patch.align : "left",
         indent: number(patch.indent, 0),
         letterSpacing: number(patch.letterSpacing, 0),
+        wordSpacing: number(patch.wordSpacing, 0),
+        softBreaks: Array.isArray(patch.softBreaks)
+          ? patch.softBreaks.filter(
+              (offset): offset is number => typeof offset === "number" && Number.isInteger(offset) && text[offset] === "\n",
+            )
+          : [],
+        lineGaps: Array.isArray(patch.lineGaps)
+          ? patch.lineGaps.map((gap) => number(gap, 0))
+          : [],
         wrap: patch.wrap === true,
         spans: role === "text" ? spanList(patch.spans, text) : [],
         image: role === "text" ? "" : image,

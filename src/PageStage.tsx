@@ -2,7 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { RotateCw } from "lucide-react";
 import { contentAt, contentLabel, isTextContent, readPageContent, type ContentElement } from "./content.ts";
-import { cropGraphic, editCover, graphicPatch, layoutTextPatch, refreshPatchFace, sampleColor, textPatch } from "./contentEdit.ts";
+import {
+  cropGraphic,
+  editCover,
+  graphicPatch,
+  layoutTextPatch,
+  refreshPatchFace,
+  sampleColor,
+  softenBreaks,
+  textPatch,
+} from "./contentEdit.ts";
 import { captureEdit } from "./pageInk.ts";
 import { SpanEditor } from "./SpanEditor.tsx";
 import { domText, placeCaret } from "./spanDom.ts";
@@ -1238,6 +1247,7 @@ export function PageStage({
             fontKerning: "none",
             fontVariantLigatures: "none",
             letterSpacing: `${patch.letterSpacing * scale}px`,
+            wordSpacing: `${patch.wordSpacing * scale}px`,
             color: showLive ? patch.color : "transparent",
             caretColor: patch.color,
             whiteSpace: patch.wrap ? "pre-wrap" : "pre",
@@ -1295,16 +1305,21 @@ export function PageStage({
             textBaseline.current = null;
             if (baseline && getEpoch() === epochOnFocus.current) onPushBaseline(baseline);
           };
-          // New text (and, for a mixed-face patch, its spans) re-laid inside the patch's box.
+          // New text (and, for a mixed-face patch, its spans) re-laid inside the patch's box. The
+          // first edit of a block turns the page's soft line breaks after it into spaces.
           const applyEdit = (value: string, spans: TextSpan[], measured: number) => {
             const current = getAnnotations();
+            let shown = value;
             const next = current.map((item) => {
               if (item.id !== patch.id || item.kind !== "patch") return item;
-              const styled = { ...item, spans };
-              return { ...styled, ...layoutTextPatch(styled, value, measured) };
+              const flowed = softenBreaks(item, value, spans);
+              shown = flowed.text;
+              const styled = { ...item, spans: flowed.spans, softBreaks: flowed.softBreaks, lineGaps: flowed.lineGaps };
+              const rows = flowed.text === value ? measured : 0;
+              return { ...styled, ...layoutTextPatch(styled, flowed.text, rows) };
             });
             onReplace(next);
-            if (live) onSelectContent({ ...live, text: value });
+            if (live) onSelectContent({ ...live, text: shown });
           };
           const handleEditorKey = (event: ReactKeyboardEvent<HTMLElement>) => {
             if ((event.key === "Enter" && !patch.wrap) || event.key === "Escape") {
@@ -1353,7 +1368,7 @@ export function PageStage({
                     height: Math.max(patch.h, 1) * scale,
                   }}
                 />
-              ) : patch.spans.length > 0 ? (
+              ) : patch.spans.length > 0 || patch.wrap ? (
                 <SpanEditor
                   patch={patch}
                   scale={scale}
