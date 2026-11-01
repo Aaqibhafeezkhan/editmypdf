@@ -212,6 +212,9 @@ export type PatchAnnotation = Base & {
   lineHeight: number;
   align: TextAlign;
   indent: number;
+  // Extra advance after every character, in page units, as the PDF set the run (character
+  // spacing, or glyph advances wider than the converted font's own).
+  letterSpacing: number;
   wrap: boolean;
   // Styled runs when the text mixes faces (a bold or italic word inside a paragraph); empty for a
   // single-face patch, whose face is the fields above.

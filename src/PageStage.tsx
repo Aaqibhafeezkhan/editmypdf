@@ -1237,7 +1237,7 @@ export function PageStage({
             textIndent: patch.indent * scale,
             fontKerning: "none",
             fontVariantLigatures: "none",
-            letterSpacing: 0,
+            letterSpacing: `${patch.letterSpacing * scale}px`,
             color: showLive ? patch.color : "transparent",
             caretColor: patch.color,
             whiteSpace: patch.wrap ? "pre-wrap" : "pre",

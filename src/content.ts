@@ -31,6 +31,9 @@ export type ContentElement = {
   align: TextAlign;
   // First-line indent of a paragraph, in page units.
   indent: number;
+  // Extra advance after every character, in page units, that the PDF gave the text beyond the
+  // face's own glyph widths.
+  letterSpacing: number;
   // pdf.js name of the font the text was set in; identifies the face across runs.
   pdfFont: string;
   // Styled runs when the text mixes faces (a bold word inside regular text), concatenating to
@@ -95,6 +98,7 @@ type Run = Box & {
   fontStyle: "normal" | "italic";
   ascent: number;
   color: string;
+  letterSpacing: number;
 };
 
 // A line of text. Its face fields describe the dominant run; `spans` lists every run in order.
@@ -109,12 +113,24 @@ type Line = Box & {
   fontStyle: "normal" | "italic";
   ascent: number;
   color: string;
+  letterSpacing: number;
   spans: ContentSpan[];
 };
 
 type TextFace = Pick<
   ContentElement,
-  "fontFamily" | "fontWeight" | "fontStyle" | "fontSize" | "ascent" | "color" | "baseline" | "lineHeight" | "align" | "indent" | "pdfFont"
+  | "fontFamily"
+  | "fontWeight"
+  | "fontStyle"
+  | "fontSize"
+  | "ascent"
+  | "color"
+  | "baseline"
+  | "lineHeight"
+  | "align"
+  | "indent"
+  | "letterSpacing"
+  | "pdfFont"
 >;
 
 // The subset of pdf.js's font object that decides how the text is drawn on the canvas.
@@ -170,6 +186,7 @@ async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promis
   ]);
   const styles = textResult.styles as Record<string, PdfFontStyle>;
   const faces = await resolveFaces(page, textResult.items, styles, graphics.glyphUse);
+  await loadFaces(faces);
   const runs = textRuns(textResult.items, styles, viewport, graphics.colors, faces);
   const lines = groupLines(runs);
   const tables = findTables(graphics.rules, viewport.width, viewport.height);
@@ -198,6 +215,7 @@ async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promis
       lineHeight: face?.lineHeight ?? box.h,
       align: face?.align ?? "left",
       indent: face?.indent ?? 0,
+      letterSpacing: face?.letterSpacing ?? 0,
       pdfFont: face?.pdfFont ?? "",
       spans: faceCount(spans) > 1 ? spans : [],
     });
@@ -248,6 +266,37 @@ async function resolveFaces(
     }),
   );
   return faces;
+}
+
+// Makes sure the faces are usable before any text is measured against them.
+async function loadFaces(faces: Map<string, Face>): Promise<void> {
+  if (typeof document === "undefined") return;
+  const css = new Set([...faces.values()].map((face) => `${face.style} ${face.weight} 12px ${face.family}`));
+  await Promise.all([...css].map((font) => document.fonts.load(font).catch(() => [])));
+}
+
+// How much wider the PDF set each character of a run than the face draws it: character spacing,
+// or glyph advances that differ from the converted font's. Spread over the run so edited text
+// keeps the run's width; left at zero when the gap is too large to be spacing.
+function runSpacing(text: string, width: number, face: Face, fontSize: number): number {
+  const glyphs = [...text].length;
+  if (glyphs < 2 || typeof document === "undefined") return 0;
+  // Measured large and scaled down: at small sizes canvas measurement rounds glyph advances.
+  const reference = 100;
+  const measured =
+    (measureWidth(
+      text,
+      { fontFamily: face.family, fontWeight: face.weight, fontStyle: face.style, fontSize: reference, letterSpacing: 0 },
+      reference,
+    ) *
+      fontSize) /
+    reference;
+  if (!(measured > 0)) return 0;
+  const spacing = (width - measured) / glyphs;
+  // Tightening is allowed only as a hair's width: a run pdf.js padded with spaces to mirror wide
+  // character gaps would otherwise have its letters squeezed together.
+  if (spacing > fontSize * 0.25 || spacing < -fontSize * 0.04 || Math.abs(spacing) < 0.01) return 0;
+  return Math.round(spacing * 1000) / 1000;
 }
 
 function fontObject(page: PDFPageProxy, name: string): Promise<PdfFontObject | null> {
@@ -359,6 +408,7 @@ function textRuns(
       fontStyle: face.style,
       ascent,
       color,
+      letterSpacing: runSpacing(item.str, item.width, face, fontSize),
     });
   }
   return runs;
@@ -428,6 +478,7 @@ function groupLines(runs: Run[]): Line[] {
         fontStyle: face.fontStyle,
         ascent: face.ascent,
         color: face.color,
+        letterSpacing: face.letterSpacing,
         spans,
       });
       current = [];
@@ -875,6 +926,7 @@ function faceOf(line: Line): TextFace {
     lineHeight: line.h,
     align: "left",
     indent: 0,
+    letterSpacing: line.letterSpacing,
     pdfFont: line.pdfFont,
   };
 }
@@ -905,6 +957,7 @@ function blockFace(lines: Line[]): TextFace {
       : {}),
     baseline: first.baseline,
     lineHeight: median(pitches) || lead.size * 1.2,
+    letterSpacing: median(sorted.map((line) => line.letterSpacing)),
     align: layout.align,
     indent: layout.indent,
   };
@@ -923,7 +976,7 @@ function blockContent(lines: Line[], face: TextFace, width: number): { text: str
     if (!line.text.trim()) continue;
     const last = spans[spans.length - 1];
     if (last && previous) {
-      const lead = line.spans[0] ?? face;
+      const lead = { ...(line.spans[0] ?? face), letterSpacing: face.letterSpacing };
       const firstWord = line.text.split(" ")[0] ?? "";
       const wouldFit = previous.w + measureWidth(` ${firstWord}`, lead, previous.size) <= width + slack;
       const hard = face.align === "center" || face.align === "right" || wouldFit;
@@ -979,10 +1032,11 @@ function dominantSpan(spans: TextSpan[]): TextSpan | null {
 function dominantFace(
   runs: Run[],
   spans: TextSpan[],
-): Pick<Run, "pdfFont" | "fontFamily" | "fontWeight" | "fontStyle" | "ascent" | "color"> {
+): Pick<Run, "pdfFont" | "fontFamily" | "fontWeight" | "fontStyle" | "ascent" | "color" | "letterSpacing"> {
   const best = dominantSpan(spans);
   const run = runs.find((item) => item.pdfFont === best?.pdfFont) ?? runs[0];
   return {
+    letterSpacing: median(runs.filter((item) => item.pdfFont === run?.pdfFont).map((item) => item.letterSpacing)),
     pdfFont: best?.pdfFont ?? run?.pdfFont ?? "",
     fontFamily: best?.fontFamily ?? run?.fontFamily ?? "sans-serif",
     fontWeight: best?.fontWeight ?? run?.fontWeight ?? 400,

@@ -243,6 +243,7 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
         align:
           patch.align === "center" || patch.align === "right" || patch.align === "justify" ? patch.align : "left",
         indent: number(patch.indent, 0),
+        letterSpacing: number(patch.letterSpacing, 0),
         wrap: patch.wrap === true,
         spans: role === "text" ? spanList(patch.spans, text) : [],
         image: role === "text" ? "" : image,

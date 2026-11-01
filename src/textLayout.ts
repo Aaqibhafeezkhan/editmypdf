@@ -2,7 +2,18 @@ import type { PatchAnnotation, Point, TextSpan } from "./types.ts";
 
 export type LaidLine = { text: string; start: number; end: number; width: number; hard: boolean };
 
-type Face = Pick<PatchAnnotation, "fontFamily" | "fontWeight" | "fontStyle" | "fontSize">;
+type Face = Pick<PatchAnnotation, "fontFamily" | "fontWeight" | "fontStyle" | "fontSize"> & { letterSpacing?: number };
+
+type SpacedContext = CanvasRenderingContext2D & { letterSpacing?: string };
+
+// Applies a face's letter spacing to a canvas context at the size it is about to draw or measure.
+// Browsers without canvas letter spacing get none; measureWidth adds it by hand instead.
+function applySpacing(context: SpacedContext, face: Face, size: number): boolean {
+  if (!("letterSpacing" in context)) return false;
+  const spacing = face.letterSpacing ?? 0;
+  context.letterSpacing = `${(spacing * size) / Math.max(face.fontSize, 0.01)}px`;
+  return true;
+}
 
 type Layout = Face &
   Pick<PatchAnnotation, "originW" | "wrap" | "indent" | "align" | "lineHeight" | "ascent" | "x" | "y" | "w" | "text"> & {
@@ -32,7 +43,10 @@ export function measureWidth(text: string, face: Face, size = face.fontSize): nu
   if (!canvas) return text.length * size * 0.5;
   canvas.font = fontCss(face, size);
   canvas.fontKerning = "none";
-  return canvas.measureText(text).width;
+  const spaced = applySpacing(canvas, face, size);
+  const width = canvas.measureText(text).width;
+  if (spaced) return width;
+  return width + ((face.letterSpacing ?? 0) * size * [...text].length) / Math.max(face.fontSize, 0.01);
 }
 
 export function spansText(spans: TextSpan[]): string {
@@ -48,7 +62,18 @@ function spansFor(text: string, patch: Layout): TextSpan[] {
 // Splits text[from, to) by the span each character is set in.
 function pieces(text: string, from: number, to: number, face: Face, spans: TextSpan[]): Piece[] {
   if (to <= from) return [];
-  if (spans.length === 0) return [{ text: text.slice(from, to), face: { ...face, color: "", pdfFont: "", text: "" } }];
+  if (spans.length === 0) {
+    const whole: TextSpan = {
+      text: "",
+      fontFamily: face.fontFamily,
+      fontWeight: face.fontWeight,
+      fontStyle: face.fontStyle,
+      fontSize: face.fontSize,
+      color: "",
+      pdfFont: "",
+    };
+    return [{ text: text.slice(from, to), face: whole }];
+  }
   const result: Piece[] = [];
   let cursor = 0;
   for (const span of spans) {
@@ -62,10 +87,15 @@ function pieces(text: string, from: number, to: number, face: Face, spans: TextS
   return result;
 }
 
+// A span's face with the patch's letter spacing, which every run of a patch shares.
+function spaced(span: TextSpan, patch: Face): Face {
+  return { ...span, letterSpacing: patch.letterSpacing ?? 0 };
+}
+
 // Width of text[from, to) when each character is measured in its own span's face.
 function rangeWidth(text: string, from: number, to: number, face: Face, spans: TextSpan[]): number {
   let width = 0;
-  for (const piece of pieces(text, from, to, face, spans)) width += measureWidth(piece.text, piece.face);
+  for (const piece of pieces(text, from, to, face, spans)) width += measureWidth(piece.text, spaced(piece.face, face));
   return width;
 }
 
@@ -204,8 +234,9 @@ export async function paintRun(patch: PatchAnnotation): Promise<string> {
     const end = line.start + line.text.trimEnd().length;
     let cursor = x;
     for (const piece of pieces(patch.text, line.start, end, patch, spans)) {
-      const face = spans.length > 0 ? piece.face : patch;
+      const face = spans.length > 0 ? spaced(piece.face, patch) : patch;
       context.font = fontCss(face, face.fontSize * zoom);
+      applySpacing(context, face, face.fontSize * zoom);
       context.fillStyle = spans.length > 0 ? piece.face.color || patch.color : patch.color;
       if (extra <= 0) {
         context.fillText(piece.text, cursor * zoom, y);
