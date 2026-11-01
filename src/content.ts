@@ -1,6 +1,7 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
-import { assignFaces, loadPageFaces } from "./pdfFonts.ts";
-import type { Point } from "./types.ts";
+import { collectGlyphUse, editableFamily, type GlyphUse } from "./fontFix.ts";
+import { measureWidth } from "./textLayout.ts";
+import type { Point, TextAlign } from "./types.ts";
 
 export type ContentKind = "text" | "heading" | "paragraph" | "table" | "line" | "image" | "shape";
 
@@ -13,12 +14,20 @@ export type ContentElement = {
   w: number;
   h: number;
   text: string;
-  fontName: string;
+  // CSS font-family list that reproduces the PDF face, usually the font pdf.js registered for the page.
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
   fontSize: number;
   ascent: number;
-  fallback: string;
   color: string;
   baseline: number;
+  // Baseline-to-baseline distance for a paragraph; the box height for a single run.
+  lineHeight: number;
+  align: TextAlign;
+  // First-line indent of a paragraph, in page units.
+  indent: number;
+  // pdf.js name of the font the text was set in; identifies the face across runs.
   pdfFont: string;
 };
 
@@ -37,9 +46,9 @@ const LABEL: Record<ContentKind, string> = {
 };
 
 const DETAIL: Record<ContentKind, string> = {
-  text: "Click the line and type. Its font and size stay as they are",
-  heading: "Click the heading and type. Its font and size stay as they are",
-  paragraph: "Click the paragraph and type. Its font and size stay as they are",
+  text: "Click the line and type. It keeps its font, size and colour",
+  heading: "Click the heading and type. It keeps its font, size and colour",
+  paragraph: "Click the paragraph and type. Text wraps inside the paragraph and keeps its font, size and colour",
   table: "Drag to move it, or use the handles to resize",
   line: "Drag to move it, or use the handles to resize",
   image: "Drag to move it, or use the handles to resize",
@@ -66,15 +75,18 @@ type TextRun = {
 
 type Box = { x: number; y: number; w: number; h: number };
 
+type Face = { family: string; weight: number; style: "normal" | "italic" };
+
 type Run = Box & {
   baseline: number;
   size: number;
   text: string;
   angle: number;
-  fontName: string;
   pdfFont: string;
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
   ascent: number;
-  fallback: string;
   color: string;
 };
 
@@ -83,30 +95,52 @@ type Line = Box & {
   size: number;
   text: string;
   heading: boolean;
-  fontName: string;
   pdfFont: string;
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
   ascent: number;
-  fallback: string;
   color: string;
 };
 
-type TextFace = {
-  fontName: string;
-  fontSize: number;
-  ascent: number;
-  fallback: string;
-  color: string;
-  baseline: number;
-  pdfFont: string;
+type TextFace = Pick<
+  ContentElement,
+  "fontFamily" | "fontWeight" | "fontStyle" | "fontSize" | "ascent" | "color" | "baseline" | "lineHeight" | "align" | "indent" | "pdfFont"
+>;
+
+// The subset of pdf.js's font object that decides how the text is drawn on the canvas.
+type PdfFontObject = {
+  loadedName?: string;
+  fallbackName?: string;
+  bold?: boolean;
+  italic?: boolean;
+  black?: boolean;
+  isType3Font?: boolean;
+  systemFontInfo?: { css?: string } | null;
+  data?: Uint8Array | null;
+};
+
+type ObjectStore = {
+  has(id: string): boolean;
+  get(id: string, callback?: (value: unknown) => void): unknown;
 };
 
 const IDENTITY = [1, 0, 0, 1, 0, 0];
 
-export async function readPageContent(
-  page: PDFPageProxy,
-  pageIndex: number,
-  pdfBytes?: Uint8Array,
-): Promise<ContentElement[]> {
+const contentCache = new WeakMap<PDFPageProxy, Promise<ContentElement[]>>();
+
+export function readPageContent(page: PDFPageProxy, pageIndex: number): Promise<ContentElement[]> {
+  const cached = contentCache.get(page);
+  if (cached) return cached;
+  const pending = extractPageContent(page, pageIndex).catch((error: unknown) => {
+    contentCache.delete(page);
+    throw error;
+  });
+  contentCache.set(page, pending);
+  return pending;
+}
+
+async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promise<ContentElement[]> {
   const viewport = page.getViewport({ scale: 1 });
   const [textResult, graphics] = await Promise.all([
     page.getTextContent(),
@@ -115,19 +149,19 @@ export async function readPageContent(
       .then((list) => ({
         ...readGraphics(list.fnArray, list.argsArray, viewport),
         colors: textColors(list.fnArray, list.argsArray),
+        glyphUse: collectGlyphUse(list.fnArray, list.argsArray),
       }))
-      .catch(() => ({ rules: [] as Box[], shapes: [] as Box[], images: [] as Box[], colors: [] as string[] })),
+      .catch(() => ({
+        rules: [] as Box[],
+        shapes: [] as Box[],
+        images: [] as Box[],
+        colors: [] as string[],
+        glyphUse: new Map<string, GlyphUse>(),
+      })),
   ]);
-  const runs = textRuns(
-    textResult.items,
-    textResult.styles as Record<string, PdfFontStyle>,
-    viewport,
-    graphics.colors,
-  );
-  if (pdfBytes && runs.length > 0) {
-    const faces = await loadPageFaces(pdfBytes, pageIndex);
-    await assignFaces(runs, faces);
-  }
+  const styles = textResult.styles as Record<string, PdfFontStyle>;
+  const faces = await resolveFaces(page, textResult.items, styles, graphics.glyphUse);
+  const runs = textRuns(textResult.items, styles, viewport, graphics.colors, faces);
   const lines = groupLines(runs);
   const tables = findTables(graphics.rules, viewport.width, viewport.height);
   const shapes = graphics.shapes.filter((shape) => !tables.some((table) => containsCenter(table, shape)));
@@ -145,46 +179,117 @@ export async function readPageContent(
       w: box.w,
       h: box.h,
       text: text.trim(),
-      fontName: face?.fontName ?? "",
+      fontFamily: face?.fontFamily ?? "sans-serif",
+      fontWeight: face?.fontWeight ?? 400,
+      fontStyle: face?.fontStyle ?? "normal",
       fontSize: face?.fontSize ?? 0,
       ascent: face?.ascent ?? 0.8,
-      fallback: face?.fallback ?? "sans-serif",
       color: face?.color ?? "#111111",
       baseline: face?.baseline ?? box.y + box.h * 0.8,
+      lineHeight: face?.lineHeight ?? box.h,
+      align: face?.align ?? "left",
+      indent: face?.indent ?? 0,
       pdfFont: face?.pdfFont ?? "",
     });
   };
   for (const block of blocks) {
+    const first = block.lines[0];
+    if (!first) continue;
     if (block.lines.length === 1) {
-      const line = block.lines[0];
-      if (line) push(line.heading ? "heading" : "text", line, line.text, faceOf(line));
+      push(first.heading ? "heading" : "text", first, first.text, faceOf(first));
       continue;
     }
-    const kind = block.lines.every((line) => line.heading) ? "heading" : "paragraph";
-    const first = block.lines[0];
-    for (const line of block.lines) push(line.heading ? "heading" : "text", line, line.text, faceOf(line));
-    if (first) {
-      push(kind, union(block.lines), block.lines.map((line) => line.text).join("\n"), {
-        ...faceOf(first),
-        fontSize: Math.max(...block.lines.map((line) => line.size)),
-      });
-    }
+    const face = blockFace(block.lines);
+    push("paragraph", union(block.lines), blockText(block.lines, face, union(block.lines).w), face);
   }
   for (const rule of graphics.rules) push("line", rule, "");
   for (const shape of shapes) push("shape", shape, textInside(lines, shape));
   for (const image of graphics.images) push("image", image, "");
   for (const table of tables) push("table", table, textInside(lines, table));
-  elements.forEach((element, index) => {
-    element.id = `${pageIndex}:${index}`;
-  });
+  // Ids come from where an element sits so an edit keeps pointing at the same text when the page
+  // is read again later, even if other elements are grouped differently.
+  const seen = new Map<string, number>();
+  for (const element of elements) {
+    const base = `${pageIndex}:${element.kind}:${Math.round(element.x)}:${Math.round(element.y)}:${Math.round(element.w)}`;
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    element.id = count > 0 ? `${base}#${count}` : base;
+  }
   return elements;
+}
+
+// Resolves each text item's font to the CSS pdf.js itself draws it with: the embedded face it
+// registered on the document, a matched system font, or the generic fallback with bold/italic flags.
+async function resolveFaces(
+  page: PDFPageProxy,
+  items: unknown[],
+  styles: Record<string, PdfFontStyle>,
+  glyphUse: Map<string, GlyphUse>,
+): Promise<Map<string, Face>> {
+  const names = new Set<string>();
+  for (const item of items) if (isTextRun(item) && item.fontName) names.add(item.fontName);
+  const faces = new Map<string, Face>();
+  await Promise.all(
+    [...names].map(async (name) => {
+      const font = await fontObject(page, name);
+      const family = font?.isType3Font ? null : await editableFamily(name, font?.data, glyphUse.get(name));
+      faces.set(name, faceFor(name, font, styles[name], family));
+    }),
+  );
+  return faces;
+}
+
+function fontObject(page: PDFPageProxy, name: string): Promise<PdfFontObject | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (font: PdfFontObject | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(font);
+    };
+    const timer = window.setTimeout(() => finish(null), 4000);
+    try {
+      const store = (page as unknown as { commonObjs?: ObjectStore }).commonObjs;
+      if (!store) {
+        finish(null);
+        return;
+      }
+      if (store.has(name)) {
+        finish((store.get(name) as PdfFontObject | null) ?? null);
+        return;
+      }
+      store.get(name, (font) => finish((font as PdfFontObject | null) ?? null));
+    } catch {
+      finish(null);
+    }
+  });
+}
+
+function faceFor(name: string, font: PdfFontObject | null, style: PdfFontStyle | undefined, fixed: string | null): Face {
+  const fallback = font?.fallbackName || style?.fontFamily || "sans-serif";
+  const weight = font?.black ? 900 : font?.bold ? 700 : 400;
+  const slant: Face["style"] = font?.italic ? "italic" : "normal";
+  if (font?.systemFontInfo?.css) return { family: font.systemFontInfo.css, weight, style: slant };
+  const loaded = font?.loadedName || name;
+  if (fixed) return { family: `"${fixed}", "${loaded}", ${fallback}`, weight, style: slant };
+  if (!font?.isType3Font && fontRegistered(loaded)) return { family: `"${loaded}", ${fallback}`, weight, style: slant };
+  return { family: fallback, weight, style: slant };
+}
+
+function fontRegistered(family: string): boolean {
+  if (typeof document === "undefined") return false;
+  let found = false;
+  document.fonts.forEach((face) => {
+    if (face.family.replace(/^["']|["']$/g, "") === family) found = true;
+  });
+  return found;
 }
 
 export function contentAt(elements: ContentElement[], point: Point): ContentElement | null {
   const hits = elements.filter((element) => contains(element, point, 0));
-  const runs = hits.filter((element) => element.kind === "text" || element.kind === "heading");
-  const pool = runs.length > 0 ? runs : hits.filter((element) => element.kind !== "paragraph");
-  const ranked = pool.length > 0 ? pool : hits;
+  const texts = hits.filter((element) => isTextContent(element.kind));
+  const ranked = texts.length > 0 ? texts : hits;
   let best: ContentElement | null = null;
   let bestArea = Infinity;
   for (const element of ranked) {
@@ -211,6 +316,7 @@ function textRuns(
   styles: Record<string, PdfFontStyle>,
   viewport: PageViewport,
   colors: string[],
+  faces: Map<string, Face>,
 ): Run[] {
   const runs: Run[] = [];
   let colorIndex = 0;
@@ -229,16 +335,18 @@ function textRuns(
       Math.abs(angle) < 0.08
         ? { x: tx[4], y: top, w: item.width, h: fontSize }
         : rotatedBox(tx[4], tx[5], item.width, fontSize, ascent, angle);
+    const face = faces.get(item.fontName) ?? { family: style?.fontFamily || "sans-serif", weight: 400, style: "normal" };
     runs.push({
       ...box,
       baseline: tx[5],
       size: fontSize,
       text: item.str,
       angle,
-      fontName: item.fontName,
       pdfFont: item.fontName,
+      fontFamily: face.family,
+      fontWeight: face.weight,
+      fontStyle: face.style,
       ascent,
-      fallback: style?.fontFamily || "sans-serif",
       color,
     });
   }
@@ -302,10 +410,11 @@ function groupLines(runs: Run[]): Line[] {
         size: Math.max(...current.map((run) => run.size)),
         text: joinRuns(current),
         heading: false,
-        fontName: face.fontName,
-        pdfFont: first.pdfFont,
+        pdfFont: face.pdfFont,
+        fontFamily: face.fontFamily,
+        fontWeight: face.fontWeight,
+        fontStyle: face.fontStyle,
         ascent: face.ascent,
-        fallback: face.fallback,
         color: face.color,
       });
       current = [];
@@ -315,10 +424,7 @@ function groupLines(runs: Run[]): Line[] {
       const gap = previous ? run.x - (previous.x + previous.w) : 0;
       const differentFace =
         !!previous &&
-        (previous.fontName !== run.fontName ||
-          previous.pdfFont !== run.pdfFont ||
-          previous.color !== run.color ||
-          Math.abs(previous.size - run.size) > 0.4);
+        (previous.pdfFont !== run.pdfFont || Math.abs(previous.size - run.size) > 0.4);
       if (previous && (differentFace || gap > Math.max(previous.size, run.size) * 1.5)) flush();
       current.push(run);
     }
@@ -366,6 +472,7 @@ function groupBlocks(lines: Line[], rules: Box[]): { lines: Line[] }[] {
 
 function sameBlock(previous: Line, next: Line, rules: Box[]): boolean {
   if (previous.heading !== next.heading) return false;
+  if (previous.pdfFont !== next.pdfFont) return false;
   const size = Math.max(previous.size, next.size, 1);
   if (Math.abs(previous.size - next.size) / size > 0.18) return false;
   const gap = next.y - (previous.y + previous.h);
@@ -640,23 +747,102 @@ function distinct(values: number[], tolerance: number): number {
 
 function faceOf(line: Line): TextFace {
   return {
-    fontName: line.fontName,
+    fontFamily: line.fontFamily,
+    fontWeight: line.fontWeight,
+    fontStyle: line.fontStyle,
     fontSize: line.size,
     ascent: line.ascent,
-    fallback: line.fallback,
     color: line.color,
     baseline: line.baseline,
+    lineHeight: line.h,
+    align: "left",
+    indent: 0,
     pdfFont: line.pdfFont,
   };
 }
 
-function dominantFace(runs: Run[]): Pick<Run, "fontName" | "pdfFont" | "ascent" | "fallback" | "color"> {
+// The face of a multi-line block: the longest line's font, the first line's baseline, the typical
+// baseline pitch, and the alignment the lines reveal.
+function blockFace(lines: Line[]): TextFace {
+  const sorted = [...lines].sort((a, b) => a.baseline - b.baseline);
+  const first = sorted[0] ?? lines[0];
+  const lead = [...sorted].sort((a, b) => b.text.length - a.text.length)[0] ?? first;
+  if (!first || !lead) return faceOf(lines[0] as Line);
+  const pitches = sorted
+    .slice(1)
+    .map((line, index) => line.baseline - (sorted[index]?.baseline ?? line.baseline))
+    .filter((pitch) => pitch > 0);
+  const layout = blockLayout(sorted, lead.size);
+  return {
+    ...faceOf(lead),
+    baseline: first.baseline,
+    lineHeight: median(pitches) || lead.size * 1.2,
+    align: layout.align,
+    indent: layout.indent,
+  };
+}
+
+// Joins a block's lines into editable text. A line break the author chose (a centered or
+// right-aligned block, or a line that ends although the next word would still have fit) stays a
+// newline; a break that only exists because the column ran out of room becomes a space, so the
+// text flows again when it is edited.
+function blockText(lines: Line[], face: TextFace, width: number): string {
+  const sorted = [...lines].sort((a, b) => a.baseline - b.baseline);
+  const measured = { fontFamily: face.fontFamily, fontWeight: face.fontWeight, fontStyle: face.fontStyle, fontSize: face.fontSize };
+  const slack = Math.max(1, face.fontSize * 0.3);
+  let text = "";
+  sorted.forEach((line, index) => {
+    const current = line.text.trim();
+    if (!current) return;
+    if (index === 0) {
+      text = current;
+      return;
+    }
+    const previous = sorted[index - 1];
+    const firstWord = current.split(" ")[0] ?? "";
+    const wouldFit =
+      !!previous &&
+      previous.w + measureWidth(` ${firstWord}`, measured, previous.size) <= width + slack;
+    const hard = face.align === "center" || face.align === "right" || wouldFit;
+    if (hard) text += `\n${current}`;
+    else if (text.endsWith("-")) text += current;
+    else text += ` ${current}`;
+  });
+  return text;
+}
+
+function blockLayout(lines: Line[], size: number): { align: TextAlign; indent: number } {
+  const box = union(lines);
+  const tolerance = Math.max(1.5, size * 0.12);
+  const left = (line: Line) => Math.abs(line.x - box.x) < tolerance;
+  const right = (line: Line) => Math.abs(line.x + line.w - (box.x + box.w)) < tolerance;
+  const centered = (line: Line) => Math.abs(line.x + line.w / 2 - (box.x + box.w / 2)) < tolerance;
+  const first = lines[0];
+  const body = lines.slice(1);
+  const butLast = lines.slice(0, -1);
+  const leftish = body.every(left);
+  const indent = first && leftish && !left(first) ? Math.max(0, first.x - box.x) : 0;
+  if (lines.length >= 3 && leftish && butLast.every(right)) return { align: "justify", indent };
+  if (leftish) return { align: "left", indent };
+  if (lines.every(right)) return { align: "right", indent: 0 };
+  if (lines.every(centered)) return { align: "center", indent: 0 };
+  return { align: "left", indent: 0 };
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
+function dominantFace(runs: Run[]): Pick<Run, "pdfFont" | "fontFamily" | "fontWeight" | "fontStyle" | "ascent" | "color"> {
   const best = [...runs].sort((a, b) => b.text.length - a.text.length)[0];
   return {
-    fontName: best?.fontName ?? "",
     pdfFont: best?.pdfFont ?? "",
+    fontFamily: best?.fontFamily ?? "sans-serif",
+    fontWeight: best?.fontWeight ?? 400,
+    fontStyle: best?.fontStyle ?? "normal",
     ascent: best?.ascent ?? 0.8,
-    fallback: best?.fallback ?? "sans-serif",
     color: best?.color ?? "#111111",
   };
 }

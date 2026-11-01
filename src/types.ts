@@ -2,6 +2,8 @@ export type FontId = "helvetica" | "times" | "courier";
 
 export type Align = "left" | "center" | "right";
 
+export type TextAlign = Align | "justify";
+
 export type Tool = "select" | "pencil" | "shape" | "emoji" | "signature" | "text" | "eraser";
 
 export type Point = { x: number; y: number };
@@ -165,13 +167,6 @@ export type SignatureAnnotation = Base & {
   rotation: number;
 };
 
-export type PatchGlyph = {
-  char: string;
-  src: string;
-  advance: number;
-  w: number;
-};
-
 export type PatchTail = {
   x: number;
   y: number;
@@ -196,16 +191,17 @@ export type PatchAnnotation = Base & {
   h: number;
   rotation: number;
   text: string;
-  fontName: string;
-  fallback: string;
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
   fontSize: number;
   color: string;
   ascent: number;
-  tracking: number;
   lineHeight: number;
+  align: TextAlign;
+  indent: number;
+  wrap: boolean;
   image: string;
-  glyphs: PatchGlyph[];
-  spaceAdvance: number;
   underlineOffset: number;
   underlineColor: string;
   backdrop: string;

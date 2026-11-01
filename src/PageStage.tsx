@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { RotateCw } from "lucide-react";
 import { contentAt, contentLabel, isTextContent, readPageContent, type ContentElement } from "./content.ts";
-import { caretAt, cropGraphic, editCover, graphicPatch, layoutTextPatch, sampleColor, textPatch } from "./contentEdit.ts";
-import { captureEdit, indexAt, layoutPieces, offsetAt, stampChar } from "./glyphs.ts";
+import { cropGraphic, editCover, graphicPatch, layoutTextPatch, sampleColor, textPatch } from "./contentEdit.ts";
+import { captureEdit } from "./pageInk.ts";
+import { blockWidth, caretIndexAt, editorTop, fontCss as faceCss } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { boundsOf, dist, hitTest, resizeAnnotation, rotateBy, rotatePoint, shapeFromDrag, translate } from "./geometry.ts";
 import { detailCanvas, startRender } from "./pdf.ts";
@@ -135,7 +136,6 @@ function fitTextarea(element: HTMLTextAreaElement) {
 export function PageStage({
   page,
   pageIndex,
-  pdfBytes,
   scale,
   baseWidth,
   baseHeight,
@@ -160,7 +160,6 @@ export function PageStage({
 }: {
   page: PDFPageProxy;
   pageIndex: number;
-  pdfBytes: Uint8Array;
   scale: number;
   baseWidth: number;
   baseHeight: number;
@@ -193,7 +192,6 @@ export function PageStage({
   const armFocus = useRef<string | null>(null);
   const caretRef = useRef<{ id: string; index: number } | null>(null);
   const [seen, setSeen] = useState(pageIndex === 0);
-  const [textCaret, setTextCaret] = useState<{ id: string; start: number; end: number } | null>(null);
   const [content, setContent] = useState<ContentElement[]>([]);
   const [hoverContent, setHoverContent] = useState<string | null>(null);
   const contentRef = useRef<ContentElement[]>([]);
@@ -224,7 +222,7 @@ export function PageStage({
   useEffect(() => {
     if (!seen) return;
     let cancel = false;
-    readPageContent(page, pageIndex, pdfBytes)
+    readPageContent(page, pageIndex)
       .then((items) => {
         if (cancel) return;
         contentRef.current = items;
@@ -234,7 +232,7 @@ export function PageStage({
     return () => {
       cancel = true;
     };
-  }, [page, pageIndex, pdfBytes, seen]);
+  }, [page, pageIndex, seen]);
 
   useEffect(() => {
     if (tool !== "select") setHoverContent(null);
@@ -287,9 +285,17 @@ export function PageStage({
     const next = getAnnotations().map((annotation) => {
       if (annotation.kind !== "patch" || annotation.role !== "text") return annotation;
       const live = content.find((element) => element.id === annotation.sourceId);
-      if (!live?.fontName || live.fontName === annotation.fontName) return annotation;
+      if (
+        !live?.fontFamily ||
+        !isTextContent(live.kind) ||
+        (live.fontFamily === annotation.fontFamily &&
+          live.fontWeight === annotation.fontWeight &&
+          live.fontStyle === annotation.fontStyle)
+      ) {
+        return annotation;
+      }
       changed = true;
-      return { ...annotation, fontName: live.fontName, fallback: live.fallback || annotation.fallback };
+      return { ...annotation, fontFamily: live.fontFamily, fontWeight: live.fontWeight, fontStyle: live.fontStyle };
     });
     if (changed) onReplace(next);
   }, [content, getAnnotations, onReplace]);
@@ -599,7 +605,7 @@ export function PageStage({
     onSelect(patch.id);
     onSelectContent(element.kind && isTextContent(element.kind) ? { ...element, text: patch.text } : element);
     if (patch.role !== "text") return;
-    caretRef.current = { id: patch.id, index: caretAt(patch.text, patch, point) };
+    caretRef.current = { id: patch.id, index: caretIndexAt(patch, point, scale) };
     armFocus.current = patch.id;
     onRequestFocus(patch.id);
   };
@@ -618,10 +624,6 @@ export function PageStage({
       onSelectContent(element);
       return;
     }
-    if (element.kind === "paragraph") {
-      onSelectContent(element);
-      return;
-    }
     if (isTextContent(element.kind)) {
       let source = canvas;
       try {
@@ -630,12 +632,10 @@ export function PageStage({
         source = canvas;
       }
       const captured = captureEdit(source, element, contentRef.current, baseWidth, baseHeight);
-      if (element.fontName) {
-        try {
-          await document.fonts.load(`${element.fontSize || element.h}px "${element.fontName}"`);
-        } catch {
-          // Glyph copies from the page still draw when the face cannot be parsed.
-        }
+      try {
+        await document.fonts.load(faceCss({ ...element, fontSize: element.fontSize || element.h }));
+      } catch {
+        // The browser falls back to the generic family when the face is missing.
       }
       const latest = getAnnotations();
       const again = latest.find((item) => item.kind === "patch" && item.sourceId === element.id);
@@ -643,7 +643,7 @@ export function PageStage({
         focusContentText(again, point, element);
         return;
       }
-      const patch = textPatch(element, sampleColor(canvas, element, baseWidth, baseHeight), captured);
+      const patch = textPatch(element, sampleColor(source, element, baseWidth, baseHeight) ?? element.color, captured);
       draftText.current = { id: patch.id, origin: latest };
       onReplace([...latest, patch]);
       focusContentText(patch, point, element);
@@ -682,7 +682,7 @@ export function PageStage({
           if (source) focusContentText(hit, point, source);
           else {
             onSelect(hit.id);
-            caretRef.current = { id: hit.id, index: caretAt(hit.text, hit, point) };
+            caretRef.current = { id: hit.id, index: caretIndexAt(hit, point, scale) };
             armFocus.current = hit.id;
             onRequestFocus(hit.id);
           }
@@ -1187,35 +1187,43 @@ export function PageStage({
           const patch = annotation;
           const selected = patch.id === selectedId && tool === "select";
           const live = content.find((element) => element.id === patch.sourceId);
-          const fontName = live?.fontName || patch.fontName;
-          const multiline = patch.text.includes("\n");
           const pristine = patch.role === "text" && patch.text === (patch.originText ?? "");
-          const useGlyphs = patch.role === "text" && !pristine && !multiline && (patch.glyphs ?? []).length > 0;
-          const pieces = useGlyphs ? layoutPieces(patch, patch.text) : [];
+          // While a run is being edited its live text replaces the page's rendering, so what the
+          // caret sits in is exactly what will be exported.
+          const showLive = patch.role === "text" && (selected || !pristine);
           const delta = patch.w - patch.originW;
-          const shiftTails = patch.role === "text" && !pristine && Math.abs(delta) >= 0.4;
-          const baseCover = pristine
-            ? { x: patch.originX, y: patch.originY, w: patch.originW, h: patch.originH }
-            : editCover(patch);
+          const shiftTails = patch.role === "text" && !patch.wrap && !pristine && Math.abs(delta) >= 0.4;
+          const baseCover = showLive
+            ? editCover(patch)
+            : { x: patch.originX, y: patch.originY, w: patch.originW, h: patch.originH };
           const underlineAt = patch.underlineOffset ?? -1;
           const cover =
-            !pristine && underlineAt >= 0
+            showLive && underlineAt >= 0
               ? { ...baseCover, h: Math.max(baseCover.h, patch.y + underlineAt + 1.4 - baseCover.y) }
               : baseCover;
-          const caret = textCaret?.id === patch.id ? textCaret : null;
-          const rememberCaret = (node: HTMLTextAreaElement) => {
-            setTextCaret({ id: patch.id, start: node.selectionStart ?? 0, end: node.selectionEnd ?? 0 });
-          };
+          const rows = Math.max(1, Math.round((patch.h - patch.fontSize) / Math.max(patch.lineHeight, 1)) + 1);
+          const editorWidth = patch.wrap
+            ? blockWidth(patch)
+            : Math.max(patch.w, patch.fontSize * 0.4) + patch.fontSize * 0.6;
+          const overflowing = patch.role === "text" && patch.h > patch.originH + 1;
+          const coverClass = [
+            "content-cover",
+            selected ? "selected" : "",
+            showLive ? "" : "quiet",
+            showLive && overflowing ? "overflowing" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
           return (
             <div key={patch.id}>
               <div
-                className={selected ? `content-cover selected${pristine ? " quiet" : ""}` : `content-cover${pristine ? " quiet" : ""}`}
+                className={coverClass}
                 style={{
                   left: cover.x * scale,
                   top: cover.y * scale,
                   width: cover.w * scale,
                   height: cover.h * scale,
-                  background: pristine ? undefined : patch.backdrop || "#ffffff",
+                  background: showLive ? patch.backdrop || "#ffffff" : undefined,
                 }}
               />
               {shiftTails &&
@@ -1246,175 +1254,112 @@ export function PageStage({
                   }}
                 />
               ) : (
-                <>
-                  {useGlyphs && (
-                    <div
-                      className="content-glyphs"
-                      style={{ left: patch.x * scale, top: patch.y * scale, width: Math.max(patch.w, 1) * scale, height: patch.h * scale }}
-                    >
-                      {pieces.map((piece, index) =>
-                        piece.glyph ? (
-                          <img
-                            key={`${piece.char}-${index}`}
-                            alt=""
-                            src={piece.glyph.src}
-                            style={{
-                              left: piece.x * scale,
-                              width: piece.glyph.w * scale,
-                              height: patch.h * scale,
-                            }}
-                          />
-                        ) : piece.char.trim() ? (
-                          <img
-                            key={`${piece.char}-${index}`}
-                            alt=""
-                            src={stampChar(piece.char, fontName, patch.fontSize, patch.color, patch.h, patch.ascent)}
-                            style={{
-                              left: piece.x * scale,
-                              width: piece.advance * scale,
-                              height: patch.h * scale,
-                            }}
-                          />
-                        ) : null,
-                      )}
-                      {patch.underlineOffset >= 0 && (
-                        <div
-                          className="content-underline"
-                          style={{
-                            top: patch.underlineOffset * scale,
-                            width: Math.max(patch.w, 1) * scale,
-                            height: Math.max(1, 0.7 * scale),
-                            background: patch.underlineColor || patch.color,
-                          }}
-                        />
-                      )}
-                    </div>
-                  )}
-                  {selected && useGlyphs && caret && (
-                    <>
-                      {caret.start !== caret.end && (
-                        <div
-                          className="content-selection"
-                          style={{
-                            left: (patch.x + offsetAt(pieces, Math.min(caret.start, caret.end))) * scale,
-                            top: patch.y * scale,
-                            width: Math.abs(offsetAt(pieces, caret.end) - offsetAt(pieces, caret.start)) * scale,
-                            height: patch.h * scale,
-                          }}
-                        />
-                      )}
-                      <div
-                        className="content-caret"
-                        style={{
-                          left: (patch.x + offsetAt(pieces, caret.end)) * scale,
-                          top: patch.y * scale,
-                          height: patch.h * scale,
-                          background: patch.color,
-                        }}
-                      />
-                    </>
-                  )}
-                  <textarea
-                    data-kind="content"
-                    data-id={patch.id}
-                    ref={(node) => {
-                      if (node) {
-                        textareas.current.set(patch.id, node);
-                        if (armFocus.current === patch.id) {
-                          node.focus({ preventScroll: true });
-                          const mark = caretRef.current;
-                          const index = mark?.id === patch.id ? mark.index : node.value.length;
-                          const clamped = Math.max(0, Math.min(index, node.value.length));
-                          node.setSelectionRange(clamped, clamped);
-                        }
-                      } else textareas.current.delete(patch.id);
-                    }}
-                    className="content-editor"
-                    value={patch.text}
-                    rows={1}
-                    spellCheck={false}
-                    readOnly={!selected}
-                    aria-label={`Edit ${live ? contentLabel(live.kind).toLowerCase() : "text"}`}
-                    style={{
-                      left: patch.x * scale,
-                      top: patch.y * scale,
-                      width: Math.max(pristine ? patch.originW : patch.w, patch.fontSize * 0.4) * scale,
-                      height: Math.max(patch.h, patch.fontSize) * scale,
-                      fontFamily: `"${fontName}"`,
-                      fontWeight: 400,
-                      fontStyle: "normal",
-                      fontSynthesis: "none",
-                      fontSize: patch.fontSize * scale,
-                      lineHeight: `${patch.lineHeight * scale}px`,
-                      color: pristine || useGlyphs ? "transparent" : patch.color,
-                      caretColor: useGlyphs ? "transparent" : patch.color,
-                      whiteSpace: multiline ? "pre-wrap" : "pre",
-                      zIndex: selected ? 6 : 2,
-                      pointerEvents: selected ? "auto" : "none",
-                    }}
-                    onFocus={() => {
-                      if (draftText.current?.id === patch.id) return;
-                      textBaseline.current = getAnnotations();
-                      epochOnFocus.current = getEpoch();
-                      onSelect(patch.id);
-                    }}
-                    onBlur={() => {
-                      const latest = getAnnotations().find((item) => item.id === patch.id);
-                      const source = contentRef.current.find((item) => item.id === patch.sourceId);
-                      const draft = draftText.current;
-                      const unchanged =
-                        !latest ||
-                        latest.kind !== "patch" ||
-                        (latest.text === (latest.originText || source?.text || "") &&
-                          Math.abs(latest.x - latest.originX) < 0.5 &&
-                          Math.abs(latest.y - latest.originY) < 0.5);
-                      if (draft?.id === patch.id) {
-                        draftText.current = null;
-                        textBaseline.current = null;
-                        if (unchanged) {
-                          onReplace(draft.origin);
-                          onSelect(null);
-                          return;
-                        }
-                        onPushBaseline(draft.origin);
-                        return;
+                <textarea
+                  data-kind="content"
+                  data-id={patch.id}
+                  ref={(node) => {
+                    if (node) {
+                      textareas.current.set(patch.id, node);
+                      if (armFocus.current === patch.id) {
+                        node.focus({ preventScroll: true });
+                        const mark = caretRef.current;
+                        const index = mark?.id === patch.id ? mark.index : node.value.length;
+                        const clamped = Math.max(0, Math.min(index, node.value.length));
+                        node.setSelectionRange(clamped, clamped);
                       }
-                      const baseline = textBaseline.current;
+                    } else textareas.current.delete(patch.id);
+                  }}
+                  className="content-editor"
+                  value={patch.text}
+                  rows={1}
+                  spellCheck={false}
+                  readOnly={!selected}
+                  aria-label={`Edit ${live ? contentLabel(live.kind).toLowerCase() : "text"}`}
+                  style={{
+                    left: patch.x * scale,
+                    top: editorTop(patch, scale) * scale,
+                    width: editorWidth * scale,
+                    height: (rows * patch.lineHeight + patch.fontSize * 0.3) * scale,
+                    fontFamily: patch.fontFamily,
+                    fontWeight: patch.fontWeight,
+                    fontStyle: patch.fontStyle,
+                    fontSize: patch.fontSize * scale,
+                    lineHeight: `${patch.lineHeight * scale}px`,
+                    textAlign: patch.align,
+                    textIndent: patch.indent * scale,
+                    fontKerning: "none",
+                    fontVariantLigatures: "none",
+                    letterSpacing: 0,
+                    color: showLive ? patch.color : "transparent",
+                    caretColor: patch.color,
+                    whiteSpace: patch.wrap ? "pre-wrap" : "pre",
+                    overflowWrap: "normal",
+                    wordBreak: "normal",
+                    zIndex: selected ? 6 : 2,
+                    pointerEvents: selected ? "auto" : "none",
+                  }}
+                  onFocus={() => {
+                    // Content edits arm focus after an async capture, often once the pointer is already
+                    // up; clearing it here keeps a later click from handing focus back to this editor.
+                    if (armFocus.current === patch.id) armFocus.current = null;
+                    if (draftText.current?.id === patch.id) return;
+                    textBaseline.current = getAnnotations();
+                    epochOnFocus.current = getEpoch();
+                    onSelect(patch.id);
+                  }}
+                  onBlur={() => {
+                    const latest = getAnnotations().find((item) => item.id === patch.id);
+                    const source = contentRef.current.find((item) => item.id === patch.sourceId);
+                    const draft = draftText.current;
+                    const unchanged =
+                      !latest ||
+                      latest.kind !== "patch" ||
+                      (latest.text === (latest.originText || source?.text || "") &&
+                        Math.abs(latest.x - latest.originX) < 0.5 &&
+                        Math.abs(latest.y - latest.originY) < 0.5);
+                    if (draft?.id === patch.id) {
+                      draftText.current = null;
                       textBaseline.current = null;
-                      if (baseline && getEpoch() === epochOnFocus.current) onPushBaseline(baseline);
-                    }}
-                    onSelect={(event) => rememberCaret(event.currentTarget)}
-                    onPointerDown={(event) => {
-                      if (!useGlyphs) return;
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      const local = (event.clientX - rect.left) / scale;
-                      const index = indexAt(pieces, local);
-                      const node = event.currentTarget;
-                      requestAnimationFrame(() => node.setSelectionRange(index, index));
-                    }}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      const current = getAnnotations();
-                      const next = current.map((item) => {
-                        if (item.id !== patch.id || item.kind !== "patch") return item;
-                        const laid = layoutTextPatch({ ...item, fontName }, value);
-                        return { ...item, ...laid, fontName };
-                      });
-                      onReplace(next);
-                      rememberCaret(event.currentTarget);
-                      if (live) onSelectContent({ ...live, text: value });
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !multiline) {
-                        event.preventDefault();
-                        event.currentTarget.blur();
+                      if (unchanged) {
+                        onReplace(draft.origin);
+                        onSelect(null);
                         return;
                       }
-                      event.stopPropagation();
-                    }}
-                    onKeyUp={(event) => rememberCaret(event.currentTarget)}
-                  />
-                </>
+                      onPushBaseline(draft.origin);
+                      return;
+                    }
+                    const baseline = textBaseline.current;
+                    textBaseline.current = null;
+                    if (baseline && getEpoch() === epochOnFocus.current) onPushBaseline(baseline);
+                  }}
+                  onChange={(event) => {
+                    const node = event.target;
+                    const value = node.value;
+                    let measured = 0;
+                    if (patch.wrap) {
+                      // The browser's own wrapping decides how many lines the block really needs.
+                      const height = node.style.height;
+                      node.style.height = "0px";
+                      measured = Math.round(node.scrollHeight / Math.max(patch.lineHeight * scale, 1));
+                      node.style.height = height;
+                    }
+                    const current = getAnnotations();
+                    const next = current.map((item) => {
+                      if (item.id !== patch.id || item.kind !== "patch") return item;
+                      return { ...item, ...layoutTextPatch(item, value, measured) };
+                    });
+                    onReplace(next);
+                    if (live) onSelectContent({ ...live, text: value });
+                  }}
+                  onKeyDown={(event) => {
+                    if ((event.key === "Enter" && !patch.wrap) || event.key === "Escape") {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                      return;
+                    }
+                    event.stopPropagation();
+                  }}
+                />
               )}
             </div>
           );

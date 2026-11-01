@@ -27,7 +27,8 @@ export async function createBlankPdf(): Promise<Uint8Array> {
 
 export async function loadPdf(bytes: Uint8Array, name: string): Promise<LoadedPdf> {
   const stored = new Uint8Array(bytes);
-  const doc = await getDocument({ data: stored.slice(0) }).promise;
+  // Keeping the converted font bytes lets content editing register corrected copies of the faces.
+  const doc = await getDocument({ data: stored.slice(0), fontExtraProperties: true }).promise;
   const pages: PDFPageProxy[] = [];
   const viewports: PageViewport[] = [];
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {

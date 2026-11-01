@@ -8,9 +8,9 @@ import {
   type PDFImage,
   type PDFPage,
 } from "pdf-lib";
+import { readPageContent, type ContentElement } from "./content.ts";
 import { editCover } from "./contentEdit.ts";
-import { paintRun } from "./glyphs.ts";
-import { loadPageFaces } from "./pdfFonts.ts";
+import { paintRun } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { rotatePoint } from "./geometry.ts";
 import { arrowBarbs, isBoxShape, isOpenShape, outlinePoints, pointsToPath } from "./shapes.ts";
@@ -22,6 +22,7 @@ import type {
   PdfPointMapper,
   TextAnnotation,
 } from "./types.ts";
+import type { PDFPageProxy } from "pdfjs-dist";
 
 function embedPngDataUrl(document: PDFDocument, src: string): Promise<PDFImage> | null {
   const comma = src.indexOf(",");
@@ -260,7 +261,7 @@ async function drawPatch(
     drawMappedRect(page, map, annotation.page, annotation, image);
   }
   const delta = annotation.w - annotation.originW;
-  if (annotation.role !== "text" || Math.abs(delta) < 0.4) return;
+  if (annotation.role !== "text" || annotation.wrap || Math.abs(delta) < 0.4) return;
   for (const tail of annotation.tails ?? []) {
     const tailImage = embedPngDataUrl(document, tail.image);
     if (!tailImage) continue;
@@ -274,17 +275,40 @@ async function drawPatch(
   }
 }
 
-export async function exportAnnotatedPdf(
-  originalBytes: Uint8Array,
-  annotations: Annotation[],
-  map: PdfPointMapper,
-  rotation = 0,
-): Promise<Uint8Array> {
-  const document = await PDFDocument.load(originalBytes.slice(0));
-  const textPages = new Set(
+// Text patches name the font pdf.js registered when the page was read, which changes between
+// documents loaded in one browser session. Re-reading the page before export makes sure the
+// patch paints with the face that is actually registered now.
+async function refreshPatchFaces(annotations: Annotation[], pages: PDFPageProxy[]): Promise<Annotation[]> {
+  const indices = new Set(
     annotations.filter((annotation) => annotation.kind === "patch" && annotation.role === "text").map((annotation) => annotation.page),
   );
-  for (const pageIndex of textPages) await loadPageFaces(originalBytes, pageIndex);
+  const faces = new Map<string, ContentElement>();
+  for (const index of indices) {
+    const page = pages[index];
+    if (!page) continue;
+    try {
+      for (const element of await readPageContent(page, index)) faces.set(element.id, element);
+    } catch {
+      // The patch keeps the face it was created with.
+    }
+  }
+  return annotations.map((annotation) => {
+    if (annotation.kind !== "patch" || annotation.role !== "text") return annotation;
+    const live = faces.get(annotation.sourceId);
+    if (!live?.fontFamily) return annotation;
+    return { ...annotation, fontFamily: live.fontFamily, fontWeight: live.fontWeight, fontStyle: live.fontStyle };
+  });
+}
+
+export async function exportAnnotatedPdf(
+  originalBytes: Uint8Array,
+  marks: Annotation[],
+  map: PdfPointMapper,
+  rotation = 0,
+  pages: PDFPageProxy[] = [],
+): Promise<Uint8Array> {
+  const document = await PDFDocument.load(originalBytes.slice(0));
+  const annotations = await refreshPatchFaces(marks, pages);
   const fonts = new Map<string, PDFFont>();
 
   const fontFor = async (annotation: TextAnnotation) => {

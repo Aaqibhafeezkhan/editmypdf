@@ -445,6 +445,11 @@
   outline-offset: 0;
 }
 
+/* The edited text needs more lines than the original block had, so it now covers what sat below. */
+.content-cover.overflowing {
+  outline: 1.5px dashed #d97706;
+}
+
 .content-editor {
   z-index: 4;
   padding: 0;

@@ -122,21 +122,6 @@ function decode(value: string): Uint8Array {
   return bytes;
 }
 
-function glyphList(value: unknown): PatchAnnotation["glyphs"] {
-  if (!Array.isArray(value)) return [];
-  const glyphs: PatchAnnotation["glyphs"] = [];
-  for (const item of value) {
-    if (!item || typeof item !== "object") continue;
-    const glyph = item as PatchAnnotation["glyphs"][number];
-    if (typeof glyph.char !== "string" || glyph.char.length === 0 || glyph.char.length > 8) continue;
-    if (typeof glyph.src !== "string" || !glyph.src.startsWith("data:image/png") || glyph.src.length > 250_000) continue;
-    const advance = typeof glyph.advance === "number" && Number.isFinite(glyph.advance) ? glyph.advance : 0;
-    const w = typeof glyph.w === "number" && Number.isFinite(glyph.w) ? glyph.w : advance;
-    glyphs.push({ char: glyph.char, src: glyph.src, advance, w });
-  }
-  return glyphs;
-}
-
 function tailList(value: unknown): PatchAnnotation["tails"] {
   if (!Array.isArray(value)) return [];
   const tails: PatchAnnotation["tails"] = [];
@@ -225,13 +210,17 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
         role,
         text,
         originText: typeof patch.originText === "string" ? patch.originText : text,
-        fontName: typeof patch.fontName === "string" ? patch.fontName : "",
-        fallback: typeof patch.fallback === "string" ? patch.fallback : "sans-serif",
+        fontFamily: typeof patch.fontFamily === "string" && patch.fontFamily ? patch.fontFamily : "sans-serif",
+        fontWeight: number(patch.fontWeight, 400),
+        fontStyle: patch.fontStyle === "italic" ? "italic" : "normal",
         fontSize: number(patch.fontSize, 12),
         color: typeof patch.color === "string" ? patch.color : "#111111",
         ascent: number(patch.ascent, 0.8),
-        tracking: number(patch.tracking, 1),
         lineHeight: number(patch.lineHeight, number(patch.h, 12)),
+        align:
+          patch.align === "center" || patch.align === "right" || patch.align === "justify" ? patch.align : "left",
+        indent: number(patch.indent, 0),
+        wrap: patch.wrap === true,
         image: role === "text" ? "" : image,
         rotation: 0,
         x: number(patch.x, 0),
@@ -242,8 +231,6 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
         originY: number(patch.originY, number(patch.y, 0)),
         originW: number(patch.originW, number(patch.w, 1)),
         originH: number(patch.originH, number(patch.h, 1)),
-        glyphs: glyphList(patch.glyphs),
-        spaceAdvance: number(patch.spaceAdvance, 0),
         underlineOffset: number(patch.underlineOffset, -1),
         underlineColor: typeof patch.underlineColor === "string" ? patch.underlineColor : patch.color,
         backdrop: typeof patch.backdrop === "string" ? patch.backdrop : "#ffffff",
