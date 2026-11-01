@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { RotateCw } from "lucide-react";
 import { contentAt, contentLabel, isTextContent, readPageContent, type ContentElement } from "./content.ts";
-import { cropGraphic, editCover, graphicPatch, layoutTextPatch, sampleColor, textPatch } from "./contentEdit.ts";
+import { cropGraphic, editCover, graphicPatch, layoutTextPatch, refreshPatchFace, sampleColor, textPatch } from "./contentEdit.ts";
 import { captureEdit } from "./pageInk.ts";
+import { SpanEditor } from "./SpanEditor.tsx";
+import { domText, placeCaret } from "./spanDom.ts";
 import { blockWidth, caretIndexAt, editorTop, fontCss as faceCss } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { boundsOf, dist, hitTest, resizeAnnotation, rotateBy, rotatePoint, shapeFromDrag, translate } from "./geometry.ts";
@@ -21,6 +23,7 @@ import {
   type StrokeStyle,
   type TextAnnotation,
   type PatchAnnotation,
+  type TextSpan,
   type TextStyle,
   type Tool,
 } from "./types.ts";
@@ -188,7 +191,9 @@ export function PageStage({
   const textBaseline = useRef<Annotation[] | null>(null);
   const draftText = useRef<{ id: string; origin: Annotation[] } | null>(null);
   const epochOnFocus = useRef(0);
-  const textareas = useRef(new Map<string, HTMLTextAreaElement>());
+  // Every editor on the page: textareas for text annotations and single-face patches, and the
+  // contentEditable blocks of patches that mix faces.
+  const textareas = useRef(new Map<string, HTMLTextAreaElement | HTMLDivElement>());
   const armFocus = useRef<string | null>(null);
   const caretRef = useRef<{ id: string; index: number } | null>(null);
   const [seen, setSeen] = useState(pageIndex === 0);
@@ -201,9 +206,11 @@ export function PageStage({
     if (!element) return;
     element.focus({ preventScroll: true });
     const caret = caretRef.current;
-    const index = caret?.id === id ? caret.index : element.value.length;
-    const clamped = Math.max(0, Math.min(index, element.value.length));
-    element.setSelectionRange(clamped, clamped);
+    const length = element instanceof HTMLTextAreaElement ? element.value.length : domText(element).length;
+    const index = caret?.id === id ? caret.index : length;
+    const clamped = Math.max(0, Math.min(index, length));
+    if (element instanceof HTMLTextAreaElement) element.setSelectionRange(clamped, clamped);
+    else placeCaret(element, clamped);
   };
 
   useEffect(() => {
@@ -285,17 +292,10 @@ export function PageStage({
     const next = getAnnotations().map((annotation) => {
       if (annotation.kind !== "patch" || annotation.role !== "text") return annotation;
       const live = content.find((element) => element.id === annotation.sourceId);
-      if (
-        !live?.fontFamily ||
-        !isTextContent(live.kind) ||
-        (live.fontFamily === annotation.fontFamily &&
-          live.fontWeight === annotation.fontWeight &&
-          live.fontStyle === annotation.fontStyle)
-      ) {
-        return annotation;
-      }
-      changed = true;
-      return { ...annotation, fontFamily: live.fontFamily, fontWeight: live.fontWeight, fontStyle: live.fontStyle };
+      if (!live?.fontFamily || !isTextContent(live.kind)) return annotation;
+      const refreshed = refreshPatchFace(annotation, live);
+      if (refreshed !== annotation) changed = true;
+      return refreshed;
     });
     if (changed) onReplace(next);
   }, [content, getAnnotations, onReplace]);
@@ -304,7 +304,7 @@ export function PageStage({
     for (const [id, element] of textareas.current) {
       const annotation = annotations.find((item) => item.id === id);
       if (!annotation || annotation.kind !== "text" || annotation.height != null) continue;
-      fitTextarea(element);
+      if (element instanceof HTMLTextAreaElement) fitTextarea(element);
     }
   }, [annotations, scale]);
 
@@ -633,7 +633,8 @@ export function PageStage({
       }
       const captured = captureEdit(source, element, contentRef.current, baseWidth, baseHeight);
       try {
-        await document.fonts.load(faceCss({ ...element, fontSize: element.fontSize || element.h }));
+        const faces = [faceCss({ ...element, fontSize: element.fontSize || element.h }), ...element.spans.map((span) => faceCss(span))];
+        await Promise.all([...new Set(faces)].map((css) => document.fonts.load(css)));
       } catch {
         // The browser falls back to the generic family when the face is missing.
       }
@@ -643,7 +644,14 @@ export function PageStage({
         focusContentText(again, point, element);
         return;
       }
-      const patch = textPatch(element, sampleColor(source, element, baseWidth, baseHeight) ?? element.color, captured);
+      // Each run's colour comes from the rendered page, like the element's own, because the
+      // colours pdf.js reports per run do not line up with its text items.
+      const sampled = sampleColor(source, element, baseWidth, baseHeight) ?? element.color;
+      const spans = element.spans.map((span) => ({
+        ...span,
+        color: sampleColor(source, span.box, baseWidth, baseHeight) ?? sampled,
+      }));
+      const patch = textPatch({ ...element, spans }, sampled, captured);
       draftText.current = { id: patch.id, origin: latest };
       onReplace([...latest, patch]);
       focusContentText(patch, point, element);
@@ -665,7 +673,7 @@ export function PageStage({
     if (event.button !== 0) return;
     event.preventDefault();
     const active = document.activeElement;
-    if (active instanceof HTMLTextAreaElement && active.dataset.kind === "content") active.blur();
+    if (active instanceof HTMLElement && active.dataset.kind === "content") active.blur();
     const current = settleOpenText();
     const point = toPoint(event);
     try {
@@ -1214,6 +1222,98 @@ export function PageStage({
           ]
             .filter(Boolean)
             .join(" ");
+          const editorLabel = `Edit ${live ? contentLabel(live.kind).toLowerCase() : "text"}`;
+          const editorStyle: CSSProperties = {
+            left: patch.x * scale,
+            top: editorTop(patch, scale) * scale,
+            width: editorWidth * scale,
+            height: (rows * patch.lineHeight + patch.fontSize * 0.3) * scale,
+            fontFamily: patch.fontFamily,
+            fontWeight: patch.fontWeight,
+            fontStyle: patch.fontStyle,
+            fontSize: patch.fontSize * scale,
+            lineHeight: `${patch.lineHeight * scale}px`,
+            textAlign: patch.align,
+            textIndent: patch.indent * scale,
+            fontKerning: "none",
+            fontVariantLigatures: "none",
+            letterSpacing: 0,
+            color: showLive ? patch.color : "transparent",
+            caretColor: patch.color,
+            whiteSpace: patch.wrap ? "pre-wrap" : "pre",
+            overflowWrap: "normal",
+            wordBreak: "normal",
+            zIndex: selected ? 6 : 2,
+            pointerEvents: selected ? "auto" : "none",
+          };
+          const registerEditor = (node: HTMLTextAreaElement | HTMLDivElement | null) => {
+            if (!node) {
+              textareas.current.delete(patch.id);
+              return;
+            }
+            textareas.current.set(patch.id, node);
+            if (armFocus.current !== patch.id) return;
+            node.focus({ preventScroll: true });
+            const mark = caretRef.current;
+            const length = node instanceof HTMLTextAreaElement ? node.value.length : domText(node).length;
+            const index = mark?.id === patch.id ? mark.index : length;
+            const clamped = Math.max(0, Math.min(index, length));
+            if (node instanceof HTMLTextAreaElement) node.setSelectionRange(clamped, clamped);
+            else placeCaret(node, clamped);
+          };
+          const handleEditorFocus = () => {
+            // Content edits arm focus after an async capture, often once the pointer is already
+            // up; clearing it here keeps a later click from handing focus back to this editor.
+            if (armFocus.current === patch.id) armFocus.current = null;
+            if (draftText.current?.id === patch.id) return;
+            textBaseline.current = getAnnotations();
+            epochOnFocus.current = getEpoch();
+            onSelect(patch.id);
+          };
+          const handleEditorBlur = () => {
+            const latest = getAnnotations().find((item) => item.id === patch.id);
+            const source = contentRef.current.find((item) => item.id === patch.sourceId);
+            const draft = draftText.current;
+            const unchanged =
+              !latest ||
+              latest.kind !== "patch" ||
+              (latest.text === (latest.originText || source?.text || "") &&
+                Math.abs(latest.x - latest.originX) < 0.5 &&
+                Math.abs(latest.y - latest.originY) < 0.5);
+            if (draft?.id === patch.id) {
+              draftText.current = null;
+              textBaseline.current = null;
+              if (unchanged) {
+                onReplace(draft.origin);
+                onSelect(null);
+                return;
+              }
+              onPushBaseline(draft.origin);
+              return;
+            }
+            const baseline = textBaseline.current;
+            textBaseline.current = null;
+            if (baseline && getEpoch() === epochOnFocus.current) onPushBaseline(baseline);
+          };
+          // New text (and, for a mixed-face patch, its spans) re-laid inside the patch's box.
+          const applyEdit = (value: string, spans: TextSpan[], measured: number) => {
+            const current = getAnnotations();
+            const next = current.map((item) => {
+              if (item.id !== patch.id || item.kind !== "patch") return item;
+              const styled = { ...item, spans };
+              return { ...styled, ...layoutTextPatch(styled, value, measured) };
+            });
+            onReplace(next);
+            if (live) onSelectContent({ ...live, text: value });
+          };
+          const handleEditorKey = (event: ReactKeyboardEvent<HTMLElement>) => {
+            if ((event.key === "Enter" && !patch.wrap) || event.key === "Escape") {
+              event.preventDefault();
+              event.currentTarget.blur();
+              return;
+            }
+            event.stopPropagation();
+          };
           return (
             <div key={patch.id}>
               <div
@@ -1253,85 +1353,34 @@ export function PageStage({
                     height: Math.max(patch.h, 1) * scale,
                   }}
                 />
+              ) : patch.spans.length > 0 ? (
+                <SpanEditor
+                  patch={patch}
+                  scale={scale}
+                  selected={selected}
+                  showLive={showLive}
+                  label={editorLabel}
+                  style={editorStyle}
+                  register={(node) => registerEditor(node)}
+                  onFocus={handleEditorFocus}
+                  onBlur={handleEditorBlur}
+                  onKeyDown={handleEditorKey}
+                  onEdit={(text, spans, measured) => applyEdit(text, spans, patch.wrap ? measured : 0)}
+                />
               ) : (
                 <textarea
                   data-kind="content"
                   data-id={patch.id}
-                  ref={(node) => {
-                    if (node) {
-                      textareas.current.set(patch.id, node);
-                      if (armFocus.current === patch.id) {
-                        node.focus({ preventScroll: true });
-                        const mark = caretRef.current;
-                        const index = mark?.id === patch.id ? mark.index : node.value.length;
-                        const clamped = Math.max(0, Math.min(index, node.value.length));
-                        node.setSelectionRange(clamped, clamped);
-                      }
-                    } else textareas.current.delete(patch.id);
-                  }}
+                  ref={(node) => registerEditor(node)}
                   className="content-editor"
                   value={patch.text}
                   rows={1}
                   spellCheck={false}
                   readOnly={!selected}
-                  aria-label={`Edit ${live ? contentLabel(live.kind).toLowerCase() : "text"}`}
-                  style={{
-                    left: patch.x * scale,
-                    top: editorTop(patch, scale) * scale,
-                    width: editorWidth * scale,
-                    height: (rows * patch.lineHeight + patch.fontSize * 0.3) * scale,
-                    fontFamily: patch.fontFamily,
-                    fontWeight: patch.fontWeight,
-                    fontStyle: patch.fontStyle,
-                    fontSize: patch.fontSize * scale,
-                    lineHeight: `${patch.lineHeight * scale}px`,
-                    textAlign: patch.align,
-                    textIndent: patch.indent * scale,
-                    fontKerning: "none",
-                    fontVariantLigatures: "none",
-                    letterSpacing: 0,
-                    color: showLive ? patch.color : "transparent",
-                    caretColor: patch.color,
-                    whiteSpace: patch.wrap ? "pre-wrap" : "pre",
-                    overflowWrap: "normal",
-                    wordBreak: "normal",
-                    zIndex: selected ? 6 : 2,
-                    pointerEvents: selected ? "auto" : "none",
-                  }}
-                  onFocus={() => {
-                    // Content edits arm focus after an async capture, often once the pointer is already
-                    // up; clearing it here keeps a later click from handing focus back to this editor.
-                    if (armFocus.current === patch.id) armFocus.current = null;
-                    if (draftText.current?.id === patch.id) return;
-                    textBaseline.current = getAnnotations();
-                    epochOnFocus.current = getEpoch();
-                    onSelect(patch.id);
-                  }}
-                  onBlur={() => {
-                    const latest = getAnnotations().find((item) => item.id === patch.id);
-                    const source = contentRef.current.find((item) => item.id === patch.sourceId);
-                    const draft = draftText.current;
-                    const unchanged =
-                      !latest ||
-                      latest.kind !== "patch" ||
-                      (latest.text === (latest.originText || source?.text || "") &&
-                        Math.abs(latest.x - latest.originX) < 0.5 &&
-                        Math.abs(latest.y - latest.originY) < 0.5);
-                    if (draft?.id === patch.id) {
-                      draftText.current = null;
-                      textBaseline.current = null;
-                      if (unchanged) {
-                        onReplace(draft.origin);
-                        onSelect(null);
-                        return;
-                      }
-                      onPushBaseline(draft.origin);
-                      return;
-                    }
-                    const baseline = textBaseline.current;
-                    textBaseline.current = null;
-                    if (baseline && getEpoch() === epochOnFocus.current) onPushBaseline(baseline);
-                  }}
+                  aria-label={editorLabel}
+                  style={editorStyle}
+                  onFocus={handleEditorFocus}
+                  onBlur={handleEditorBlur}
                   onChange={(event) => {
                     const node = event.target;
                     const value = node.value;
@@ -1343,22 +1392,9 @@ export function PageStage({
                       measured = Math.round(node.scrollHeight / Math.max(patch.lineHeight * scale, 1));
                       node.style.height = height;
                     }
-                    const current = getAnnotations();
-                    const next = current.map((item) => {
-                      if (item.id !== patch.id || item.kind !== "patch") return item;
-                      return { ...item, ...layoutTextPatch(item, value, measured) };
-                    });
-                    onReplace(next);
-                    if (live) onSelectContent({ ...live, text: value });
+                    applyEdit(value, patch.spans, measured);
                   }}
-                  onKeyDown={(event) => {
-                    if ((event.key === "Enter" && !patch.wrap) || event.key === "Escape") {
-                      event.preventDefault();
-                      event.currentTarget.blur();
-                      return;
-                    }
-                    event.stopPropagation();
-                  }}
+                  onKeyDown={handleEditorKey}
                 />
               )}
             </div>

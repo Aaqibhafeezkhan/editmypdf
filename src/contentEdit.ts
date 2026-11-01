@@ -1,7 +1,7 @@
 import type { ContentElement } from "./content.ts";
-import { wrapText } from "./textLayout.ts";
+import { spansText, wrapText } from "./textLayout.ts";
 import type { EditCapture } from "./pageInk.ts";
-import { uid, type PatchAnnotation, type PatchTail } from "./types.ts";
+import { uid, type PatchAnnotation, type PatchTail, type TextSpan } from "./types.ts";
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -57,8 +57,9 @@ function unionBoxes(boxes: Box[], pad: number): Box {
 }
 
 // Re-lays the patch for new text. A wrapped block keeps its width and grows downward when it needs
-// more lines; a single run grows with its text. `measuredLines` is what the browser's textarea
-// actually produced, which wins when it wrapped more than the measurement predicted.
+// more lines; a single run grows with its text. `measuredLines` is what the browser's editor
+// actually produced, which wins when it wrapped more than the measurement predicted. When the
+// patch has spans they must already describe `text`.
 export function layoutTextPatch(
   patch: PatchAnnotation,
   text: string,
@@ -71,10 +72,112 @@ export function layoutTextPatch(
   return { text, w, h };
 }
 
+// Joins neighbouring spans in the same face whose colours are as good as equal, so a paragraph
+// read line by line edits as a few runs rather than one per line.
+export function mergeSpans(spans: TextSpan[]): TextSpan[] {
+  const merged: TextSpan[] = [];
+  for (const span of spans) {
+    const last = merged[merged.length - 1];
+    if (
+      last &&
+      last.fontFamily === span.fontFamily &&
+      last.fontWeight === span.fontWeight &&
+      last.fontStyle === span.fontStyle &&
+      Math.abs(last.fontSize - span.fontSize) < 0.05 &&
+      closeColors(last.color, span.color)
+    ) {
+      last.text += span.text;
+      continue;
+    }
+    merged.push({ ...span });
+  }
+  return merged;
+}
+
+function closeColors(a: string, b: string): boolean {
+  if (a === b) return true;
+  const parse = (value: string) => {
+    const match = /^#([0-9a-f]{6})$/i.exec(value);
+    if (!match?.[1]) return null;
+    return [0, 2, 4].map((offset) => Number.parseInt(match[1]!.slice(offset, offset + 2), 16));
+  };
+  const first = parse(a);
+  const second = parse(b);
+  if (!first || !second) return false;
+  return first.every((channel, index) => Math.abs(channel - (second[index] ?? 0)) <= 20);
+}
+
+// Replaces text[from, to) with `insert` inside a list of spans. The inserted text takes the face of
+// the character before the caret, so typing continues whatever run the caret sits in; a span that
+// loses all its text disappears, except the last one, which stays so typing can continue.
+export function editSpans(spans: TextSpan[], from: number, to: number, insert: string): TextSpan[] {
+  const total = spansText(spans).length;
+  const start = Math.max(0, Math.min(from, total));
+  const end = Math.max(start, Math.min(to, total));
+  const next: TextSpan[] = [];
+  let cursor = 0;
+  let placed = false;
+  spans.forEach((span, index) => {
+    const spanStart = cursor;
+    const spanEnd = cursor + span.text.length;
+    cursor = spanEnd;
+    const keepHead = span.text.slice(0, Math.max(0, Math.min(span.text.length, start - spanStart)));
+    const keepTail = span.text.slice(Math.max(0, Math.min(span.text.length, end - spanStart)));
+    // The span owning the caret: the one whose text ends at or after the caret, preferring the one
+    // the caret follows (start > spanStart) so a new word after a bold run stays bold.
+    const owns = !placed && (spanEnd >= start && (start > spanStart || spanStart === 0 || index === spans.length - 1));
+    let text = keepHead + keepTail;
+    if (owns) {
+      text = keepHead + insert + keepTail;
+      placed = true;
+    }
+    if (text || (index === spans.length - 1 && next.length === 0)) next.push({ ...span, text });
+  });
+  if (!placed) {
+    const last = next[next.length - 1] ?? spans[spans.length - 1];
+    if (last) {
+      if (next.length === 0) next.push({ ...last, text: insert });
+      else last.text += insert;
+    }
+  }
+  return next;
+}
+
+// Takes the face pdf.js registers for the page now, which can differ from the one the patch was made
+// with when another document was loaded in between. Returns the same object when nothing changed.
+export function refreshPatchFace(patch: PatchAnnotation, live: ContentElement): PatchAnnotation {
+  let changed =
+    live.fontFamily !== patch.fontFamily || live.fontWeight !== patch.fontWeight || live.fontStyle !== patch.fontStyle;
+  const spans = patch.spans.map((span) => {
+    const match =
+      live.spans.find((item) => item.pdfFont === span.pdfFont) ??
+      (live.spans.length === 0 && live.pdfFont === span.pdfFont ? live : null);
+    if (!match || !match.fontFamily) return span;
+    if (match.fontFamily === span.fontFamily && match.fontWeight === span.fontWeight && match.fontStyle === span.fontStyle) {
+      return span;
+    }
+    changed = true;
+    return { ...span, fontFamily: match.fontFamily, fontWeight: match.fontWeight, fontStyle: match.fontStyle };
+  });
+  if (!changed) return patch;
+  return { ...patch, fontFamily: live.fontFamily, fontWeight: live.fontWeight, fontStyle: live.fontStyle, spans };
+}
+
 export function textPatch(element: ContentElement, color: string, capture: EditCapture): PatchAnnotation {
   const wrap = element.kind === "paragraph";
   const text = element.text;
   const fontSize = element.fontSize || element.h;
+  const spans = mergeSpans(
+    element.spans.map((span) => ({
+      text: span.text,
+      fontFamily: span.fontFamily,
+      fontWeight: span.fontWeight,
+      fontStyle: span.fontStyle,
+      fontSize: span.fontSize,
+      color: span.color || color || element.color,
+      pdfFont: span.pdfFont,
+    })),
+  );
   return {
     id: uid(),
     page: element.page,
@@ -102,6 +205,7 @@ export function textPatch(element: ContentElement, color: string, capture: EditC
     align: element.align,
     indent: element.indent,
     wrap,
+    spans,
     image: "",
     underlineOffset: wrap ? -1 : capture.underlineOffset,
     underlineColor: capture.underlineColor || element.color || color,
@@ -137,6 +241,7 @@ export function graphicPatch(element: ContentElement, image: string): PatchAnnot
     align: "left",
     indent: 0,
     wrap: false,
+    spans: [],
     image,
     originText: "",
     underlineOffset: -1,

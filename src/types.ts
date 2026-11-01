@@ -167,6 +167,18 @@ export type SignatureAnnotation = Base & {
   rotation: number;
 };
 
+// One run of a text patch set in its own face. A patch's spans, in order, concatenate to its text.
+export type TextSpan = {
+  text: string;
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
+  fontSize: number;
+  color: string;
+  // pdf.js name of the font the run was set in; identifies the face when the page is read again.
+  pdfFont: string;
+};
+
 export type PatchTail = {
   x: number;
   y: number;
@@ -201,6 +213,9 @@ export type PatchAnnotation = Base & {
   align: TextAlign;
   indent: number;
   wrap: boolean;
+  // Styled runs when the text mixes faces (a bold or italic word inside a paragraph); empty for a
+  // single-face patch, whose face is the fields above.
+  spans: TextSpan[];
   image: string;
   underlineOffset: number;
   underlineColor: string;

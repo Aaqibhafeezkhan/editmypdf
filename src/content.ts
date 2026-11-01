@@ -1,9 +1,13 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
 import { collectGlyphUse, editableFamily, type GlyphUse } from "./fontFix.ts";
 import { measureWidth } from "./textLayout.ts";
-import type { Point, TextAlign } from "./types.ts";
+import type { Point, TextAlign, TextSpan } from "./types.ts";
 
 export type ContentKind = "text" | "heading" | "paragraph" | "table" | "line" | "image" | "shape";
+
+// A styled run of a content element, with the page box its glyphs occupy so its colour can be
+// read from the rendered page.
+export type ContentSpan = TextSpan & { box: { x: number; y: number; w: number; h: number } };
 
 export type ContentElement = {
   id: string;
@@ -29,6 +33,9 @@ export type ContentElement = {
   indent: number;
   // pdf.js name of the font the text was set in; identifies the face across runs.
   pdfFont: string;
+  // Styled runs when the text mixes faces (a bold word inside regular text), concatenating to
+  // `text`; empty when the whole element is set in one face.
+  spans: ContentSpan[];
 };
 
 export function isTextContent(kind: ContentKind): boolean {
@@ -90,6 +97,7 @@ type Run = Box & {
   color: string;
 };
 
+// A line of text. Its face fields describe the dominant run; `spans` lists every run in order.
 type Line = Box & {
   baseline: number;
   size: number;
@@ -101,6 +109,7 @@ type Line = Box & {
   fontStyle: "normal" | "italic";
   ascent: number;
   color: string;
+  spans: ContentSpan[];
 };
 
 type TextFace = Pick<
@@ -168,7 +177,7 @@ async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promis
   markHeadings(lines);
   const blocks = groupBlocks(lines, graphics.rules);
   const elements: ContentElement[] = [];
-  const push = (kind: ContentKind, box: Box, text: string, face?: TextFace) => {
+  const push = (kind: ContentKind, box: Box, text: string, face?: TextFace, spans: ContentSpan[] = []) => {
     if (box.w < 0.5 || box.h < 0.5) return;
     elements.push({
       id: "",
@@ -190,17 +199,19 @@ async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promis
       align: face?.align ?? "left",
       indent: face?.indent ?? 0,
       pdfFont: face?.pdfFont ?? "",
+      spans: faceCount(spans) > 1 ? spans : [],
     });
   };
   for (const block of blocks) {
     const first = block.lines[0];
     if (!first) continue;
     if (block.lines.length === 1) {
-      push(first.heading ? "heading" : "text", first, first.text, faceOf(first));
+      push(first.heading ? "heading" : "text", first, first.text, faceOf(first), first.spans);
       continue;
     }
     const face = blockFace(block.lines);
-    push("paragraph", union(block.lines), blockText(block.lines, face, union(block.lines).w), face);
+    const flowed = blockContent(block.lines, face, union(block.lines).w);
+    push("paragraph", union(block.lines), flowed.text, face, flowed.spans);
   }
   for (const rule of graphics.rules) push("line", rule, "");
   for (const shape of shapes) push("shape", shape, textInside(lines, shape));
@@ -403,12 +414,13 @@ function groupLines(runs: Run[]): Line[] {
       const first = current[0];
       if (!first) return;
       const box = union(current);
-      const face = dominantFace(current);
+      const spans = spanRuns(current);
+      const face = dominantFace(current, spans);
       lines.push({
         ...box,
         baseline: first.baseline,
         size: Math.max(...current.map((run) => run.size)),
-        text: joinRuns(current),
+        text: spans.map((span) => span.text).join(""),
         heading: false,
         pdfFont: face.pdfFont,
         fontFamily: face.fontFamily,
@@ -416,16 +428,22 @@ function groupLines(runs: Run[]): Line[] {
         fontStyle: face.fontStyle,
         ascent: face.ascent,
         color: face.color,
+        spans,
       });
       current = [];
     };
     for (const run of row) {
       const previous = current[current.length - 1];
       const gap = previous ? run.x - (previous.x + previous.w) : 0;
-      const differentFace =
+      // A bold or italic word stays in its line as a span of its own; only a change of size, a wide
+      // gap, or a list marker set apart from its item starts a new line.
+      const differentSize = !!previous && Math.abs(previous.size - run.size) > 0.4;
+      const afterMarker =
         !!previous &&
-        (previous.pdfFont !== run.pdfFont || Math.abs(previous.size - run.size) > 0.4);
-      if (previous && (differentFace || gap > Math.max(previous.size, run.size) * 1.5)) flush();
+        current.length === 1 &&
+        isListMarker(previous.text) &&
+        (previous.pdfFont !== run.pdfFont || gap > run.size * 0.45);
+      if (previous && (differentSize || afterMarker || gap > Math.max(previous.size, run.size) * 1.5)) flush();
       current.push(run);
     }
     flush();
@@ -433,16 +451,89 @@ function groupLines(runs: Run[]): Line[] {
   return lines;
 }
 
-function joinRuns(runs: Run[]): string {
-  let text = "";
+function isListMarker(text: string): boolean {
+  // An em dash is left out: it opens wrapped lines as a run of its own far more often than a list.
+  return /^(?:[\u2022\u25E6\u2023\u2043\u25AA\u25CF\u25A0\u25A1\u00B7\u2013*-]|\(?\d{1,3}[.)]|\(?[a-zA-Z][.)]|[ivxIVX]{1,4}[.)])$/.test(
+    text.trim(),
+  );
+}
+
+// Joins a line's runs, left to right, into spans: adjacent runs in one face become one span, a gap
+// wider than a sliver becomes a space, and whitespace collapses the way the text would read.
+function spanRuns(runs: Run[]): ContentSpan[] {
+  const spans: ContentSpan[] = [];
   let end = 0;
   for (const run of runs) {
-    const gap = text ? run.x - end : 0;
-    if (text && gap > run.size * 0.18) text += " ";
-    text += run.text;
+    let text = run.text.replace(/[ \t]+/g, " ");
+    const last = spans[spans.length - 1];
+    if (last) {
+      const gap = run.x - end;
+      if (gap > run.size * 0.18 && !last.text.endsWith(" ") && !text.startsWith(" ")) last.text += " ";
+      else if (last.text.endsWith(" ") && text.startsWith(" ")) text = text.slice(1);
+    } else text = text.trimStart();
     end = run.x + run.w;
+    if (!text) continue;
+    if (last && sameSpanFace(last, run)) {
+      last.text += text;
+      last.box = union([last.box, run]);
+    } else {
+      spans.push({
+        text,
+        fontFamily: run.fontFamily,
+        fontWeight: run.fontWeight,
+        fontStyle: run.fontStyle,
+        fontSize: run.size,
+        color: run.color,
+        pdfFont: run.pdfFont,
+        box: { x: run.x, y: run.y, w: run.w, h: run.h },
+      });
+    }
   }
-  return text.replace(/[ \t]+/g, " ").trim();
+  const last = spans[spans.length - 1];
+  if (last) last.text = last.text.trimEnd();
+  return mergeSpans(spans);
+}
+
+function sameSpanFace(
+  a: Pick<TextSpan, "fontFamily" | "fontWeight" | "fontStyle" | "fontSize" | "color">,
+  b: Pick<TextSpan, "fontFamily" | "fontWeight" | "fontStyle" | "color"> & { fontSize?: number; size?: number },
+): boolean {
+  const size = b.fontSize ?? b.size ?? a.fontSize;
+  return (
+    a.fontFamily === b.fontFamily &&
+    a.fontWeight === b.fontWeight &&
+    a.fontStyle === b.fontStyle &&
+    a.color === b.color &&
+    Math.abs(a.fontSize - size) < 0.05
+  );
+}
+
+// Drops empty spans, folds whitespace-only spans into a neighbour and merges neighbours in one face.
+function mergeSpans(spans: ContentSpan[]): ContentSpan[] {
+  const merged: ContentSpan[] = [];
+  for (const span of spans) {
+    if (!span.text) continue;
+    const last = merged[merged.length - 1];
+    if (last && (sameSpanFace(last, span) || !span.text.trim())) {
+      last.text += span.text;
+      last.box = union([last.box, span.box]);
+      continue;
+    }
+    if (last && !last.text.trim()) {
+      merged[merged.length - 1] = { ...span, text: last.text + span.text, box: union([last.box, span.box]) };
+      continue;
+    }
+    merged.push({ ...span, box: { ...span.box } });
+  }
+  return merged;
+}
+
+// How many faces the spans use, colour aside: the colours pdf.js reports per run are unreliable.
+function faceCount(spans: ContentSpan[]): number {
+  const faces = new Set(
+    spans.map((span) => `${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${Math.round(span.fontSize * 4)}`),
+  );
+  return faces.size;
 }
 
 function markHeadings(lines: Line[]) {
@@ -455,6 +546,11 @@ function markHeadings(lines: Line[]) {
 
 function groupBlocks(lines: Line[], rules: Box[]): { lines: Line[] }[] {
   const sorted = [...lines].sort((a, b) => a.y - b.y || a.x - b.x);
+  const markers = sorted.filter((line) => isListMarker(line.text));
+  // A line with a list marker to its left starts an item, so a new block, whatever sits above it.
+  const marked = new Set(
+    sorted.filter((line) => !isListMarker(line.text) && markers.some((marker) => markerBeside(marker, line))),
+  );
   const blocks: { lines: Line[] }[] = [];
   let current: Line[] = [];
   const flush = () => {
@@ -462,17 +558,29 @@ function groupBlocks(lines: Line[], rules: Box[]): { lines: Line[] }[] {
     current = [];
   };
   for (const line of sorted) {
+    // A marker is a block of its own and never interrupts the item it belongs to.
+    if (isListMarker(line.text)) {
+      blocks.push({ lines: [line] });
+      continue;
+    }
     const previous = current[current.length - 1];
-    if (!previous || !sameBlock(previous, line, rules)) flush();
+    if (!previous || marked.has(line) || !sameBlock(previous, line, rules)) flush();
     current.push(line);
   }
   flush();
   return blocks;
 }
 
+function markerBeside(marker: Line, line: Line): boolean {
+  const size = Math.max(marker.size, line.size);
+  if (Math.abs(marker.baseline - line.baseline) > size * 0.45) return false;
+  const gap = line.x - (marker.x + marker.w);
+  return gap > -1 && gap < size * 4;
+}
+
 function sameBlock(previous: Line, next: Line, rules: Box[]): boolean {
   if (previous.heading !== next.heading) return false;
-  if (previous.pdfFont !== next.pdfFont) return false;
+  if (!facesFlow(previous, next)) return false;
   const size = Math.max(previous.size, next.size, 1);
   if (Math.abs(previous.size - next.size) / size > 0.18) return false;
   const gap = next.y - (previous.y + previous.h);
@@ -489,6 +597,16 @@ function sameBlock(previous: Line, next: Line, rules: Box[]): boolean {
     const spans = rule.x <= previous.x + 6 && rule.x + rule.w >= previous.x + previous.w - 6;
     return between && spans;
   });
+}
+
+// Whether the text of one line can continue into the next: they share a dominant face, or the
+// next line's face already appears in the previous one (a paragraph whose first words are bold).
+// The reverse pairing, a single-face line above a mixed line that merely contains its face, is
+// left apart: that is what a heading followed by a paragraph with a bold lead-in looks like, and
+// pdf.js cannot tell a heading face from a bold one when the weight is baked into the font.
+function facesFlow(previous: Line, next: Line): boolean {
+  if (previous.pdfFont === next.pdfFont) return true;
+  return previous.spans.some((span) => span.pdfFont === next.pdfFont);
 }
 
 function readGraphics(
@@ -773,8 +891,18 @@ function blockFace(lines: Line[]): TextFace {
     .map((line, index) => line.baseline - (sorted[index]?.baseline ?? line.baseline))
     .filter((pitch) => pitch > 0);
   const layout = blockLayout(sorted, lead.size);
+  const face = dominantSpan(sorted.flatMap((line) => line.spans));
   return {
     ...faceOf(lead),
+    ...(face
+      ? {
+          fontFamily: face.fontFamily,
+          fontWeight: face.fontWeight,
+          fontStyle: face.fontStyle,
+          color: face.color,
+          pdfFont: face.pdfFont,
+        }
+      : {}),
     baseline: first.baseline,
     lineHeight: median(pitches) || lead.size * 1.2,
     align: layout.align,
@@ -786,29 +914,27 @@ function blockFace(lines: Line[]): TextFace {
 // right-aligned block, or a line that ends although the next word would still have fit) stays a
 // newline; a break that only exists because the column ran out of room becomes a space, so the
 // text flows again when it is edited.
-function blockText(lines: Line[], face: TextFace, width: number): string {
+function blockContent(lines: Line[], face: TextFace, width: number): { text: string; spans: ContentSpan[] } {
   const sorted = [...lines].sort((a, b) => a.baseline - b.baseline);
-  const measured = { fontFamily: face.fontFamily, fontWeight: face.fontWeight, fontStyle: face.fontStyle, fontSize: face.fontSize };
   const slack = Math.max(1, face.fontSize * 0.3);
-  let text = "";
-  sorted.forEach((line, index) => {
-    const current = line.text.trim();
-    if (!current) return;
-    if (index === 0) {
-      text = current;
-      return;
+  const spans: ContentSpan[] = [];
+  let previous: Line | null = null;
+  for (const line of sorted) {
+    if (!line.text.trim()) continue;
+    const last = spans[spans.length - 1];
+    if (last && previous) {
+      const lead = line.spans[0] ?? face;
+      const firstWord = line.text.split(" ")[0] ?? "";
+      const wouldFit = previous.w + measureWidth(` ${firstWord}`, lead, previous.size) <= width + slack;
+      const hard = face.align === "center" || face.align === "right" || wouldFit;
+      if (hard) last.text += "\n";
+      else if (!last.text.endsWith("-")) last.text += " ";
     }
-    const previous = sorted[index - 1];
-    const firstWord = current.split(" ")[0] ?? "";
-    const wouldFit =
-      !!previous &&
-      previous.w + measureWidth(` ${firstWord}`, measured, previous.size) <= width + slack;
-    const hard = face.align === "center" || face.align === "right" || wouldFit;
-    if (hard) text += `\n${current}`;
-    else if (text.endsWith("-")) text += current;
-    else text += ` ${current}`;
-  });
-  return text;
+    // Spans stay one per line and face so each keeps the box its colour is read from.
+    spans.push(...line.spans.map((span) => ({ ...span, box: { ...span.box } })));
+    previous = line;
+  }
+  return { text: spans.map((span) => span.text).join(""), spans };
 }
 
 function blockLayout(lines: Line[], size: number): { align: TextAlign; indent: number } {
@@ -835,15 +961,34 @@ function median(values: number[]): number {
   return sorted[Math.floor(sorted.length / 2)] ?? 0;
 }
 
-function dominantFace(runs: Run[]): Pick<Run, "pdfFont" | "fontFamily" | "fontWeight" | "fontStyle" | "ascent" | "color"> {
-  const best = [...runs].sort((a, b) => b.text.length - a.text.length)[0];
+// The face that sets most of the text, counted across every span in that face.
+function dominantSpan(spans: TextSpan[]): TextSpan | null {
+  const totals = new Map<string, { span: TextSpan; length: number }>();
+  for (const span of spans) {
+    // Colour is left out: the colours pdf.js reports per run are unreliable and would split a face.
+    const key = `${span.pdfFont}|${span.fontFamily}|${span.fontWeight}|${span.fontStyle}`;
+    const entry = totals.get(key);
+    if (entry) entry.length += span.text.length;
+    else totals.set(key, { span, length: span.text.length });
+  }
+  let best: { span: TextSpan; length: number } | null = null;
+  for (const entry of totals.values()) if (!best || entry.length > best.length) best = entry;
+  return best?.span ?? null;
+}
+
+function dominantFace(
+  runs: Run[],
+  spans: TextSpan[],
+): Pick<Run, "pdfFont" | "fontFamily" | "fontWeight" | "fontStyle" | "ascent" | "color"> {
+  const best = dominantSpan(spans);
+  const run = runs.find((item) => item.pdfFont === best?.pdfFont) ?? runs[0];
   return {
-    pdfFont: best?.pdfFont ?? "",
-    fontFamily: best?.fontFamily ?? "sans-serif",
-    fontWeight: best?.fontWeight ?? 400,
-    fontStyle: best?.fontStyle ?? "normal",
-    ascent: best?.ascent ?? 0.8,
-    color: best?.color ?? "#111111",
+    pdfFont: best?.pdfFont ?? run?.pdfFont ?? "",
+    fontFamily: best?.fontFamily ?? run?.fontFamily ?? "sans-serif",
+    fontWeight: best?.fontWeight ?? run?.fontWeight ?? 400,
+    fontStyle: best?.fontStyle ?? run?.fontStyle ?? "normal",
+    ascent: run?.ascent ?? 0.8,
+    color: best?.color ?? run?.color ?? "#111111",
   };
 }
 

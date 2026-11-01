@@ -609,7 +609,8 @@ export function Editor({ sessionId }: { sessionId: string }) {
       const typing =
         target instanceof HTMLTextAreaElement ||
         target instanceof HTMLInputElement ||
-        target instanceof HTMLSelectElement;
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
       const meta = event.metaKey || event.ctrlKey;
       if (meta && event.key.toLowerCase() === "z") {
         event.preventDefault();

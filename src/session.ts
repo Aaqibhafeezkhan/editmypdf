@@ -10,6 +10,7 @@ import type {
   LineAnnotation,
   ShapeAnnotation,
   TextAnnotation,
+  TextSpan,
 } from "./types.ts";
 
 const INDEX_KEY = "pdf-editor:sessions";
@@ -122,6 +123,28 @@ function decode(value: string): Uint8Array {
   return bytes;
 }
 
+// Styled runs of an older or hand-edited patch; dropped when they do not add up to its text.
+function spanList(value: unknown, text: string): TextSpan[] {
+  if (!Array.isArray(value) || value.length === 0) return [];
+  const spans: TextSpan[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const span = item as TextSpan;
+    if (typeof span.text !== "string") continue;
+    const number = (field: unknown, fallback: number) => (typeof field === "number" && Number.isFinite(field) ? field : fallback);
+    spans.push({
+      text: span.text,
+      fontFamily: typeof span.fontFamily === "string" && span.fontFamily ? span.fontFamily : "sans-serif",
+      fontWeight: number(span.fontWeight, 400),
+      fontStyle: span.fontStyle === "italic" ? "italic" : "normal",
+      fontSize: number(span.fontSize, 12),
+      color: typeof span.color === "string" ? span.color : "#111111",
+      pdfFont: typeof span.pdfFont === "string" ? span.pdfFont : "",
+    });
+  }
+  return spans.map((span) => span.text).join("") === text ? spans : [];
+}
+
 function tailList(value: unknown): PatchAnnotation["tails"] {
   if (!Array.isArray(value)) return [];
   const tails: PatchAnnotation["tails"] = [];
@@ -221,6 +244,7 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
           patch.align === "center" || patch.align === "right" || patch.align === "justify" ? patch.align : "left",
         indent: number(patch.indent, 0),
         wrap: patch.wrap === true,
+        spans: role === "text" ? spanList(patch.spans, text) : [],
         image: role === "text" ? "" : image,
         rotation: 0,
         x: number(patch.x, 0),

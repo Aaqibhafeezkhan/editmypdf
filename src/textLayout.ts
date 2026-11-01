@@ -1,11 +1,16 @@
-import type { PatchAnnotation, Point } from "./types.ts";
+import type { PatchAnnotation, Point, TextSpan } from "./types.ts";
 
 export type LaidLine = { text: string; start: number; end: number; width: number; hard: boolean };
 
 type Face = Pick<PatchAnnotation, "fontFamily" | "fontWeight" | "fontStyle" | "fontSize">;
 
 type Layout = Face &
-  Pick<PatchAnnotation, "originW" | "wrap" | "indent" | "align" | "lineHeight" | "ascent" | "x" | "y" | "w" | "text">;
+  Pick<PatchAnnotation, "originW" | "wrap" | "indent" | "align" | "lineHeight" | "ascent" | "x" | "y" | "w" | "text"> & {
+    spans?: TextSpan[];
+  };
+
+// A piece of one span that falls inside a laid-out line.
+type Piece = { text: string; face: TextSpan };
 
 // Extra width, in page units, allowed when wrapping so a line that just fits in the PDF is not broken one word early.
 export const WRAP_SLACK = 1;
@@ -30,6 +35,40 @@ export function measureWidth(text: string, face: Face, size = face.fontSize): nu
   return canvas.measureText(text).width;
 }
 
+export function spansText(spans: TextSpan[]): string {
+  return spans.map((span) => span.text).join("");
+}
+
+// The spans that describe `text`, or none when the patch is single-face or its spans are stale.
+function spansFor(text: string, patch: Layout): TextSpan[] {
+  const spans = patch.spans ?? [];
+  return spans.length > 0 && spansText(spans) === text ? spans : [];
+}
+
+// Splits text[from, to) by the span each character is set in.
+function pieces(text: string, from: number, to: number, face: Face, spans: TextSpan[]): Piece[] {
+  if (to <= from) return [];
+  if (spans.length === 0) return [{ text: text.slice(from, to), face: { ...face, color: "", pdfFont: "", text: "" } }];
+  const result: Piece[] = [];
+  let cursor = 0;
+  for (const span of spans) {
+    const start = cursor;
+    const end = cursor + span.text.length;
+    cursor = end;
+    if (end <= from) continue;
+    if (start >= to) break;
+    result.push({ text: span.text.slice(Math.max(from, start) - start, Math.min(to, end) - start), face: span });
+  }
+  return result;
+}
+
+// Width of text[from, to) when each character is measured in its own span's face.
+function rangeWidth(text: string, from: number, to: number, face: Face, spans: TextSpan[]): number {
+  let width = 0;
+  for (const piece of pieces(text, from, to, face, spans)) width += measureWidth(piece.text, piece.face);
+  return width;
+}
+
 export function blockWidth(patch: Pick<PatchAnnotation, "wrap" | "originW" | "w">): number {
   return patch.wrap ? patch.originW + WRAP_SLACK : Math.max(patch.w, 1);
 }
@@ -38,13 +77,16 @@ function tokens(text: string): string[] {
   return text.match(/\S+?-(?=[^\s\d-])|\S+\s*|\s+/g) ?? [];
 }
 
-function laid(text: string, start: number, face: Face, hard: boolean): LaidLine {
-  return { text, start, end: start + text.length, width: measureWidth(text.trimEnd(), face), hard };
+function laid(whole: string, text: string, start: number, face: Face, spans: TextSpan[], hard: boolean): LaidLine {
+  const width = rangeWidth(whole, start, start + text.trimEnd().length, face, spans);
+  return { text, start, end: start + text.length, width, hard };
 }
 
-// Breaks text into lines the way the browser lays out a pre-wrap textarea of the block's width:
-// at spaces and after hyphens, with trailing spaces hanging past the edge and long words overflowing.
+// Breaks text into lines the way the browser lays out a pre-wrap editor of the block's width:
+// at spaces and after hyphens, with trailing spaces hanging past the edge and long words
+// overflowing. Each character is measured in its own span's face.
 export function wrapText(text: string, patch: Layout): LaidLine[] {
+  const spans = spansFor(text, patch);
   const limit = patch.wrap ? patch.originW + WRAP_SLACK : Infinity;
   const lines: LaidLine[] = [];
   let cursor = 0;
@@ -53,14 +95,15 @@ export function wrapText(text: string, patch: Layout): LaidLine[] {
     let lineText = "";
     for (const token of tokens(paragraph)) {
       const available = limit - (lines.length === 0 ? patch.indent : 0);
-      if (lineText && measureWidth((lineText + token).trimEnd(), patch) > available) {
-        lines.push(laid(lineText, lineStart, patch, false));
+      const candidate = (lineText + token).trimEnd().length;
+      if (lineText && rangeWidth(text, lineStart, lineStart + candidate, patch, spans) > available) {
+        lines.push(laid(text, lineText, lineStart, patch, spans, false));
         lineStart += lineText.length;
         lineText = "";
       }
       lineText += token;
     }
-    lines.push(laid(lineText, lineStart, patch, true));
+    lines.push(laid(text, lineText, lineStart, patch, spans, true));
     cursor += paragraph.length + 1;
   }
   return lines;
@@ -117,11 +160,12 @@ export function caretIndexAt(patch: PatchAnnotation, point: Point, scale: number
   const { x, extra } = lineX(patch, line, row, lines.length);
   const local = point.x - patch.x - x;
   const text = line.text;
+  const spans = spansFor(patch.text, patch);
   let best = 0;
   let bestDistance = Infinity;
   let spaces = 0;
   for (let index = 0; index <= text.length; index += 1) {
-    const width = measureWidth(text.slice(0, index), patch) + spaces * extra;
+    const width = rangeWidth(patch.text, line.start, line.start + index, patch, spans) + spaces * extra;
     const distance = Math.abs(width - local);
     if (distance < bestDistance) {
       bestDistance = distance;
@@ -136,8 +180,10 @@ export function caretIndexAt(patch: PatchAnnotation, point: Point, scale: number
 // Paints the edited text at 3x for the exported PDF, laid out exactly like the on-page editor.
 export async function paintRun(patch: PatchAnnotation): Promise<string> {
   if (!patch.text.trim()) return "";
+  const spans = spansFor(patch.text, patch);
+  const faces = new Set([fontCss(patch), ...spans.map((span) => fontCss(span))]);
   try {
-    await document.fonts.load(fontCss(patch));
+    await Promise.all([...faces].map((css) => document.fonts.load(css)));
   } catch {
     // The face is registered by pdf.js when the page rendered; a failure here only affects fallbacks.
   }
@@ -150,26 +196,31 @@ export async function paintRun(patch: PatchAnnotation): Promise<string> {
   canvas.height = Math.max(1, Math.ceil(height * zoom));
   const context = canvas.getContext("2d");
   if (!context) return "";
-  context.font = fontCss(patch, patch.fontSize * zoom);
   context.fontKerning = "none";
-  context.fillStyle = patch.color;
   context.textBaseline = "alphabetic";
-  const spaceWidth = measureWidth(" ", patch);
   lines.forEach((line, index) => {
     const y = (patch.ascent * patch.fontSize + index * patch.lineHeight) * zoom;
     const { x, extra } = lineX(patch, line, index, lines.length);
-    const text = line.text.trimEnd();
-    if (extra <= 0) {
-      context.fillText(text, x * zoom, y);
-      return;
-    }
+    const end = line.start + line.text.trimEnd().length;
     let cursor = x;
-    const words = text.split(" ");
-    words.forEach((word, wordIndex) => {
-      if (word) context.fillText(word, cursor * zoom, y);
-      cursor += measureWidth(word, patch);
-      if (wordIndex < words.length - 1) cursor += spaceWidth + extra;
-    });
+    for (const piece of pieces(patch.text, line.start, end, patch, spans)) {
+      const face = spans.length > 0 ? piece.face : patch;
+      context.font = fontCss(face, face.fontSize * zoom);
+      context.fillStyle = spans.length > 0 ? piece.face.color || patch.color : patch.color;
+      if (extra <= 0) {
+        context.fillText(piece.text, cursor * zoom, y);
+        cursor += measureWidth(piece.text, face);
+        continue;
+      }
+      // Justified: every space in the line widens by the same amount, as the editor's text-align does.
+      const spaceWidth = measureWidth(" ", face);
+      const words = piece.text.split(" ");
+      words.forEach((word, wordIndex) => {
+        if (word) context.fillText(word, cursor * zoom, y);
+        cursor += measureWidth(word, face);
+        if (wordIndex < words.length - 1) cursor += spaceWidth + extra;
+      });
+    }
   });
   if (patch.underlineOffset >= 0) {
     context.fillStyle = patch.underlineColor || patch.color;

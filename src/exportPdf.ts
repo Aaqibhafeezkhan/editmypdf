@@ -9,7 +9,7 @@ import {
   type PDFPage,
 } from "pdf-lib";
 import { readPageContent, type ContentElement } from "./content.ts";
-import { editCover } from "./contentEdit.ts";
+import { editCover, refreshPatchFace } from "./contentEdit.ts";
 import { paintRun } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { rotatePoint } from "./geometry.ts";
@@ -296,7 +296,7 @@ async function refreshPatchFaces(annotations: Annotation[], pages: PDFPageProxy[
     if (annotation.kind !== "patch" || annotation.role !== "text") return annotation;
     const live = faces.get(annotation.sourceId);
     if (!live?.fontFamily) return annotation;
-    return { ...annotation, fontFamily: live.fontFamily, fontWeight: live.fontWeight, fontStyle: live.fontStyle };
+    return refreshPatchFace(annotation, live);
   });
 }
 
