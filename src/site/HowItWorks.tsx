@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Link } from "react-router";
 import {
   ArrowRight,
@@ -141,18 +141,92 @@ const LIMITS = [
   { icon: MemoryStick, text: "Everything happens in memory, so a very large file is limited by what your browser can hold." },
 ];
 
-// The sticky header's height plus a little, so a step scrolled to sits below it.
-const HEADER_OFFSET = 96;
+// The site header's height; the step strip sticks under it.
+const HEADER = 64;
 
-// Scrolls to a step under the sticky header without handing the hash to the router.
-function jump(event: MouseEvent<HTMLAnchorElement>, id: string) {
-  const node = document.getElementById(id);
-  if (!node) return;
-  event.preventDefault();
-  const top = node.getBoundingClientRect().top + window.scrollY - HEADER_OFFSET;
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  window.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
-  history.replaceState(null, "", `#${id}`);
+// The five steps as a strip that sticks under the site header while the steps scroll past, the
+// step on screen highlighted. A click scrolls so the step's card sits under the strip.
+function StepStrip() {
+  const [active, setActive] = useState<string | null>(null);
+  const [stuck, setStuck] = useState(false);
+  const strip = useRef<HTMLDivElement>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const cards = STEPS.map((step) => document.getElementById(`step-${step.n}`)).filter((node): node is HTMLElement => node !== null);
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const line = HEADER + (strip.current?.offsetHeight ?? 0) + 40;
+      let current: string | null = null;
+      for (const card of cards) {
+        if (card.getBoundingClientRect().top <= line) current = card.id;
+        else break;
+      }
+      // Past the last card the strip stays on the last step; above the first, nothing is marked.
+      setActive(current);
+      setStuck((sentinel.current?.getBoundingClientRect().bottom ?? 1) < HEADER);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  // On a narrow screen the strip scrolls sideways; the active step is kept in view.
+  useEffect(() => {
+    if (!active || !strip.current) return;
+    const row = strip.current.querySelector<HTMLElement>(".how-overview");
+    const item = row?.querySelector<HTMLElement>(`[data-step="${active}"]`);
+    if (!row || !item || row.scrollWidth <= row.clientWidth) return;
+    const left = item.offsetLeft - (row.clientWidth - item.offsetWidth) / 2;
+    row.scrollTo({ left, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [active]);
+
+  const jump = (event: MouseEvent<HTMLAnchorElement>, id: string) => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    event.preventDefault();
+    const offset = HEADER + (strip.current?.offsetHeight ?? 0) + 16;
+    const top = node.getBoundingClientRect().top + window.scrollY - offset;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
+    history.replaceState(null, "", `#${id}`);
+  };
+
+  return (
+    <>
+      <div ref={sentinel} className="how-sentinel" aria-hidden="true" />
+      <div ref={strip} className={stuck ? "how-sticky stuck" : "how-sticky"}>
+        <div className="container">
+          <ol className="how-overview" aria-label="The five steps">
+            {STEPS.map((step) => {
+              const id = `step-${step.n}`;
+              const current = active === id;
+              return (
+                <li key={step.n} data-step={id} className={current ? "active" : undefined}>
+                  <a href={`#${id}`} aria-current={current ? "step" : undefined} onClick={(event) => jump(event, id)}>
+                    <span className="icon-tile" aria-hidden="true">
+                      <step.icon />
+                    </span>
+                    <span className="how-overview-n">{step.n}</span>
+                    <span className="how-overview-t">{step.short}</span>
+                  </a>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      </div>
+    </>
+  );
 }
 
 export function HowItWorks() {
@@ -175,7 +249,7 @@ export function HowItWorks() {
   });
   return (
     <>
-      <section className="section container tone-violet">
+      <section className="section container tone-violet how-intro">
         <div className="section-head">
           <p className="eyebrow">
             <Workflow aria-hidden="true" /> How it works
@@ -187,23 +261,14 @@ export function HowItWorks() {
             and back again into a PDF.
           </p>
         </div>
-        <ol className="how-overview" aria-label="The five steps">
-          {STEPS.map((step) => (
-            <li key={step.n}>
-              <a href={`#step-${step.n}`} onClick={(event) => jump(event, `step-${step.n}`)}>
-                <span className="icon-tile" aria-hidden="true">
-                  <step.icon />
-                </span>
-                <span className="how-overview-n">{step.n}</span>
-                <span className="how-overview-t">{step.short}</span>
-              </a>
-            </li>
-          ))}
-        </ol>
       </section>
 
-      <section className="container tone-violet">
-        <ol className="how-steps">
+      {/* The strip and the steps share one wrapper: a sticky element can only stick within its
+          parent's box, so the parent has to be as tall as the steps it follows. */}
+      <div className="tone-violet how-flow">
+        <StepStrip />
+        <section className="container how-steps-section">
+          <ol className="how-steps">
           {STEPS.map((step) => (
             <li key={step.n} id={`step-${step.n}`} className="how-step">
               <span className="how-step-marker" aria-hidden="true">
@@ -219,8 +284,9 @@ export function HowItWorks() {
               </div>
             </li>
           ))}
-        </ol>
-      </section>
+          </ol>
+        </section>
+      </div>
 
       <section className="section container tone-coral">
         <div className="section-head">

@@ -6,6 +6,37 @@
 
 /* ---- Overview strip --------------------------------------------------------- */
 
+/* The strip sticks under the site header while the steps scroll past. A sentinel just above it
+   tells the script when it is stuck, which draws a rule under it and tightens the tiles. */
+.how-intro {
+  padding-bottom: var(--sp-4);
+}
+
+.how-sentinel {
+  height: 1px;
+}
+
+.how-sticky {
+  position: sticky;
+  top: 64px;
+  z-index: 30;
+  padding: var(--sp-3) 0;
+  background: color-mix(in oklab, var(--paper-0) 86%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out);
+}
+
+.how-sticky.stuck {
+  border-bottom-color: var(--rule);
+  box-shadow: var(--elev-1);
+}
+
+.how-steps-section {
+  padding-top: var(--sp-8);
+}
+
 /* The five steps in one row, each a link to its step below. On narrow screens the row scrolls
    sideways and snaps, so the strip stays one line. */
 .how-overview {
@@ -54,6 +85,45 @@
   transform: translateY(-2px);
 }
 
+/* The step on screen. */
+.how-overview li.active a {
+  border-color: var(--tone);
+  background: var(--tone-soft);
+  box-shadow: 0 0 0 1px var(--tone);
+}
+
+.how-overview li.active .how-overview-t {
+  color: var(--tone-ink);
+}
+
+.how-overview li.active .icon-tile {
+  background: var(--tone);
+  color: #ffffff;
+}
+
+/* Stuck: one line per tile, number hidden, so the strip takes less of the viewport. */
+.how-sticky.stuck .how-overview a {
+  grid-template-columns: 32px 1fr;
+  grid-template-rows: auto;
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.how-sticky.stuck .how-overview .icon-tile {
+  grid-row: auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.how-sticky.stuck .how-overview .icon-tile svg {
+  width: 16px;
+  height: 16px;
+}
+
+.how-sticky.stuck .how-overview-n {
+  display: none;
+}
+
 .how-overview .icon-tile {
   grid-row: span 2;
 }
@@ -81,6 +151,14 @@
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
+  }
+
+  .how-sticky.stuck .how-overview li {
+    flex-basis: auto;
+  }
+
+  .how-sticky.stuck .how-overview-t {
+    white-space: nowrap;
   }
 
   .how-overview::-webkit-scrollbar {
@@ -120,7 +198,7 @@
   grid-template-columns: 48px minmax(0, 1fr);
   gap: var(--sp-6);
   padding-bottom: var(--sp-8);
-  scroll-margin-top: 96px;
+  scroll-margin-top: 160px;
 }
 
 .how-step::before {
