@@ -252,21 +252,40 @@ export function editSpans(spans: TextSpan[], from: number, to: number, insert: s
 // Takes the face pdf.js registers for the page now, which can differ from the one the patch was made
 // with when another document was loaded in between. Returns the same object when nothing changed.
 export function refreshPatchFace(patch: PatchAnnotation, live: ContentElement): PatchAnnotation {
+  const livePdfFont = sameFontRef(patch.pdfFont, live.pdfFont) ? live.pdfFont : patch.pdfFont;
   let changed =
-    live.fontFamily !== patch.fontFamily || live.fontWeight !== patch.fontWeight || live.fontStyle !== patch.fontStyle;
+    live.fontFamily !== patch.fontFamily ||
+    live.fontWeight !== patch.fontWeight ||
+    live.fontStyle !== patch.fontStyle ||
+    livePdfFont !== patch.pdfFont;
   const spans = patch.spans.map((span) => {
     const match =
-      live.spans.find((item) => item.pdfFont === span.pdfFont) ??
-      (live.spans.length === 0 && live.pdfFont === span.pdfFont ? live : null);
+      live.spans.find((item) => sameFontRef(item.pdfFont, span.pdfFont)) ??
+      (live.spans.length === 0 && sameFontRef(live.pdfFont, span.pdfFont) ? live : null);
     if (!match || !match.fontFamily) return span;
-    if (match.fontFamily === span.fontFamily && match.fontWeight === span.fontWeight && match.fontStyle === span.fontStyle) {
+    if (
+      match.fontFamily === span.fontFamily &&
+      match.fontWeight === span.fontWeight &&
+      match.fontStyle === span.fontStyle &&
+      match.pdfFont === span.pdfFont
+    ) {
       return span;
     }
     changed = true;
-    return { ...span, fontFamily: match.fontFamily, fontWeight: match.fontWeight, fontStyle: match.fontStyle };
+    return { ...span, fontFamily: match.fontFamily, fontWeight: match.fontWeight, fontStyle: match.fontStyle, pdfFont: match.pdfFont };
   });
   if (!changed) return patch;
-  return { ...patch, fontFamily: live.fontFamily, fontWeight: live.fontWeight, fontStyle: live.fontStyle, spans };
+  return { ...patch, fontFamily: live.fontFamily, fontWeight: live.fontWeight, fontStyle: live.fontStyle, pdfFont: livePdfFont, spans };
+}
+
+// Whether two pdf.js font names refer to the same font of the file. pdf.js names a font after the
+// document it loaded it in and the font's number in the file (`g_d2_f3`); the document part
+// changes every time the file is opened, the font part does not.
+export function sameFontRef(a: string, b: string): boolean {
+  if (a === b) return true;
+  const left = /^g_d\d+_(f\d+)$/.exec(a);
+  const right = /^g_d\d+_(f\d+)$/.exec(b);
+  return !!left && !!right && left[1] === right[1];
 }
 
 export function textPatch(element: ContentElement, color: string, capture: EditCapture): PatchAnnotation {

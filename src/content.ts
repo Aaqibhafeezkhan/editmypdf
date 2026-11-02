@@ -1,6 +1,7 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
-import { collectGlyphUse, editableFamily, familyBytes, missingGlyphs, type GlyphUse } from "./fontFix.ts";
+import { collectGlyphUse, editableFamily, familyBytes, missingGlyphs, rememberCoverage, type GlyphUse } from "./fontFix.ts";
 import { measureWidth } from "./textLayout.ts";
+import { collectType3Glyphs, groupType3Fonts, type3Face, type Type3Glyph, type Type3Member } from "./type3Font.ts";
 import type { PatchAnnotation, Point, TextAlign, TextSpan } from "./types.ts";
 
 export type ContentKind = "text" | "heading" | "paragraph" | "table" | "line" | "image" | "shape";
@@ -251,6 +252,7 @@ async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promis
         ...readGraphics(list.fnArray, list.argsArray, viewport),
         colors: textColors(list.fnArray, list.argsArray),
         glyphUse: collectGlyphUse(list.fnArray, list.argsArray),
+        type3: collectType3Glyphs(list.fnArray, list.argsArray),
         glyphs: glyphStream(list.fnArray, list.argsArray),
       }))
       .catch(() => ({
@@ -260,11 +262,12 @@ async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promis
         covers: [] as Cover[],
         colors: [] as string[],
         glyphUse: new Map<string, GlyphUse>(),
+        type3: new Map<string, Map<string, Type3Glyph>>(),
         glyphs: [] as GlyphState[],
       })),
   ]);
   const styles = textResult.styles as Record<string, PdfFontStyle>;
-  const faces = await resolveFaces(page, textResult.items, styles, graphics.glyphUse);
+  const faces = await resolveFaces(page, textResult.items, styles, graphics.glyphUse, graphics.type3);
   await loadFaces(faces);
   const runs = textRuns(
     textResult.items,
@@ -368,17 +371,36 @@ async function resolveFaces(
   items: unknown[],
   styles: Record<string, PdfFontStyle>,
   glyphUse: Map<string, GlyphUse>,
+  type3Glyphs: Map<string, Map<string, Type3Glyph>>,
 ): Promise<Map<string, Face>> {
   const names = new Set<string>();
   for (const item of items) if (isTextRun(item) && item.fontName) names.add(item.fontName);
   const faces = new Map<string, Face>();
   const fonts = new Map<string, PageFont>();
+  const type3: Type3Member[] = [];
   await Promise.all(
     [...names].map(async (name) => {
       const font = await fontObject(page, name);
-      const family = font?.isType3Font ? null : await editableFamily(name, font?.data, glyphUse.get(name));
+      if (font?.isType3Font) {
+        type3.push({ name, font, glyphs: type3Glyphs.get(name) ?? new Map() });
+        return;
+      }
+      const family = await editableFamily(name, font?.data, glyphUse.get(name));
       faces.set(name, await faceFor(name, font, styles[name], family));
-      fonts.set(name, { data: font?.data ?? null, fixed: family ? familyBytes(family) : null, type3: font?.isType3Font === true });
+      fonts.set(name, { data: font?.data ?? null, fixed: family ? familyBytes(family) : null, type3: false });
+    }),
+  );
+  // A Type3 font is a set of drawings: a real face is rebuilt from them, so the text is set in
+  // the page's own letters, with the page's advances and a space of its own. Fonts that are one
+  // typeface share a face built from all their glyphs.
+  await Promise.all(
+    groupType3Fonts(type3).map(async (members) => {
+      const rebuilt = await type3Face(members);
+      for (const member of members) {
+        if (rebuilt) rememberCoverage(member.name, rebuilt.data, glyphUse.get(member.name));
+        faces.set(member.name, await faceFor(member.name, member.font, styles[member.name], rebuilt?.family ?? null));
+        fonts.set(member.name, { data: null, fixed: rebuilt?.data ?? null, type3: true });
+      }
     }),
   );
   fontCache.set(page, fonts);

@@ -109,6 +109,13 @@ export function familyBytes(family: string): Uint8Array | null {
   return bytesByFamily.get(family) ?? null;
 }
 
+// Records what a face built elsewhere (one rebuilt from a Type3 font's outlines) covers, and
+// what the page drew with it, so `missingGlyphs` can speak for it too.
+export function rememberCoverage(loadedName: string, data: Uint8Array, use: GlyphUse | undefined): void {
+  cmaps.set(loadedName, unicodeMap(data));
+  if (use) rememberDrawn(loadedName, use);
+}
+
 // Every Unicode code point an OpenType font maps to a glyph, with the glyph's index.
 export function fontUnicodeMap(bytes: Uint8Array): Map<number, number> {
   return unicodeMap(bytes);
