@@ -329,6 +329,84 @@
   text-underline-offset: 0.2em;
 }
 
+/* Hover motion: primary and secondary buttons lift (above); a trailing arrow slides a little and a
+   leading icon grows a little. Viewers who prefer reduced motion get the colour change only. */
+.btn .btn-arrow,
+.btn .btn-lead {
+  transition: transform var(--duration) var(--ease-out);
+}
+
+.btn:hover .btn-arrow {
+  transform: translateX(3px);
+}
+
+.btn:hover .btn-lead {
+  transform: scale(1.12);
+}
+
+.btn-secondary .btn-lead {
+  color: var(--accent-ink);
+}
+
+.link-arrow svg {
+  transition: transform var(--duration) var(--ease-out);
+}
+
+.link-arrow:hover svg {
+  transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:hover,
+  .btn:hover .btn-arrow,
+  .btn:hover .btn-lead,
+  .link-arrow:hover svg,
+  a.card:hover,
+  a.usecase:hover {
+    transform: none;
+  }
+}
+
+/* Three or four icon-led points under a statement: tile, title, one line. */
+.point-list {
+  list-style: none;
+  margin: var(--sp-6) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4) var(--sp-5);
+}
+
+.point-list li {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 2px var(--sp-3);
+  align-content: start;
+}
+
+.point-list .icon-tile {
+  grid-row: span 2;
+}
+
+.point-list strong {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  padding-top: 2px;
+}
+
+.point-list span:not(.icon-tile) {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+@media (max-width: 560px) {
+  .point-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---- Header -------------------------------------------------------------- */
 
 .site-header {
