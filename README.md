@@ -50,3 +50,8 @@ absolute.
 Edit `src/data/competitors.ts`. Each entry carries `checkedAt` and a `sources` list; update both when
 a price or a limit changes. The roundup table, the per-tool pages, the landing teaser and the
 sitemap all read from that file.
+
+## Contributing and licence
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run, test and change the editor and the site.
+Stet is released under the MIT licence; see [LICENSE](LICENSE).
