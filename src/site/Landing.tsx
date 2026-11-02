@@ -1,21 +1,26 @@
 import { Link } from "react-router";
 import {
   ArrowRight,
+  BadgeCheck,
   BookOpen,
   CalendarDays,
   Check,
   CircleHelp,
+  CirclePlay,
   ClipboardPen,
   CloudOff,
   Code,
   Cpu,
+  Database,
   Download,
   EyeOff,
   FileDown,
+  FileText,
   FolderOpen,
   Globe,
   HardDrive,
   Highlighter,
+  Laptop,
   Layers,
   ListChecks,
   MousePointerClick,
@@ -25,7 +30,6 @@ import {
   Scale,
   ShieldCheck,
   Signature,
-  Sparkles,
   SpellCheck,
   Terminal,
   TrendingUp,
@@ -34,22 +38,49 @@ import {
   UserX,
   ZoomIn,
 } from "lucide-react";
-import { COMPETITORS, OURS } from "../data/competitors.ts";
+import { COMPETITORS } from "../data/competitors.ts";
 import { FAQ } from "../data/faq.ts";
-import { formatDate, POSTS } from "../data/posts.ts";
-import { PRODUCT, ROUTES } from "../data/product.ts";
+import { POSTS } from "../data/posts.ts";
+import { ANALYTICS, PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
 import { EditorWindow } from "./EditorWindow.tsx";
 import { faqJsonLd } from "./Faq.tsx";
 import { Markdown } from "./Markdown.tsx";
-import { readingTime } from "./markdown.ts";
-import { Mark, Where } from "./Marks.tsx";
+import { GlanceTable } from "./GlanceTable.tsx";
+import { PostCard } from "./PostCard.tsx";
 import { useMeta } from "./useMeta.ts";
 import { AnnotateVisual, BeforeAfter, ExportVisual, FidelityDemo, PrivacyDiagram, SpansVisual } from "./Visuals.tsx";
 import "./landing.css";
 
 const TEASER = ["ilovepdf", "smallpdf", "adobe-acrobat-online", "sejda"];
-const COVERS = ["Tj", "¶", "ƒ", "Aa", "{ }", "Tc"];
+
+const STEPS = [
+  { icon: FolderOpen, title: "Open", body: "Drop a PDF. It is read in a worker on your machine." },
+  { icon: MousePointerClick, title: "Click and type", body: "Any heading, line or paragraph opens in its own font." },
+  { icon: Download, title: "Download", body: "A new PDF with your words as real text." },
+];
+
+// The privacy section in four points. The privacy page and the FAQ make the same claims.
+const PRIVACY_POINTS = [
+  { icon: CloudOff, title: "No upload", body: "The code has no endpoint to send a file to." },
+  { icon: UserX, title: "No account", body: "Nothing to sign up for and nothing logged." },
+  {
+    icon: EyeOff,
+    title: ANALYTICS.enabled ? "Nothing beside your document" : "No tracking",
+    body: ANALYTICS.enabled
+      ? "The editor loads no analytics and no third-party script; the site's pages count visits only if you agree."
+      : "No analytics, no error reporter, no third-party script.",
+  },
+  { icon: Database, title: "Stored on this device", body: "IndexedDB keeps your documents between visits. Clear site data to remove them." },
+];
+
+// The comparison section in four points; the table beside them shows the same facts per tool.
+const COMPARE_POINTS = [
+  { icon: Laptop, title: "Runs in your browser", body: "Most web editors upload your file to their servers first." },
+  { icon: Type, title: "Keeps the page's own font", body: "Retyped text stays in the embedded face, not a substitute." },
+  { icon: BadgeCheck, title: "Free, with no limits", body: "No task counter, watermark or file size cap, because there are no tiers." },
+  { icon: Scale, title: "Honest about the rest", body: "Where another tool is the better choice, its page says so." },
+];
 
 const USE_CASES = [
   {
@@ -91,6 +122,7 @@ function Showcase({
   body,
   points,
   visual,
+  caption,
   reverse = false,
   link,
 }: {
@@ -100,16 +132,20 @@ function Showcase({
   body: string;
   points: string[];
   visual: React.ReactNode;
+  // The label on the preview's title bar.
+  caption: string;
   reverse?: boolean;
   link?: { to: string; label: string };
 }) {
   return (
-    <div className={reverse ? "showcase reverse" : "showcase"} data-reveal>
+    <div className={reverse ? "showcase reverse" : "showcase"}>
       <div className="showcase-copy">
-        <span className="showcase-icon" aria-hidden="true">
-          <Icon />
-        </span>
-        <p className="eyebrow">{eyebrow}</p>
+        <p className="showcase-label">
+          <span className="icon-tile" aria-hidden="true">
+            <Icon />
+          </span>
+          <span>{eyebrow}</span>
+        </p>
         <h3 className="h2">{title}</h3>
         <p className="lede">{body}</p>
         <ul className="checklist">
@@ -128,7 +164,15 @@ function Showcase({
           </p>
         )}
       </div>
-      <div className="showcase-visual">{visual}</div>
+      <div className="showcase-visual">
+        <div className="preview-frame">
+          <div className="preview-bar" aria-hidden="true">
+            <span className="preview-dots" />
+            <span className="preview-title">{caption}</span>
+          </div>
+          <div className="preview-body">{visual}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -181,7 +225,7 @@ export function Landing() {
         <div className="hero-bg" aria-hidden="true" />
         <div className="container hero-copy">
           <p className="eyebrow">
-            <Sparkles aria-hidden="true" /> Free browser PDF editor
+            <FileText aria-hidden="true" /> Free browser PDF editor
           </p>
           <h1 className="display display-xl">
             Edit the text in a PDF <em>without disturbing the page.</em>
@@ -192,10 +236,10 @@ export function Landing() {
           </p>
           <p className="actions">
             <Link to={ROUTES.app} className="btn btn-primary btn-lg">
-              Open the editor <ArrowRight aria-hidden="true" />
+              Open the editor <ArrowRight className="btn-arrow" aria-hidden="true" />
             </Link>
             <Link to={ROUTES.howItWorks} className="btn btn-secondary btn-lg">
-              See how it works
+              <CirclePlay className="btn-lead" aria-hidden="true" /> See how it works
             </Link>
           </p>
           <ul className="hero-trust">
@@ -228,37 +272,20 @@ export function Landing() {
       </section>
 
       <section className="container" aria-label="How it works in three steps">
-        <div className="steps-strip" data-reveal>
-          <div className="step-chip">
-            <span className="step-chip-icon">
-              <FolderOpen aria-hidden="true" />
-            </span>
-            <div>
-              <strong>Open</strong>
-              <span>Drop a PDF. It is read in a worker on your machine.</span>
-            </div>
-          </div>
-          <span className="step-line" aria-hidden="true" />
-          <div className="step-chip">
-            <span className="step-chip-icon">
-              <MousePointerClick aria-hidden="true" />
-            </span>
-            <div>
-              <strong>Click and type</strong>
-              <span>Any heading, line or paragraph opens in its own font.</span>
-            </div>
-          </div>
-          <span className="step-line" aria-hidden="true" />
-          <div className="step-chip">
-            <span className="step-chip-icon">
-              <Download aria-hidden="true" />
-            </span>
-            <div>
-              <strong>Download</strong>
-              <span>A new PDF with your words as real text.</span>
-            </div>
-          </div>
-        </div>
+        <ol className="steps-strip">
+          {STEPS.map((step, index) => (
+            <li key={step.title} className="step-chip">
+              <span className="step-chip-icon" aria-hidden="true">
+                <step.icon />
+                <i className="step-chip-n">{index + 1}</i>
+              </span>
+              <span className="step-chip-text">
+                <strong>{step.title}</strong>
+                <span>{step.body}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
         <ul className="trust-strip">
           <li>
             <Cpu aria-hidden="true" /> Reads with pdf.js
@@ -270,7 +297,7 @@ export function Landing() {
             <Code aria-hidden="true" /> Open source
           </li>
           <li>
-            <EyeOff aria-hidden="true" /> No analytics, no tracking
+            <EyeOff aria-hidden="true" /> {ANALYTICS.enabled ? "No tracking in the editor" : "No analytics, no tracking"}
           </li>
           <li>
             <Globe aria-hidden="true" /> Chrome, Edge, Firefox, Safari
@@ -281,7 +308,7 @@ export function Landing() {
       <section className="section container" id="features">
         <div className="section-head centered">
           <p className="eyebrow">
-            <Sparkles aria-hidden="true" /> What it does
+            <PenLine aria-hidden="true" /> What it does
           </p>
           <h2 className="h2">An editor for the page itself, not a layer on top of it.</h2>
           <p className="lede">
@@ -305,6 +332,7 @@ export function Landing() {
             "The original words are hidden under the edit and taken out of the page on download.",
           ]}
           visual={<BeforeAfter />}
+          caption="Before and after one edit"
           link={{ to: ROUTES.post("exactly-as-the-page-prints-it"), label: "How the fit is done" }}
         />
 
@@ -324,6 +352,7 @@ export function Landing() {
             "Each face is embedded separately on export.",
           ]}
           visual={<SpansVisual />}
+          caption="One paragraph, three faces"
           link={{ to: ROUTES.post("mixed-face-paragraphs"), label: "How the span editor works" }}
         />
 
@@ -342,6 +371,7 @@ export function Landing() {
             "The result is searchable, selectable and sharp at any zoom.",
           ]}
           visual={<ExportVisual />}
+          caption="What the download contains"
           link={{ to: ROUTES.post("exporting-real-text"), label: "How export works" }}
         />
 
@@ -361,9 +391,10 @@ export function Landing() {
             "Emoji, and a signature drawn by hand or typed in a script face.",
           ]}
           visual={<AnnotateVisual />}
+          caption="Marks on a page"
         />
 
-        <div className="mini-grid" data-reveal>
+        <div className="mini-grid">
           <div className="mini">
             <Layers aria-hidden="true" />
             <strong>Every document at its own link</strong>
@@ -382,7 +413,7 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="section container">
+      <section className="section container tone-coral">
         <div className="section-head centered">
           <p className="eyebrow">
             <ListChecks aria-hidden="true" /> Use cases
@@ -393,7 +424,7 @@ export function Landing() {
             change it without rebuilding it.
           </p>
         </div>
-        <div className="usecases" data-reveal>
+        <div className="usecases">
           {USE_CASES.map((item) => (
             <Link key={item.title} to={ROUTES.app} className="usecase">
               <span className="usecase-icon" aria-hidden="true">
@@ -407,7 +438,7 @@ export function Landing() {
             </Link>
           ))}
         </div>
-        <div className="seo-copy" data-reveal>
+        <div className="seo-copy">
           <div>
             <h3>Edit PDF text online, free, without uploading</h3>
             <p>
@@ -429,8 +460,8 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="section fidelity-section">
-        <div className="container fidelity" data-reveal>
+      <section className="section fidelity-section tone-violet">
+        <div className="container fidelity">
           <div>
             <p className="eyebrow">
               <Ruler aria-hidden="true" /> Fidelity
@@ -467,146 +498,94 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="privacy-band" id="privacy">
+      <section className="privacy-band tone-teal" id="privacy">
         <div className="privacy-bg" aria-hidden="true" />
-        <div className="container">
-          <div className="privacy-head" data-reveal>
-            <span className="privacy-shield" aria-hidden="true">
-              <ShieldCheck />
-            </span>
-            <p className="eyebrow">Privacy</p>
+        <div className="container privacy-layout">
+          <div className="privacy-copy">
+            <p className="eyebrow">
+              <ShieldCheck aria-hidden="true" /> Privacy
+            </p>
             <h2 className="h2">
               Your document <em>never leaves your device.</em>
             </h2>
             <p className="lede">
-              There is no server. The PDF is parsed by pdf.js in a web worker in your tab, edited there, and
-              rewritten by pdf-lib in the same tab. The only network requests are for the app's own files.
+              There is no server. The PDF is read, edited and rewritten inside your browser tab, and the only
+              network requests are for the app's own files.
             </p>
-          </div>
-          <div className="privacy-grid" data-reveal>
-            <PrivacyDiagram />
-            <ul className="privacy-proofs">
-              <li>
-                <CloudOff aria-hidden="true" />
-                <strong>No upload</strong>
-                <span>The code has no endpoint to send a file to. Your document exists in this browser and nowhere else.</span>
-              </li>
-              <li>
-                <UserX aria-hidden="true" />
-                <strong>No account</strong>
-                <span>Nothing to sign up for, nothing to log, nothing that could leak.</span>
-              </li>
-              <li>
-                <EyeOff aria-hidden="true" />
-                <strong>No tracking</strong>
-                <span>No analytics script, no error reporter, no third-party embed on any page.</span>
-              </li>
-            </ul>
-          </div>
-          <div className="privacy-verify" data-reveal>
-            <Terminal aria-hidden="true" />
-            <p>
-              <strong>Verify it yourself.</strong> Open your browser's developer tools, choose Network, then open
-              and edit a PDF. You will see requests for the app's own files and nothing else.
-            </p>
-            <div className="privacy-links">
-              <Link to={ROUTES.privacy} className="btn btn-secondary">
-                What is stored, and where
-              </Link>
-              <Link to={ROUTES.post("nothing-leaves-your-browser")} className="link-arrow">
-                The architecture post <ArrowRight aria-hidden="true" />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="section container">
-        <div className="section-head centered">
-          <p className="eyebrow">
-            <Scale aria-hidden="true" /> Compare
-          </p>
-          <h2 className="h2">How it stands against the tools you have used.</h2>
-          <p className="lede">
-            Honest comparisons, checked {PRODUCT.comparisonsCheckedAt}. Where another tool is the better choice,
-            the page says so.
-          </p>
-        </div>
-        <div className="table-wrap" data-reveal>
-          <table className="cmp-table">
-            <thead>
-              <tr>
-                <th scope="col">Tool</th>
-                <th scope="col">Files processed</th>
-                <th scope="col">Edits existing text</th>
-                <th scope="col">Keeps original font</th>
-                <th scope="col">Free tier</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="us">
-                <th scope="row">{OURS.name}</th>
-                <td>
-                  <Where where="browser" />
-                </td>
-                <td>
-                  <Mark value="yes" />
-                </td>
-                <td>
-                  <Mark value="yes" />
-                </td>
-                <td>Everything, no limits</td>
-              </tr>
-              {teaser.map((tool) => (
-                <tr key={tool.slug}>
-                  <th scope="row">
-                    <Link to={ROUTES.comparison(tool.slug)}>{tool.name}</Link>
-                  </th>
-                  <td>
-                    <Where where={tool.processing.where} />
-                  </td>
-                  <td>
-                    <Mark value={tool.textEditing.existing} />
-                  </td>
-                  <td>
-                    <Mark value={tool.textEditing.keepsFont} />
-                  </td>
-                  <td>{tool.free.summary}</td>
-                </tr>
+            <ul className="point-list">
+              {PRIVACY_POINTS.map((point) => (
+                <li key={point.title}>
+                  <span className="icon-tile" aria-hidden="true">
+                    <point.icon />
+                  </span>
+                  <strong>{point.title}</strong>
+                  <span>{point.body}</span>
+                </li>
               ))}
-            </tbody>
-          </table>
+            </ul>
+            <p className="actions">
+              <Link to={ROUTES.privacy} className="btn btn-primary">
+                What is stored, and where <ArrowRight className="btn-arrow" aria-hidden="true" />
+              </Link>
+            </p>
+            <p className="privacy-verify">
+              <Terminal aria-hidden="true" />
+              <span>
+                <strong>Check it yourself:</strong> open your browser's developer tools, choose Network, then edit
+                a PDF. Only the app's own files appear.
+              </span>
+            </p>
+          </div>
+          <div className="privacy-figure">
+            <PrivacyDiagram />
+          </div>
         </div>
-        <p className="actions centered">
-          <Link to={ROUTES.compare} className="btn btn-secondary">
-            All twelve comparisons <ArrowRight aria-hidden="true" />
-          </Link>
-        </p>
       </section>
 
-      <section className="section container">
+      <section className="section container" aria-labelledby="compare-heading">
+        <div className="cmp-teaser">
+          <div className="cmp-teaser-copy">
+            <p className="eyebrow">
+              <Scale aria-hidden="true" /> Compare
+            </p>
+            <h2 className="h2" id="compare-heading">
+              The only one that edits the page's text <em>without uploading it.</em>
+            </h2>
+            <p className="lede">
+              Twelve PDF editors, the same questions, every fact checked {PRODUCT.comparisonsCheckedAt} against the
+              vendor's own pages.
+            </p>
+            <ul className="point-list">
+              {COMPARE_POINTS.map((point) => (
+                <li key={point.title}>
+                  <span className="icon-tile" aria-hidden="true">
+                    <point.icon />
+                  </span>
+                  <strong>{point.title}</strong>
+                  <span>{point.body}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="actions">
+              <Link to={ROUTES.compare} className="btn btn-primary">
+                All twelve comparisons <ArrowRight className="btn-arrow" aria-hidden="true" />
+              </Link>
+            </p>
+          </div>
+          <GlanceTable tools={teaser} />
+        </div>
+      </section>
+
+      <section className="section container tone-violet">
         <div className="section-head centered">
           <p className="eyebrow">
             <BookOpen aria-hidden="true" /> From the blog
           </p>
           <h2 className="h2">Engineering notes, not announcements.</h2>
         </div>
-        <div className="card-grid" data-reveal>
-          {posts.map((post, index) => (
-            <Link key={post.slug} to={ROUTES.post(post.slug)} className="card post-card-cover">
-              <span className="post-cover" aria-hidden="true">
-                <span>{COVERS[index % COVERS.length]}</span>
-              </span>
-              <div className="card-meta">
-                <time dateTime={post.date}>{formatDate(post.date)}</time>
-                <span>{readingTime(post.body)} min read</span>
-              </div>
-              <h3>{post.title}</h3>
-              <p>{post.description}</p>
-              <span className="link-arrow">
-                Read <ArrowRight aria-hidden="true" />
-              </span>
-            </Link>
+        <div className="post-grid">
+          {posts.map((post) => (
+            <PostCard key={post.slug} post={post} />
           ))}
         </div>
         <p className="actions centered">
@@ -640,16 +619,16 @@ export function Landing() {
       </section>
 
       <section className="section container">
-        <div className="cta" data-reveal>
+        <div className="cta">
           <div className="cta-bg" aria-hidden="true" />
           <h2 className="display">Open a PDF and click a line.</h2>
           <p className="lede">Free, in your browser, with nothing to install and nothing to upload.</p>
           <p className="actions">
             <Link to={ROUTES.app} className="btn btn-primary btn-lg">
-              Open the editor <ArrowRight aria-hidden="true" />
+              Open the editor <ArrowRight className="btn-arrow" aria-hidden="true" />
             </Link>
             <Link to={ROUTES.howItWorks} className="btn btn-secondary btn-lg">
-              How it works
+              <CirclePlay className="btn-lead" aria-hidden="true" /> How it works
             </Link>
           </p>
         </div>

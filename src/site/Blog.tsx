@@ -1,7 +1,7 @@
-import { Link } from "react-router";
-import { formatDate, POSTS } from "../data/posts.ts";
+import { BookOpen } from "lucide-react";
+import { POSTS } from "../data/posts.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
-import { readingTime } from "./markdown.ts";
+import { PostCard } from "./PostCard.tsx";
 import { useMeta } from "./useMeta.ts";
 
 export function Blog() {
@@ -21,27 +21,20 @@ export function Blog() {
     },
   });
   return (
-    <section className="section container">
+    <section className="section container tone-violet">
       <div className="section-head">
-        <p className="eyebrow">Blog</p>
+        <p className="eyebrow">
+          <BookOpen aria-hidden="true" /> Blog
+        </p>
         <h1 className="display">Notes from the inside of a PDF.</h1>
         <p className="lede">
           What it takes to edit a page in place, written from the code that does it. No roadmap posts, no
           announcements, just the engineering.
         </p>
       </div>
-      <div className="post-list">
+      <div className="post-grid">
         {POSTS.map((post) => (
-          <Link key={post.slug} to={ROUTES.post(post.slug)} className="post-card">
-            <div>
-              <time dateTime={post.date}>{formatDate(post.date)}</time>
-              <div className="post-meta">{readingTime(post.body)} min read</div>
-            </div>
-            <div>
-              <h2>{post.title}</h2>
-              <p>{post.description}</p>
-            </div>
-          </Link>
+          <PostCard key={post.slug} post={post} heading="h2" />
         ))}
       </div>
     </section>

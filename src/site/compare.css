@@ -1,0 +1,434 @@
+/* ---------------------------------------------------------------------------
+   Comparisons: the index head with its numbers, the wide table (sticky header,
+   pinned first column on narrow screens, aligned price column), the per-tool
+   thumbnail and card, and the per-tool page's glance table.
+   --------------------------------------------------------------------------- */
+
+/* ---- Index head ------------------------------------------------------------- */
+
+.cmp-head-wide {
+  max-width: 760px;
+  margin-bottom: var(--sp-8);
+}
+
+/* Four numbers in a row, big enough to read from across the room. */
+.cmp-numbers {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin: 0;
+}
+
+.cmp-number {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 2px var(--sp-4);
+  align-items: center;
+  padding: var(--sp-5);
+  border: 1px solid var(--rule);
+  border-radius: var(--round-xl);
+  background: var(--paper-1);
+  box-shadow: var(--elev-1);
+}
+
+.cmp-number .icon-tile {
+  grid-row: span 2;
+}
+
+.cmp-number dt {
+  font-family: var(--ff-display);
+  font-size: var(--fs-2xl);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: var(--ls-display);
+  color: var(--tone-ink);
+}
+
+.cmp-number dt small {
+  margin-left: 6px;
+  font-family: var(--ff-sans);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-2);
+}
+
+.cmp-number dd {
+  margin: 0;
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.cmp-checked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin: var(--sp-5) 0 var(--sp-6);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+.cmp-checked .as-of svg {
+  width: 14px;
+  height: 14px;
+  color: var(--tone-ink);
+}
+
+@media (max-width: 960px) {
+  .cmp-numbers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .cmp-numbers {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- The wide table --------------------------------------------------------- */
+
+/* Calmer rows: middle alignment, light stripes, a hover, notes a step smaller. */
+.cmp-main th,
+.cmp-main td {
+  vertical-align: middle;
+  padding-block: var(--sp-4);
+}
+
+.cmp-main tbody tr:nth-child(even):not(.us) {
+  background: color-mix(in oklab, var(--paper-0) 55%, transparent);
+}
+
+.cmp-main tbody tr:not(.us):hover {
+  background: var(--paper-2);
+}
+
+.cmp-main .cell-note {
+  max-width: 26ch;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.cmp-main th[scope="row"] a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cmp-main th[scope="row"] a:hover {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.cmp-main tr.us th[scope="row"] {
+  color: var(--accent-ink);
+}
+
+.cmp-main .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-footnote {
+  margin-top: var(--sp-4);
+}
+
+.cmp-cards-section {
+  padding-bottom: var(--sp-16);
+}
+
+.cmp-cards-section .section-head {
+  margin-bottom: var(--sp-6);
+}
+
+/* On wide screens the wrapper does not scroll, so the header row can stick under the site header
+   while the page scrolls; the first column pins instead when the table scrolls sideways on a
+   narrow screen (an element cannot stick to the page from inside a scrolling box). */
+@media (min-width: 901px) {
+  .table-wrap.sticky {
+    overflow: visible;
+  }
+
+  .table-wrap.sticky thead th {
+    position: sticky;
+    top: 64px;
+    z-index: 2;
+    background: var(--paper-0);
+    box-shadow: 0 1px 0 var(--rule);
+  }
+
+  .table-wrap.sticky thead th:first-child {
+    border-top-left-radius: var(--round-lg);
+  }
+
+  .table-wrap.sticky thead th:last-child {
+    border-top-right-radius: var(--round-lg);
+  }
+}
+
+@media (max-width: 900px) {
+  .table-wrap.sticky {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-wrap.sticky .cmp-main {
+    min-width: 880px;
+  }
+
+  .table-wrap.sticky .cmp-main th[scope="row"],
+  .table-wrap.sticky .cmp-main thead th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--paper-1);
+    box-shadow: 1px 0 0 var(--rule);
+  }
+
+  .table-wrap.sticky .cmp-main thead th:first-child {
+    background: var(--paper-0);
+  }
+
+  .table-wrap.sticky .cmp-main tr.us th[scope="row"] {
+    background: var(--accent-soft);
+  }
+}
+
+/* ---- Prices ----------------------------------------------------------------- */
+
+.price {
+  display: inline-grid;
+  gap: 3px;
+  justify-items: start;
+}
+
+.num .price {
+  justify-items: end;
+}
+
+.price-figure {
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ink-0);
+}
+
+.price-figure small {
+  font-size: 0.85em;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.price-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.num .price-flags {
+  justify-content: flex-end;
+}
+
+.num .price .cell-note {
+  max-width: 24ch;
+  text-align: right;
+}
+
+.price.compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.price.compact .price-figure {
+  font-size: var(--fs-xs);
+}
+
+/* ---- Thumbnail and card ----------------------------------------------------- */
+
+.cmp-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--round-lg);
+  background: var(--paper-1);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out), transform var(--duration) var(--ease-out);
+}
+
+.cmp-card:hover {
+  border-color: var(--rule-strong);
+  box-shadow: var(--elev-2);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmp-card:hover {
+    transform: none;
+  }
+}
+
+.cmp-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 1;
+  border-bottom: 1px solid var(--rule);
+  object-fit: cover;
+}
+
+.cmp-card .duel {
+  margin: var(--sp-4) var(--sp-4) 0;
+}
+
+.cmp-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+
+.cmp-card .card-meta {
+  align-items: center;
+}
+
+.cmp-card h3 {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+}
+
+.cmp-card p {
+  margin: 0;
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.cmp-card .link-arrow {
+  margin-top: auto;
+  padding-top: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+/* Two rows, PDF Edit then the tool: a mark, the name and one dot per fact. */
+.duel {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) repeat(3, 22px);
+  gap: 7px 8px;
+  align-items: center;
+  margin-bottom: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--round-md);
+  background: var(--paper-0);
+}
+
+.duel-spacer {
+  grid-column: 1 / 3;
+}
+
+.duel-fact {
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+}
+
+.duel-fact svg {
+  width: 14px;
+  height: 14px;
+}
+
+.duel-mark {
+  display: grid;
+  place-items: center;
+}
+
+.duel-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.duel-name.us {
+  color: var(--accent-ink);
+}
+
+.duel-dot {
+  width: 12px;
+  height: 12px;
+  margin: 0 auto;
+  border-radius: 50%;
+}
+
+.duel-dot.yes {
+  background: var(--good);
+}
+
+.duel-dot.no {
+  background: var(--bad);
+}
+
+.duel-dot.partial {
+  background: var(--warn);
+}
+
+.duel-dot.unknown {
+  background: var(--rule-strong);
+}
+
+.monogram {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  font-family: var(--ff-sans);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* ---- Per-tool page ---------------------------------------------------------- */
+
+.cmp-versus {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-5);
+  color: var(--ink-2);
+  font-family: var(--ff-display);
+  font-size: var(--fs-lg);
+  font-style: italic;
+}
+
+.cmp-versus .tool-mark {
+  border-radius: 12px;
+}
+
+.cmp-verdict .duel {
+  margin-bottom: var(--sp-4);
+  background: var(--paper-0);
+}
+
+.cmp-table.glance thead th.us {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.cmp-table.glance td.us {
+  background: var(--accent-soft);
+}
+
+@media (min-width: 901px) {
+  .cmp-table.glance th[scope="row"] {
+    width: 220px;
+  }
+}

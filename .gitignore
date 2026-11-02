@@ -25,3 +25,6 @@ dist-ssr
 *.sln
 *.sw?
 samples
+
+# The owner's SEO plan: kept locally, not published with the code.
+docs/seo-plan.md

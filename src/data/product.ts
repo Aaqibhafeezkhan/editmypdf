@@ -9,6 +9,7 @@ export const PRODUCT = {
     "PDF Edit is a free PDF editor that runs entirely in your browser. Click any heading, line or paragraph and retype it in the page's own font, size, colour and spacing. Nothing is uploaded, and no account is needed.",
   shortDescription: "Free browser PDF editor that edits the page's own text in its own font. No uploads, no account.",
   repository: "https://github.com/vr-patel/pdf-editor",
+  licenseUrl: "https://github.com/vr-patel/pdf-editor/blob/main/LICENSE",
   // The stack the privacy claims rest on. Verified against the source: pdf.js parses and renders in
   // a web worker, pdf-lib writes the file, IndexedDB and localStorage hold the sessions, and the
   // download is a blob URL. The only fetch() in the app loads its own emoji images.
@@ -18,6 +19,17 @@ export const PRODUCT = {
   },
   // Month the comparison facts were last checked.
   comparisonsCheckedAt: "November 2026",
+} as const;
+
+// Visit counting, off unless the build sets VITE_GA_MEASUREMENT_ID (a GA4 id such as G-XXXXXXX).
+// When it is on, the site shows a notice and loads the script only after the visitor agrees, on
+// the site's pages only; the privacy page, FAQ, terms and landing page describe that state. When
+// it is off, every page says the site runs no analytics, and that is true.
+export const ANALYTICS = {
+  id: (import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined) || undefined,
+  get enabled(): boolean {
+    return Boolean(this.id);
+  },
 } as const;
 
 export const ROUTES = {
@@ -32,6 +44,7 @@ export const ROUTES = {
   pricing: "/pricing",
   features: "/#features",
   privacy: "/privacy",
+  terms: "/terms",
   faq: "/faq",
 } as const;
 

@@ -1,0 +1,333 @@
+/* ---------------------------------------------------------------------------
+   How it works: the overview strip, the five steps on one aligned grid, and
+   the limits as cards. Built from the tokens in index.css and the tone
+   classes and .icon-tile in site.css.
+   --------------------------------------------------------------------------- */
+
+/* ---- Overview strip --------------------------------------------------------- */
+
+/* The strip sticks under the site header while the steps scroll past. A sentinel just above it
+   tells the script when it is stuck, which draws a rule under it and tightens the tiles. */
+.how-intro {
+  padding-bottom: var(--sp-4);
+}
+
+.how-sentinel {
+  height: 1px;
+}
+
+.how-sticky {
+  position: sticky;
+  top: 64px;
+  z-index: 30;
+  padding: var(--sp-3) 0;
+  background: color-mix(in oklab, var(--paper-0) 86%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out);
+}
+
+.how-sticky.stuck {
+  border-bottom-color: var(--rule);
+  box-shadow: var(--elev-1);
+}
+
+.how-steps-section {
+  padding-top: var(--sp-8);
+}
+
+/* The five steps in one row, each a link to its step below. On narrow screens the row scrolls
+   sideways and snaps, so the strip stays one line. */
+.how-overview {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
+.how-overview li {
+  position: relative;
+  min-width: 0;
+}
+
+.how-overview li + li::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--sp-3));
+  top: 50%;
+  width: var(--sp-3);
+  height: 1px;
+  background: var(--rule-strong);
+}
+
+.how-overview a {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  grid-template-rows: auto auto;
+  gap: 0 var(--sp-3);
+  align-items: center;
+  height: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--round-lg);
+  background: var(--paper-1);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out), transform var(--duration) var(--ease-out);
+}
+
+.how-overview a:hover {
+  border-color: var(--rule-strong);
+  box-shadow: var(--elev-2);
+  transform: translateY(-2px);
+}
+
+/* The step on screen. */
+.how-overview li.active a {
+  border-color: var(--tone);
+  background: var(--tone-soft);
+  box-shadow: 0 0 0 1px var(--tone);
+}
+
+.how-overview li.active .how-overview-t {
+  color: var(--tone-ink);
+}
+
+.how-overview li.active .icon-tile {
+  background: var(--tone);
+  color: #ffffff;
+}
+
+/* Stuck: one line per tile, number hidden, so the strip takes less of the viewport. */
+.how-sticky.stuck .how-overview a {
+  grid-template-columns: 32px 1fr;
+  grid-template-rows: auto;
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.how-sticky.stuck .how-overview .icon-tile {
+  grid-row: auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.how-sticky.stuck .how-overview .icon-tile svg {
+  width: 16px;
+  height: 16px;
+}
+
+.how-sticky.stuck .how-overview-n {
+  display: none;
+}
+
+.how-overview .icon-tile {
+  grid-row: span 2;
+}
+
+.how-overview-n {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  color: var(--tone-ink);
+}
+
+.how-overview-t {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+}
+
+@media (max-width: 900px) {
+  .how-overview {
+    display: flex;
+    gap: var(--sp-3);
+    margin-inline: calc(-1 * var(--gutter));
+    padding: var(--sp-1) var(--gutter);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .how-sticky.stuck .how-overview li {
+    flex-basis: auto;
+  }
+
+  .how-sticky.stuck .how-overview-t {
+    white-space: nowrap;
+  }
+
+  .how-overview::-webkit-scrollbar {
+    display: none;
+  }
+
+  .how-overview li {
+    flex: 0 0 min(58%, 220px);
+    scroll-snap-align: start;
+  }
+
+  .how-overview li + li::before {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .how-overview a:hover {
+    transform: none;
+  }
+}
+
+/* ---- Steps ------------------------------------------------------------------ */
+
+/* Every step is marker | card on the same two columns, with one rule running down the marker
+   column, so the five align whatever their length. */
+.how-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 900px;
+}
+
+.how-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: var(--sp-6);
+  padding-bottom: var(--sp-8);
+  scroll-margin-top: 160px;
+}
+
+.how-step::before {
+  content: "";
+  position: absolute;
+  left: 23px;
+  top: 56px;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--tone-soft), var(--rule));
+}
+
+.how-step:last-child {
+  padding-bottom: 0;
+}
+
+.how-step:last-child::before {
+  display: none;
+}
+
+.how-step-marker {
+  display: block;
+}
+
+.how-step-marker .icon-tile {
+  box-shadow: 0 0 0 6px var(--paper-0);
+}
+
+.how-step-card {
+  padding: var(--sp-6);
+  border: 1px solid var(--rule);
+  border-radius: var(--round-xl);
+  background: var(--paper-1);
+  box-shadow: var(--elev-1);
+}
+
+.how-step-n {
+  display: inline-block;
+  font-family: var(--ff-mono);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--tone-ink);
+}
+
+.how-step-card h2 {
+  margin: var(--sp-1) 0 var(--sp-3);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-tight);
+}
+
+.how-step-summary {
+  margin: 0 0 var(--sp-4);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-0);
+  font-size: var(--fs-md);
+  line-height: var(--lh-normal);
+}
+
+.how-step-body p {
+  margin: 0 0 var(--sp-3);
+  color: var(--ink-1);
+  line-height: var(--lh-relaxed);
+}
+
+.how-step-body p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 560px) {
+  .how-step {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: var(--sp-3);
+  }
+
+  .how-step::before {
+    left: 19px;
+    top: 48px;
+  }
+
+  .how-step-marker .icon-tile {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .how-step-marker .icon-tile svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .how-step-card {
+    padding: var(--sp-5);
+  }
+}
+
+/* ---- Limits ----------------------------------------------------------------- */
+
+.limits-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+.limit-card {
+  gap: var(--sp-3);
+}
+
+.limit-card > span:not(.icon-tile) {
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .limits-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .limits-grid {
+    grid-template-columns: 1fr;
+  }
+}

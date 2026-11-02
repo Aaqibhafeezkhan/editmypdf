@@ -1,0 +1,342 @@
+/* ---------------------------------------------------------------------------
+   Blog: post cards with drawn covers, the post page layout with its table of
+   contents, and related posts. Built from the tokens in index.css and the
+   tone classes in site.css.
+   --------------------------------------------------------------------------- */
+
+/* ---- Cards ------------------------------------------------------------------ */
+
+.post-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-5);
+}
+
+@media (max-width: 900px) {
+  .post-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .post-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.post-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--round-lg);
+  background: var(--paper-1);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out), transform var(--duration) var(--ease-out);
+}
+
+.post-card:hover {
+  border-color: var(--rule-strong);
+  box-shadow: var(--elev-2);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-card:hover {
+    transform: none;
+  }
+}
+
+.post-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+
+.post-card h2,
+.post-card h3 {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-weight: 400;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-display);
+  text-wrap: balance;
+}
+
+.post-card p {
+  margin: 0;
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.post-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: auto;
+  padding-top: var(--sp-3);
+}
+
+.post-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.post-card .link-arrow {
+  flex: none;
+  font-size: var(--fs-sm);
+}
+
+/* The cover: a tinted ground in the post's hue, a page with text lines and one edited line, and
+   the post's glyph in the display face. The tone class on the svg supplies the hue. */
+.post-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  border-bottom: 1px solid var(--rule);
+}
+
+.post-cover-ground {
+  fill: color-mix(in oklab, var(--tone) 16%, var(--paper-2));
+}
+
+.post-cover-dot {
+  fill: color-mix(in oklab, var(--tone) 35%, transparent);
+}
+
+.post-cover-page rect:first-child {
+  fill: #ffffff;
+  stroke: color-mix(in oklab, var(--tone) 30%, #d3d0c8);
+  stroke-width: 1;
+}
+
+.post-cover-lines rect {
+  fill: #c9c6be;
+}
+
+.post-cover-lines rect:first-child {
+  fill: #8a877e;
+}
+
+.post-cover-edit {
+  fill: var(--tone);
+  fill-opacity: 0.85;
+}
+
+.post-cover-glyph {
+  fill: var(--tone-ink);
+  font-family: var(--ff-display);
+  font-size: 84px;
+  letter-spacing: -0.02em;
+}
+
+/* ---- Post page ------------------------------------------------------------- */
+
+/* Header, then the text with its contents, then related posts. Wide: the contents are a sticky
+   column to the right of the text; .post-main is its own grid so the sticky column ends with
+   the text (a sticky grid item is bounded by its grid, not its row). Narrow: the contents fold
+   above the text, which is also the DOM order, so no markup moves. */
+.post-layout {
+  max-width: 1040px;
+}
+
+.post-header {
+  max-width: 720px;
+  margin-bottom: var(--sp-8);
+}
+
+.post-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "side"
+    "body";
+  gap: var(--sp-6) var(--sp-12);
+}
+
+.post-side {
+  grid-area: side;
+}
+
+.post-body {
+  grid-area: body;
+  max-width: 720px;
+}
+
+.post-footer {
+  margin-top: var(--sp-16);
+  padding-top: var(--sp-10);
+  border-top: 1px solid var(--rule);
+}
+
+.post-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin: var(--sp-5) 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.post-related .eyebrow {
+  margin-bottom: var(--sp-5);
+}
+
+.prose h2,
+.prose h3 {
+  scroll-margin-top: 96px;
+}
+
+@media (min-width: 1024px) {
+  .post-main {
+    grid-template-columns: minmax(0, 1fr) 232px;
+    grid-template-areas: "body side";
+  }
+
+  .post-side {
+    position: sticky;
+    top: 88px;
+    align-self: start;
+    max-height: calc(100vh - 112px);
+    overflow-y: auto;
+    padding-top: 2px;
+  }
+}
+
+/* ---- Table of contents ---------------------------------------------------- */
+
+.toc {
+  border: 1px solid var(--rule);
+  border-radius: var(--round-lg);
+  background: var(--paper-1);
+}
+
+.toc-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--ink-0);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-align: left;
+}
+
+.toc-toggle svg {
+  width: 16px;
+  height: 16px;
+  color: var(--tone-ink);
+}
+
+.toc-toggle small {
+  margin-left: auto;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+}
+
+.toc-toggle .toc-chevron {
+  color: var(--ink-2);
+  transition: transform var(--duration) var(--ease-out);
+}
+
+.toc.open .toc-toggle .toc-chevron {
+  transform: rotate(180deg);
+}
+
+.toc-title {
+  display: none;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.toc-title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--tone-ink);
+}
+
+.toc-list {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--sp-4) var(--sp-3);
+}
+
+.toc.open .toc-list {
+  display: block;
+}
+
+.toc-item a {
+  display: block;
+  padding: 6px 0 6px var(--sp-3);
+  border-left: 2px solid var(--rule);
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  text-decoration: none;
+  transition: color var(--duration) var(--ease-out), border-color var(--duration) var(--ease-out);
+}
+
+.toc-item.depth-3 a {
+  padding-left: var(--sp-6);
+  font-size: var(--fs-xs);
+}
+
+.toc-item a:hover {
+  color: var(--ink-0);
+  border-color: var(--rule-strong);
+}
+
+.toc-item.active a {
+  color: var(--tone-ink);
+  border-color: var(--tone);
+  font-weight: 600;
+}
+
+.toc-list li + li {
+  margin-top: 1px;
+}
+
+@media (min-width: 1024px) {
+  .toc {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .toc-toggle {
+    display: none;
+  }
+
+  .toc-title {
+    display: flex;
+  }
+
+  .toc-list {
+    display: block;
+    padding: 0;
+  }
+}
