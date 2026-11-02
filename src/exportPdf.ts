@@ -32,6 +32,7 @@ import { editCover, refreshPatchFace } from "./contentEdit.ts";
 import { stripPageText, type StripResult } from "./contentStream.ts";
 import { fontUnicodeMap } from "./fontFix.ts";
 import { blockWidth, measureWidth, paintRun, placeRuns, type PlacedRun } from "./textLayout.ts";
+import { type3FaceBytes } from "./type3Font.ts";
 import { emojiSrc } from "./emojis.ts";
 import { rotatePoint } from "./geometry.ts";
 import { arrowBarbs, isBoxShape, isOpenShape, outlinePoints, pointsToPath } from "./shapes.ts";
@@ -292,8 +293,9 @@ function faceEmbedder(document: PDFDocument, pages: PDFPageProxy[]): FaceEmbedde
     const pending = (async () => {
       const page = pages[pageIndex];
       const info = page ? pageFonts(page)?.get(pdfFont) : undefined;
-      // A Type3 font has bytes only when a face was rebuilt from its outlines.
-      const bytes = info?.fixed ?? info?.data;
+      // A Type3 font has bytes only when a face was rebuilt from its outlines; the face may have
+      // been built again with more letters since the page was read.
+      const bytes = (info?.family ? type3FaceBytes(info.family) : null) ?? info?.fixed ?? info?.data;
       if (!info || !bytes || bytes.length < 12) return null;
       const cmap = fontUnicodeMap(bytes);
       if (cmap.size === 0) return null;

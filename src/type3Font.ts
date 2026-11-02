@@ -3,9 +3,11 @@ import { OPS } from "pdfjs-dist";
 // A page printed from a browser carries its web fonts as Type3 fonts: every glyph is a little
 // drawing (a filled path) and there is no font file, so pdf.js paints the outlines itself and
 // the editor had nothing to set its text in but a substitute face. This rebuilds a real font from
-// those outlines, one per Type3 font, with the page's own advances and a Unicode cmap, and
+// those outlines, one per typeface, with the page's own advances and a Unicode cmap, and
 // registers it with the document, so the editor's text is drawn with the page's own letters and
-// the export can embed them.
+// the export can embed them. A browser prints one Type3 font per run of text, each holding only
+// its own letters, so the fonts of a document that are one typeface are pooled, and a face is
+// built again, under the same family name, whenever another page adds letters to its pool.
 
 type Proc = { fnArray: number[]; argsArray: unknown[] };
 
@@ -21,42 +23,36 @@ export type Type3FontObject = {
 // name of the procedure that draws it.
 export type Type3Glyph = { unicode: string; width: number; operatorListId: string };
 
-export type Type3Face = { family: string; data: Uint8Array };
-
-// A Type3 font of the page with the glyphs it draws.
+// A Type3 font of the document with the glyphs its pages draw.
 export type Type3Member = { name: string; font: Type3FontObject; glyphs: Map<string, Type3Glyph> };
+
+type Face = { family: string; data: Uint8Array; face: FontFace; glyphs: number };
+
+type Registry = {
+  members: Map<string, Type3Member>;
+  familyByName: Map<string, string>;
+  faces: Map<string, Face>;
+  building: Promise<void> | null;
+};
 
 type Opentype = typeof import("opentype.js");
 
-const pending = new Map<string, Promise<Type3Face | null>>();
-const settled = new Map<string, Type3Face>();
+const registries = new Map<string, Registry>();
 let serial = 0;
 
-// Groups a page's Type3 fonts that are the same typeface: a browser prints one Type3 font per
-// run of text, so a heading and a tag set in the same bold face come as two fonts, each with
-// only its own letters. Fonts with the same base name and matrix whose shared glyphs have the
-// same advances are one face, and a face built from their union covers more of what is typed.
-export function groupType3Fonts(members: Type3Member[]): Type3Member[][] {
-  const groups: Type3Member[][] = [];
-  const baseName = (font: Type3FontObject) => (font.name ?? "").replace(/^[A-Z]{6}\+/, "");
-  const matrixKey = (font: Type3FontObject) => (font.fontMatrix ?? []).map((n) => Math.round(n * 1e6)).join(",");
-  const alike = (a: Type3Member, b: Type3Member): boolean => {
-    if (baseName(a.font) !== baseName(b.font) || matrixKey(a.font) !== matrixKey(b.font)) return false;
-    let shared = 0;
-    for (const [unicode, glyph] of a.glyphs) {
-      const other = b.glyphs.get(unicode);
-      if (!other) continue;
-      if (Math.abs(other.width - glyph.width) > 1) return false;
-      shared += 1;
-    }
-    return shared > 0;
-  };
-  for (const member of members) {
-    const group = groups.find((candidates) => candidates.some((candidate) => alike(candidate, member)));
-    if (group) group.push(member);
-    else groups.push([member]);
+// The document a pdf.js font name belongs to (`g_d2_f3` is font 3 of document 2).
+function documentOf(name: string): string {
+  return /^(g_d\d+)_/.exec(name)?.[1] ?? name;
+}
+
+function registry(name: string): Registry {
+  const key = documentOf(name);
+  let entry = registries.get(key);
+  if (!entry) {
+    entry = { members: new Map(), familyByName: new Map(), faces: new Map(), building: null };
+    registries.set(key, entry);
   }
-  return groups;
+  return entry;
 }
 
 // The glyphs each Type3 font draws on a page, by pdf.js font name and character, read from the
@@ -94,30 +90,118 @@ export function collectType3Glyphs(fnArray: number[], argsArray: unknown[]): Map
   return fonts;
 }
 
-// Builds and registers (once per set of pdf.js font names) a font from the glyph procedures of
-// one Type3 font, or of several that are the same typeface, and resolves to its family name and
-// bytes. Null when a glyph is not a plain filled outline (a bitmap glyph, say) or the font cannot
-// be written.
-export function type3Face(members: Type3Member[]): Promise<Type3Face | null> {
-  const key = members.map((member) => member.name).sort().join("+");
-  const cached = pending.get(key);
-  if (cached) return cached;
-  const first = members[0];
-  if (!first || typeof document === "undefined" || typeof FontFace === "undefined") return Promise.resolve(null);
-  if (members.every((member) => member.glyphs.size === 0)) return Promise.resolve(null);
-  const promise = build(first.name, members)
-    .then((face) => {
-      if (face) settled.set(face.family, face);
-      return face;
-    })
-    .catch(() => null);
-  pending.set(key, promise);
-  return promise;
+// Adds a page's Type3 fonts to their document's pool, merging the glyphs of a font seen before.
+export function registerType3Fonts(members: Type3Member[]): void {
+  for (const member of members) {
+    const pool = registry(member.name);
+    const known = pool.members.get(member.name);
+    if (!known) {
+      pool.members.set(member.name, { ...member, glyphs: new Map(member.glyphs) });
+      continue;
+    }
+    for (const [unicode, glyph] of member.glyphs) if (!known.glyphs.has(unicode)) known.glyphs.set(unicode, glyph);
+  }
 }
 
-// The bytes behind a family `type3Face` registered; null for any other family.
+// Groups a document's Type3 fonts that are the same typeface: fonts with the same base name and
+// matrix whose shared glyphs have the same advances. Fonts that share no glyph stay apart.
+export function groupType3Fonts(members: Type3Member[]): Type3Member[][] {
+  const groups: Type3Member[][] = [];
+  const baseName = (font: Type3FontObject) => (font.name ?? "").replace(/^[A-Z]{6}\+/, "");
+  const matrixKey = (font: Type3FontObject) => (font.fontMatrix ?? []).map((n) => Math.round(n * 1e6)).join(",");
+  const alike = (a: Type3Member, b: Type3Member): boolean => {
+    if (baseName(a.font) !== baseName(b.font) || matrixKey(a.font) !== matrixKey(b.font)) return false;
+    let shared = 0;
+    for (const [unicode, glyph] of a.glyphs) {
+      const other = b.glyphs.get(unicode);
+      if (!other) continue;
+      if (Math.abs(other.width - glyph.width) > 1) return false;
+      shared += 1;
+    }
+    return shared > 0;
+  };
+  for (const member of members) {
+    const group = groups.find((candidates) => candidates.some((candidate) => alike(candidate, member)));
+    if (group) group.push(member);
+    else groups.push([member]);
+  }
+  return groups;
+}
+
+// Builds the faces of a document's pooled Type3 fonts and resolves to the family each font is
+// set in. A face is never changed once built (the browser does not re-resolve a family whose
+// FontFace was swapped: its text goes blank); a group whose pool grew since its face was built
+// gets a new family holding every glyph, which the fonts resolved from then on are set in, while
+// text already laid out keeps the face it has. Null for a font whose glyphs are not plain
+// outlines.
+export async function type3Families(name: string): Promise<Map<string, string | null>> {
+  const pool = registry(name);
+  // Builds are serialised per document: two pages read at once must not race on one family.
+  const previous = pool.building ?? Promise.resolve();
+  const run = previous.then(() => rebuild(pool)).catch(() => undefined);
+  pool.building = run;
+  await run;
+  const families = new Map<string, string | null>();
+  for (const member of pool.members.keys()) families.set(member, pool.familyByName.get(member) ?? null);
+  return families;
+}
+
+// The bytes behind a family `type3Families` registered, as last built; null for other families.
 export function type3FaceBytes(family: string): Uint8Array | null {
-  return settled.get(family)?.data ?? null;
+  for (const pool of registries.values()) {
+    const face = pool.faces.get(family);
+    if (face) return face.data;
+  }
+  return null;
+}
+
+async function rebuild(pool: Registry): Promise<void> {
+  if (typeof document === "undefined" || typeof FontFace === "undefined") return;
+  for (const group of groupType3Fonts([...pool.members.values()])) {
+    const unresolved = group.filter((member) => !pool.familyByName.has(member.name));
+    if (unresolved.length === 0) continue;
+    const glyphs = unionGlyphs(group);
+    if (glyphs.size === 0) continue;
+    // The richest face the group already has serves the fonts still without one when it holds
+    // every glyph of the pool; otherwise a new face is built from the whole pool.
+    const existing = group
+      .map((member) => pool.familyByName.get(member.name))
+      .filter((family): family is string => !!family)
+      .map((family) => pool.faces.get(family))
+      .filter((face): face is Face => !!face)
+      .sort((a, b) => b.glyphs - a.glyphs)[0];
+    let family = existing && existing.glyphs >= glyphs.size ? existing.family : null;
+    if (!family) {
+      serial += 1;
+      const name = `${group[0]?.name ?? "type3"}-type3-${serial}`;
+      let built: { data: Uint8Array; face: FontFace } | null = null;
+      try {
+        built = await build(name, group[0]?.font, glyphs);
+      } catch {
+        built = null;
+      }
+      if (!built) continue;
+      document.fonts.add(built.face);
+      pool.faces.set(name, { family: name, data: built.data, face: built.face, glyphs: glyphs.size });
+      family = name;
+    }
+    for (const member of unresolved) pool.familyByName.set(member.name, family);
+  }
+}
+
+type Pooled = { glyph: Type3Glyph; lookup: (id: string) => Proc | undefined };
+
+// Every glyph of a group, each with the procedures of the font that drew it; the first font to
+// draw a character keeps it.
+function unionGlyphs(group: Type3Member[]): Map<string, Pooled> {
+  const glyphs = new Map<string, Pooled>();
+  for (const member of group) {
+    const procs = member.font.charProcOperatorList;
+    if (!procs) continue;
+    const lookup = (id: string): Proc | undefined => (procs instanceof Map ? procs.get(id) : (procs as Record<string, Proc>)[id]);
+    for (const [unicode, glyph] of member.glyphs) if (!glyphs.has(unicode)) glyphs.set(unicode, { glyph, lookup });
+  }
+  return glyphs;
 }
 
 type Matrix = [number, number, number, number, number, number];
@@ -140,19 +224,12 @@ function asMatrix(value: unknown): Matrix | null {
   return list as Matrix;
 }
 
-async function build(loadedName: string, members: Type3Member[]): Promise<Type3Face | null> {
-  const font = members[0]?.font;
+async function build(
+  family: string,
+  font: Type3FontObject | undefined,
+  glyphs: Map<string, Pooled>,
+): Promise<{ data: Uint8Array; face: FontFace } | null> {
   if (!font) return null;
-  // Every member's glyphs, each with the procedures of the font that drew it; the first font to
-  // draw a character keeps it.
-  const glyphs = new Map<string, { glyph: Type3Glyph; lookup: (id: string) => Proc | undefined }>();
-  for (const member of members) {
-    const procs = member.font.charProcOperatorList;
-    if (!procs) continue;
-    const lookup = (id: string): Proc | undefined => (procs instanceof Map ? procs.get(id) : (procs as Record<string, Proc>)[id]);
-    for (const [unicode, glyph] of member.glyphs) if (!glyphs.has(unicode)) glyphs.set(unicode, { glyph, lookup });
-  }
-  if (glyphs.size === 0) return null;
   const fontMatrix = asMatrix(font.fontMatrix) ?? [0.001, 0, 0, 0.001, 0, 0];
   // One em is the matrix's scale; the font's units are chosen so the glyph coordinates stay
   // whole numbers where the matrix is a plain 1/n.
@@ -200,8 +277,6 @@ async function build(loadedName: string, members: Type3Member[]): Promise<Type3F
     top = unitsPerEm * 0.8;
     bottom = -unitsPerEm * 0.2;
   }
-  serial += 1;
-  const family = `${loadedName}-type3-${serial}`;
   const built = new opentype.Font({
     familyName: family,
     styleName: "Regular",
@@ -213,8 +288,7 @@ async function build(loadedName: string, members: Type3Member[]): Promise<Type3F
   const data = new Uint8Array(built.toArrayBuffer());
   const face = new FontFace(family, data.buffer as ArrayBuffer);
   await face.load();
-  document.fonts.add(face);
-  return { family, data };
+  return { data, face };
 }
 
 // The filled outline a glyph procedure draws, in font units; null when the procedure paints

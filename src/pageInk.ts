@@ -163,23 +163,29 @@ function inspectRun(
 }
 
 // Runs on the same baseline immediately to the right of the edited one; they shift when its width changes.
-function followingRuns(element: ContentElement, elements: ContentElement[]): ContentElement[] {
+// What sits to the right of a line and moves along when it grows: the next runs of text on the
+// same baseline, and the small shapes and images between and around them (an icon before a
+// date, the rounded box behind a tag), as long as nothing leaves a gap wider than a few letters.
+function followingRuns(element: ContentElement, elements: ContentElement[], edited: Set<string>): ContentElement[] {
   const size = Math.max(element.fontSize || element.h, 1);
   const row = elements
-    .filter(
-      (item) =>
-        item.id !== element.id &&
-        item.page === element.page &&
-        isTextContent(item.kind) &&
-        item.kind !== "paragraph" &&
-        Math.abs(item.baseline - element.baseline) < size * 0.45 &&
-        item.x >= element.x + element.w - 1.5,
-    )
+    .filter((item) => {
+      if (item.id === element.id || item.page !== element.page || item.x < element.x + element.w - 1.5) return false;
+      if (isTextContent(item.kind)) {
+        return item.kind !== "paragraph" && Math.abs(item.baseline - element.baseline) < size * 0.45;
+      }
+      if (item.kind !== "shape" && item.kind !== "image") return false;
+      const overlap = Math.min(item.y + item.h, element.y + element.h) - Math.max(item.y, element.y);
+      return item.h <= size * 3 && item.w <= size * 24 && overlap > Math.min(item.h, element.h) * 0.5;
+    })
     .sort((a, b) => a.x - b.x);
   const kept: ContentElement[] = [];
   let edge = element.x + element.w;
   for (const item of row) {
     if (item.x - edge > size * 1.75) break;
+    // A neighbour that is being edited itself shows its own text; a picture of the page there
+    // would show the old words over it, so the row stops at it.
+    if (edited.has(item.id)) break;
     kept.push(item);
     edge = Math.max(edge, item.x + item.w);
   }
@@ -192,11 +198,12 @@ export function captureEdit(
   elements: ContentElement[],
   pageWidth: number,
   pageHeight: number,
+  edited: Set<string> = new Set(),
 ): EditCapture {
   const found = inspectRun(canvas, element, pageWidth, pageHeight);
   const tails: PatchTail[] = [];
   if (element.kind !== "paragraph") {
-    for (const tail of followingRuns(element, elements)) {
+    for (const tail of followingRuns(element, elements, edited)) {
       const region = pixelBox(canvas, tail, pageWidth, pageHeight, TAIL_PAD);
       if (!region) continue;
       const image = snap(canvas, region);

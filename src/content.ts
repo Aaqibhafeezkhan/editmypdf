@@ -1,7 +1,7 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
 import { collectGlyphUse, editableFamily, familyBytes, missingGlyphs, rememberCoverage, type GlyphUse } from "./fontFix.ts";
 import { measureWidth } from "./textLayout.ts";
-import { collectType3Glyphs, groupType3Fonts, type3Face, type Type3Glyph, type Type3Member } from "./type3Font.ts";
+import { collectType3Glyphs, registerType3Fonts, type3FaceBytes, type3Families, type Type3Glyph, type Type3Member } from "./type3Font.ts";
 import type { PatchAnnotation, Point, TextAlign, TextSpan } from "./types.ts";
 
 export type ContentKind = "text" | "heading" | "paragraph" | "table" | "line" | "image" | "shape";
@@ -222,7 +222,42 @@ const contentCache = new WeakMap<PDFPageProxy, Promise<ContentElement[]>>();
 // The bytes of a font a page draws with, as pdf.js converted them: the copy with the corrected
 // cmap when the editor registered one, and the converted font itself. Both null for a font pdf.js
 // drew without bytes (a system font).
-export type PageFont = { data: Uint8Array | null; fixed: Uint8Array | null; type3: boolean };
+export type PageFont = {
+  data: Uint8Array | null;
+  fixed: Uint8Array | null;
+  type3: boolean;
+  // The family of the face rebuilt from a Type3 font, whose latest bytes `type3FaceBytes` gives.
+  family?: string;
+};
+
+// The scan of a document's Type3 fonts in progress, which the reader waits a moment for before
+// it builds a page's faces, so the first page's faces already hold the letters the other pages
+// drew with the same typeface.
+let type3Scan: Promise<void> | null = null;
+
+// Reads the Type3 fonts of every page of a document into their pool, in the background. Pages
+// whose content was read are already in the pool and are skipped.
+export function scanType3Fonts(pages: PDFPageProxy[]): Promise<void> {
+  const scan = (async () => {
+    for (const page of pages) {
+      if (contentCache.has(page)) continue;
+      try {
+        const list = await page.getOperatorList({ annotationMode: AnnotationMode.DISABLE });
+        const glyphs = collectType3Glyphs(list.fnArray, list.argsArray);
+        const members: Type3Member[] = [];
+        for (const [name, drawn] of glyphs) {
+          const font = await fontObject(page, name);
+          if (font?.isType3Font) members.push({ name, font, glyphs: drawn });
+        }
+        if (members.length > 0) registerType3Fonts(members);
+      } catch {
+        // A page that cannot be read adds nothing; the faces keep what they have.
+      }
+    }
+  })();
+  type3Scan = scan;
+  return scan;
+}
 
 const fontCache = new WeakMap<PDFPageProxy, Map<string, PageFont>>();
 
@@ -391,18 +426,24 @@ async function resolveFaces(
     }),
   );
   // A Type3 font is a set of drawings: a real face is rebuilt from them, so the text is set in
-  // the page's own letters, with the page's advances and a space of its own. Fonts that are one
-  // typeface share a face built from all their glyphs.
-  await Promise.all(
-    groupType3Fonts(type3).map(async (members) => {
-      const rebuilt = await type3Face(members);
-      for (const member of members) {
-        if (rebuilt) rememberCoverage(member.name, rebuilt.data, glyphUse.get(member.name));
-        faces.set(member.name, await faceFor(member.name, member.font, styles[member.name], rebuilt?.family ?? null));
-        fonts.set(member.name, { data: null, fixed: rebuilt?.data ?? null, type3: true });
-      }
-    }),
-  );
+  // the page's own letters, with the page's advances and a space of its own. The document's
+  // fonts that are one typeface share a face built from all the glyphs seen so far.
+  if (type3.length > 0) {
+    registerType3Fonts(type3);
+    // The rest of the document is still being read into the pool; a short wait lets the first
+    // pages' faces start with most of the typeface, and a long document is not waited for.
+    if (type3Scan) {
+      await Promise.race([type3Scan, new Promise<void>((resolve) => window.setTimeout(resolve, 2500))]);
+    }
+    const families = await type3Families(type3[0]?.name ?? "");
+    for (const member of type3) {
+      const family = families.get(member.name) ?? null;
+      const bytes = family ? type3FaceBytes(family) : null;
+      if (family && bytes) rememberCoverage(member.name, bytes, glyphUse.get(member.name));
+      faces.set(member.name, await faceFor(member.name, member.font, styles[member.name], family));
+      fonts.set(member.name, { data: null, fixed: bytes, type3: true, family: family ?? undefined });
+    }
+  }
   fontCache.set(page, fonts);
   return faces;
 }
