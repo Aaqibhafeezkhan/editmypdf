@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { BookOpen } from "lucide-react";
 import { formatDate, POSTS } from "../data/posts.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { readingTime } from "./markdown.ts";
@@ -21,9 +22,11 @@ export function Blog() {
     },
   });
   return (
-    <section className="section container">
+    <section className="section container tone-violet">
       <div className="section-head">
-        <p className="eyebrow">Blog</p>
+        <p className="eyebrow">
+          <BookOpen aria-hidden="true" /> Blog
+        </p>
         <h1 className="display">Notes from the inside of a PDF.</h1>
         <p className="lede">
           What it takes to edit a page in place, written from the code that does it. No roadmap posts, no

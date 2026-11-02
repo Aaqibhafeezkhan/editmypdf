@@ -19,6 +19,7 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
   { path: "/how-it-works" },
   { path: "/pricing" },
   { path: "/privacy" },
+  { path: "/terms" },
   { path: "/faq" },
   { path: "/blog" },
   ...POSTS.map((post) => ({ path: `/blog/${post.slug}`, lastmod: post.date })),

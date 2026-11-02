@@ -8,6 +8,7 @@ import { ComparePage } from "./ComparePage.tsx";
 import { HowItWorks } from "./HowItWorks.tsx";
 import { Pricing } from "./Pricing.tsx";
 import { Privacy } from "./Privacy.tsx";
+import { Terms } from "./Terms.tsx";
 import { Faq } from "./Faq.tsx";
 import { NotFound } from "./NotFound.tsx";
 
@@ -27,6 +28,7 @@ export const siteRoutes: RouteObject[] = [
       { path: "how-it-works", Component: HowItWorks },
       { path: "pricing", Component: Pricing },
       { path: "privacy", Component: Privacy },
+      { path: "terms", Component: Terms },
       { path: "faq", Component: Faq },
       { path: "*", Component: NotFound },
     ],

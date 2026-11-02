@@ -32,12 +32,14 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  color: var(--ink-0);
 }
 
 .ew-brand-word {
-  font-family: var(--ff-display);
-  font-size: 1.15rem;
+  font-size: 0.95rem;
+  font-weight: 600;
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .ew-file {

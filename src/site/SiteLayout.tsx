@@ -1,18 +1,30 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation } from "react-router";
-import { ArrowRight, Menu, X } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  CircleHelp,
+  FileText,
+  LayoutGrid,
+  Menu,
+  Scale,
+  Tag,
+  Workflow,
+  X,
+} from "lucide-react";
 import { ThemeSelect } from "../ThemeSelect.tsx";
 import { PRODUCT, publicUrl, ROUTES, siteOrigin } from "../data/product.ts";
 import { Logo } from "./Logo.tsx";
 import "./site.css";
 
+// Each item carries the icon its page uses in its own heading, so the nav and the page agree.
 const NAV = [
-  { to: ROUTES.features, label: "Features" },
-  { to: ROUTES.howItWorks, label: "How it works" },
-  { to: ROUTES.compare, label: "Compare" },
-  { to: ROUTES.pricing, label: "Pricing" },
-  { to: ROUTES.blog, label: "Blog" },
-  { to: ROUTES.faq, label: "FAQ" },
+  { to: ROUTES.features, label: "Features", icon: LayoutGrid },
+  { to: ROUTES.howItWorks, label: "How it works", icon: Workflow },
+  { to: ROUTES.compare, label: "Compare", icon: Scale },
+  { to: ROUTES.pricing, label: "Pricing", icon: Tag },
+  { to: ROUTES.blog, label: "Blog", icon: BookOpen },
+  { to: ROUTES.faq, label: "FAQ", icon: CircleHelp },
 ];
 
 // Organisation and site records for search engines, the same on every page.
@@ -98,10 +110,12 @@ export function SiteLayout() {
             {NAV.map((item) =>
               item.to.includes("#") ? (
                 <Link key={item.to} to={item.to} className="site-nav-link" onClick={() => setOpen(false)}>
+                  <item.icon aria-hidden="true" />
                   {item.label}
                 </Link>
               ) : (
                 <NavLink key={item.to} to={item.to} className="site-nav-link">
+                  <item.icon aria-hidden="true" />
                   {item.label}
                 </NavLink>
               ),
@@ -150,7 +164,11 @@ export function SiteLayout() {
               <a href={PRODUCT.libraries.writer.url} rel="noopener noreferrer" target="_blank">
                 pdf-lib
               </a>
-              . Open source under the MIT licence on{" "}
+              . Open source under the{" "}
+              <a href={PRODUCT.licenseUrl} rel="noopener noreferrer" target="_blank">
+                MIT licence
+              </a>{" "}
+              on{" "}
               <a href={PRODUCT.repository} rel="noopener noreferrer" target="_blank">
                 GitHub
               </a>
@@ -158,16 +176,21 @@ export function SiteLayout() {
             </p>
           </div>
           <nav className="footer-col" aria-label="Product">
-            <h2>Product</h2>
+            <h2>
+              <FileText aria-hidden="true" /> Product
+            </h2>
             <Link to={ROUTES.app}>Open the editor</Link>
             <Link to={ROUTES.features}>Features</Link>
             <Link to={ROUTES.howItWorks}>How it works</Link>
             <Link to={ROUTES.pricing}>Pricing</Link>
-            <Link to={ROUTES.privacy}>Privacy</Link>
             <Link to={ROUTES.faq}>FAQ</Link>
+            <Link to={ROUTES.privacy}>Privacy</Link>
+            <Link to={ROUTES.terms}>Terms of use</Link>
           </nav>
           <nav className="footer-col" aria-label="Compare">
-            <h2>Compare</h2>
+            <h2>
+              <Scale aria-hidden="true" /> Compare
+            </h2>
             <Link to={ROUTES.comparison("ilovepdf")}>vs iLovePDF</Link>
             <Link to={ROUTES.comparison("smallpdf")}>vs Smallpdf</Link>
             <Link to={ROUTES.comparison("adobe-acrobat-online")}>vs Adobe Acrobat online</Link>
@@ -175,7 +198,9 @@ export function SiteLayout() {
             <Link to={ROUTES.compare}>All comparisons</Link>
           </nav>
           <nav className="footer-col" aria-label="Blog">
-            <h2>Blog</h2>
+            <h2>
+              <BookOpen aria-hidden="true" /> Blog
+            </h2>
             <Link to={ROUTES.post("why-editing-pdf-text-is-hard")}>Why editing PDF text is hard</Link>
             <Link to={ROUTES.post("exactly-as-the-page-prints-it")}>Opening text exactly as printed</Link>
             <Link to={ROUTES.post("exporting-real-text")}>Exporting edits as real text</Link>
@@ -184,7 +209,10 @@ export function SiteLayout() {
           </nav>
         </div>
         <div className="container footer-bottom">
-          <span>© 2026 {PRODUCT.name}. Free to use.</span>
+          <span>
+            © 2026 {PRODUCT.name}. Free to use. <Link to={ROUTES.privacy}>Privacy</Link> ·{" "}
+            <Link to={ROUTES.terms}>Terms</Link>
+          </span>
           <span>Competitor names belong to their owners and are used only to compare products.</span>
         </div>
       </footer>

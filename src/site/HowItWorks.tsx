@@ -135,7 +135,7 @@ export function HowItWorks() {
   });
   return (
     <>
-      <section className="section container page-narrow">
+      <section className="section container page-narrow tone-violet">
         <p className="eyebrow">
           <Workflow aria-hidden="true" /> How it works
         </p>
@@ -146,7 +146,7 @@ export function HowItWorks() {
           and back again into a PDF.
         </p>
       </section>
-      <section className="container page-narrow">
+      <section className="container page-narrow tone-violet">
         <ol className="timeline">
           {STEPS.map((step) => (
             <li key={step.n} className="tl-item" data-reveal>
@@ -163,7 +163,7 @@ export function HowItWorks() {
           ))}
         </ol>
       </section>
-      <section className="section container page-narrow">
+      <section className="section container page-narrow tone-coral">
         <div className="section-head">
           <p className="eyebrow">
             <Ban aria-hidden="true" /> Limits
