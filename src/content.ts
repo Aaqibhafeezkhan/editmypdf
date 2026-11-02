@@ -143,6 +143,10 @@ type GlyphState = {
   width: number;
   // Index of the operator that drew the glyph: its place in the page's paint order.
   op: number;
+  // How many two-byte space codes were drawn before this glyph since the text position was last
+  // set. pdf.js adds the word spacing to those when it reads text positions but not when it draws
+  // them, so the positions it reports drift right by that many word spacings.
+  phantom: number;
 };
 
 // Something opaque the page painted (an image, a filled shape) and when.
@@ -152,7 +156,14 @@ type Cover = Box & { order: number };
 // many of its letters were matched to glyphs, those glyphs' summed advance in text space at the
 // selected font size, and the item's text as the stream spells it (letters, with a space only
 // where the stream drew one).
-type ItemSpacing = { state: GlyphState; letters: number; advance: number; text: string };
+type ItemSpacing = {
+  state: GlyphState;
+  letters: number;
+  advance: number;
+  text: string;
+  // Two-byte space codes inside the item, whose word spacing pdf.js wrongly added to its width.
+  phantomInside: number;
+};
 
 type TextFace = Pick<
   ContentElement,
@@ -360,13 +371,21 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
   let wordSpacing = 0;
   let fontSize = 1;
   let font = "";
+  let phantom = 0;
   const show = (glyphs: unknown, op: number) => {
     if (!Array.isArray(glyphs)) return;
     for (const glyph of glyphs) {
       if (!glyph || typeof glyph !== "object") continue;
-      const { unicode, isSpace, width } = glyph as { unicode?: unknown; isSpace?: unknown; width?: unknown };
+      const { unicode, isSpace, width, originalCharCode } = glyph as {
+        unicode?: unknown;
+        isSpace?: unknown;
+        width?: unknown;
+        originalCharCode?: unknown;
+      };
       const text = isSpace ? " " : typeof unicode === "string" ? unicode : "";
-      if (text) out.push({ text, charSpacing, wordSpacing, fontSize, font, width: number(width, 0), op });
+      if (text) out.push({ text, charSpacing, wordSpacing, fontSize, font, width: number(width, 0), op, phantom });
+      // A space drawn as a two-byte code: the renderer gives it no word spacing, the text reader does.
+      if (!isSpace && originalCharCode === 0x20) phantom += 1;
     }
   };
   const number = (value: unknown, fallback: number) =>
@@ -385,6 +404,19 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
       const state = saved.pop();
       if (state) ({ charSpacing, wordSpacing, fontSize, font } = state);
       continue;
+    }
+    // Setting the text position anew discards the drift accumulated along the line.
+    if (
+      fn === OPS.beginText ||
+      fn === OPS.endText ||
+      fn === OPS.setTextMatrix ||
+      fn === OPS.moveText ||
+      fn === OPS.setLeadingMoveText ||
+      fn === OPS.nextLine ||
+      fn === OPS.nextLineShowText ||
+      fn === OPS.nextLineSetSpacingShowText
+    ) {
+      phantom = 0;
     }
     if (!Array.isArray(args)) continue;
     if (fn === OPS.setCharSpacing) charSpacing = number(args[0], 0);
@@ -415,6 +447,7 @@ function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, 
     const text = item.str;
     let position = 0;
     let first: GlyphState | null = null;
+    let last: GlyphState | null = null;
     let letters = 0;
     let advance = 0;
     let spelled = "";
@@ -434,6 +467,7 @@ function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, 
       if (text.startsWith(glyph.text, position)) {
         if (first && skipped) spelled += " ";
         first ??= glyph;
+        last = glyph;
         letters += glyph.text.length;
         advance += glyph.width * (faces.get(glyph.font)?.unitScale ?? 0.001) * glyph.fontSize;
         spelled += glyph.text;
@@ -455,7 +489,10 @@ function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, 
       }
       position += 1;
     }
-    if (first) states.set(index, { state: first, letters, advance, text: spelled });
+    if (first) {
+      const phantomInside = last && last.op === first.op ? Math.max(0, last.phantom - first.phantom) : 0;
+      states.set(index, { state: first, letters, advance, text: spelled, phantomInside });
+    }
   });
   return states;
 }
@@ -558,9 +595,16 @@ function textRuns(
     const ascent = ascentRatio(style);
     const angle = Math.atan2(tx[1], tx[0]) + (style?.vertical ? Math.PI / 2 : 0);
     const top = tx[5] - fontSize * ascent;
+    const matched = spacing.get(index);
+    // Word spacing pdf.js added to two-byte space codes when it read the positions, which the
+    // page never drew: the item sits that much further left, and is that much narrower.
+    const phantomSpacing = matched ? matched.state.wordSpacing * (fontSize / matched.state.fontSize) : 0;
+    const drift = Math.abs(angle) < 0.08 && Number.isFinite(phantomSpacing) ? phantomSpacing : 0;
+    const x = tx[4] - drift * (matched?.state.phantom ?? 0);
+    const width = Math.max(0.5, item.width - drift * (matched?.phantomInside ?? 0));
     const box =
       Math.abs(angle) < 0.08
-        ? { x: tx[4], y: top, w: item.width, h: fontSize }
+        ? { x, y: top, w: width, h: fontSize }
         : rotatedBox(tx[4], tx[5], item.width, fontSize, ascent, angle);
     const face: Face = faces.get(item.fontName) ?? {
       family: style?.fontFamily || "sans-serif",
@@ -568,11 +612,10 @@ function textRuns(
       style: "normal",
       unitScale: 0.001,
     };
-    const matched = spacing.get(index);
     // Text the page later painted over (an edit flattened to an image by an earlier export, a
     // filled box) is not on the page as the reader sees it, so it is not offered for editing.
     if (matched && hidden(box, matched.state.op, covers)) return;
-    const { text, letterSpacing, wordSpacing } = runSpacing(item, fontSize, face, matched);
+    const { text, letterSpacing, wordSpacing } = runSpacing(item, width, fontSize, face, matched);
     runs.push({
       ...box,
       baseline: tx[5],
@@ -601,6 +644,7 @@ function textRuns(
 // no spaces and get none; the gaps between them are measured when they are joined into a line.
 function runSpacing(
   item: TextRun,
+  width: number,
   fontSize: number,
   face: Face,
   matched: ItemSpacing | undefined,
@@ -626,7 +670,7 @@ function runSpacing(
     // from the face's, and any kerning shifts, spread over the gaps between the letters.
     const natural = measureWidth(letters, measure);
     if (letterCount > 1 && natural > 0) {
-      const spread = (item.width - natural) / (letterCount - 1);
+      const spread = (width - natural) / (letterCount - 1);
       letterSpacing = Math.max(-fontSize * 0.08, Math.min(fontSize * 0.5, spread));
     }
     return { text, letterSpacing: Math.round(letterSpacing * 1000) / 1000, wordSpacing: 0 };
@@ -641,7 +685,7 @@ function runSpacing(
   letterSpacing = Math.round(letterSpacing * 1000) / 1000;
   // CSS letter spacing also follows the last glyph; the page's width stops at its ink.
   const natural = measureWidth(text, { ...measure, letterSpacing, wordSpacing: 0 }) - letterSpacing;
-  return { text, letterSpacing, wordSpacing: natural > 0 ? spaceFit(item.width - natural, spaceCount, measure) : 0 };
+  return { text, letterSpacing, wordSpacing: natural > 0 ? spaceFit(width - natural, spaceCount, measure) : 0 };
 }
 
 // The word spacing that spreads `extra` width over `spaces` spaces, kept within what a space can

@@ -671,12 +671,23 @@ export function PageStage({
       onSelectContent(element);
       return;
     }
+    // The patch is only a selection until it is moved or resized; an untouched one is dropped
+    // again when something else is clicked, and moving it is what enters the history.
     const patch = graphicPatch(element, image);
     onReplace([...current, patch]);
-    onPushBaseline(current);
     onSelect(patch.id);
     onSelectContent(element);
   };
+
+  // A graphic patch that still sits exactly where its element was: a selection, nothing more.
+  const untouchedGraphic = (annotation: Annotation): annotation is PatchAnnotation =>
+    annotation.kind === "patch" &&
+    annotation.role === "graphic" &&
+    Math.abs(annotation.x - annotation.originX) < 0.01 &&
+    Math.abs(annotation.y - annotation.originY) < 0.01 &&
+    Math.abs(annotation.w - annotation.originW) < 0.01 &&
+    Math.abs(annotation.h - annotation.originH) < 0.01 &&
+    !annotation.rotation;
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -692,7 +703,26 @@ export function PageStage({
     }
 
     if (tool === "select") {
-      const hit = hitTest(current, pageIndex, point, textBox);
+      let hit = hitTest(current, pageIndex, point, textBox);
+      // Text under a selected table or shape stays reachable: a click on a label inside an
+      // untouched graphic selection opens that label, and the selection itself is let go.
+      if (hit && untouchedGraphic(hit)) {
+        const element = contentAt(contentRef.current, point);
+        if (element && isTextContent(element.kind)) {
+          const rest = current.filter((item) => item.id !== hit?.id);
+          onReplace(rest);
+          onSelect(null);
+          void beginContentEdit(element, point);
+          return;
+        }
+      }
+      // A graphic selection that was never moved is dropped when the click lands elsewhere.
+      const selectedNow = current.find((item) => item.id === selectedId);
+      if (selectedNow && untouchedGraphic(selectedNow) && hit?.id !== selectedNow.id) {
+        const rest = current.filter((item) => item.id !== selectedNow.id);
+        onReplace(rest);
+        hit = hitTest(rest, pageIndex, point, textBox);
+      }
       if (hit) {
         if (hit.kind === "patch" && hit.role === "text") {
           const source = contentRef.current.find((item) => item.id === hit.sourceId);
