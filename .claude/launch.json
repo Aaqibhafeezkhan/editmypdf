@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "--port", "5177", "--strictPort"],
       "port": 5177
+    },
+    {
+      "name": "pdf-editor-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--", "--port", "5178", "--strictPort"],
+      "port": 5178
     }
   ]
 }

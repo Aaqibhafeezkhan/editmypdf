@@ -138,11 +138,12 @@ function DocumentCard({
           {confirming ? (
             <>
               <span className="doc-confirm">Delete this document and its edits?</span>
-              <Button type="button" size="sm" variant="destructive" onClick={onRemove}>
-                Remove
-              </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setConfirming(false)}>
                 Keep
+              </Button>
+              <Button type="button" size="sm" variant="destructive" className="doc-remove" onClick={onRemove}>
+                <Trash2 />
+                Delete
               </Button>
             </>
           ) : (
@@ -150,7 +151,14 @@ function DocumentCard({
               <Button type="button" size="sm" variant="outline" onClick={() => navigate(href)}>
                 Open
               </Button>
-              <Button type="button" size="sm" variant="ghost" aria-label={`Remove ${session.name}`} onClick={() => setConfirming(true)}>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                className="doc-remove"
+                aria-label={`Remove ${session.name}`}
+                onClick={() => setConfirming(true)}
+              >
                 <Trash2 />
                 Remove
               </Button>
