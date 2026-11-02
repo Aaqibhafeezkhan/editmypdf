@@ -188,6 +188,9 @@ export function PageStage({
   stroke,
   textStyle,
   selectedId,
+  hoverId,
+  objectNumbers,
+  onHover,
   focusId,
   getAnnotations,
   getEpoch,
@@ -212,6 +215,10 @@ export function PageStage({
   stroke: StrokeStyle;
   textStyle: TextStyle;
   selectedId: string | null;
+  // The mark hovered in the object list or on a page, outlined here with its list number.
+  hoverId: string | null;
+  objectNumbers: ReadonlyMap<string, number>;
+  onHover: (id: string | null) => void;
   focusId: string | null;
   getAnnotations: () => Annotation[];
   onReplace: (next: Annotation[]) => void;
@@ -524,8 +531,12 @@ export function PageStage({
   };
 
   const hoverContentAt = (point: Point) => {
-    if (tool !== "select") return;
+    if (tool !== "select") {
+      onHover(null);
+      return;
+    }
     const mark = hitTest(getAnnotations(), pageIndex, point, textBox);
+    onHover(mark?.id ?? null);
     const next = mark ? null : (contentAt(contentRef.current, point)?.id ?? null);
     setHoverContent((current) => (current === next ? current : next));
   };
@@ -1167,6 +1178,8 @@ export function PageStage({
                 transform: annotation.rotation ? `rotate(${annotation.rotation}deg)` : undefined,
                 transformOrigin: "center center",
               }}
+              onPointerEnter={() => onHover(annotation.id)}
+              onPointerLeave={() => onHover(null)}
             >
               {selected && interactive &&
                 (["n", "e", "s", "w"] as const).map((edge) => (
@@ -1318,7 +1331,10 @@ export function PageStage({
           onPointerMove={moveDrag}
           onPointerUp={finishDrag}
           onPointerCancel={finishDrag}
-          onPointerLeave={() => setHoverContent(null)}
+          onPointerLeave={() => {
+            setHoverContent(null);
+            onHover(null);
+          }}
         />
         {pageAnnotations.map((annotation) => {
           if (annotation.kind !== "patch") return null;
@@ -1572,7 +1588,7 @@ export function PageStage({
             setWidth(currentWidth + (event.key === "ArrowRight" ? step : -step));
           };
           return (
-            <div key={patch.id}>
+            <div key={patch.id} onPointerEnter={() => onHover(patch.id)} onPointerLeave={() => onHover(null)}>
               <div
                 className={coverClass}
                 style={{
@@ -1721,6 +1737,36 @@ export function PageStage({
                 </div>
               );
             })}
+        {hoverId !== null &&
+          pageAnnotations.map((annotation) => {
+            if (annotation.id !== hoverId) return null;
+            if (annotation.kind === "text" && annotation.text.length === 0 && annotation.id !== selectedId) return null;
+            const box = boundsOf(annotation);
+            const pad =
+              annotation.kind === "text" ||
+              annotation.kind === "emoji" ||
+              annotation.kind === "signature" ||
+              annotation.kind === "patch"
+                ? 4
+                : annotation.strokeWidth / 2 + 4;
+            const number = objectNumbers.get(annotation.id);
+            return (
+              <div
+                key={`${annotation.id}-glow`}
+                className="object-glow"
+                data-object-id={annotation.id}
+                aria-hidden="true"
+                style={{
+                  left: (box.x - pad) * scale,
+                  top: (box.y - pad) * scale,
+                  width: Math.max(box.w + pad * 2, 1) * scale,
+                  height: Math.max(box.h + pad * 2, 1) * scale,
+                }}
+              >
+                {number !== undefined && <span className="object-badge">{number}</span>}
+              </div>
+            );
+          })}
         {pageAnnotations.map((annotation) => {
           if (annotation.id !== selectedId || annotation.kind === "text") return null;
           if (annotation.kind === "patch" && (annotation.role !== "graphic" || tool !== "select")) return null;
@@ -1751,6 +1797,8 @@ export function PageStage({
             <div
               key={`${annotation.id}-handles`}
               className="shape-box"
+              onPointerEnter={() => onHover(annotation.id)}
+              onPointerLeave={() => onHover(null)}
               style={{
                 left: (box.x - pad) * scale,
                 top: (box.y - pad) * scale,

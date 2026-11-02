@@ -730,3 +730,222 @@
   display: flex;
   flex-direction: column;
 }
+
+/* ---- Inspector panes: the object list above, the selection's attributes below ------------- */
+
+.inspector-pane {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.inspector-pane + .inspector-pane {
+  border-top: 1px solid var(--line);
+}
+
+/* ---- Object list ---------------------------------------------------------------------------- */
+
+.object-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.object-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  border-radius: 8px;
+  color: var(--ink);
+}
+
+.object-row:hover,
+.object-row.hot {
+  background: var(--section);
+}
+
+.object-row.selected {
+  background: var(--accent-soft);
+}
+
+.object-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 5px 4px 5px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.object-number {
+  flex: none;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: var(--section);
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.object-row:hover .object-number,
+.object-row.hot .object-number,
+.object-row.selected .object-number {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.object-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-muted);
+}
+
+.object-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.object-icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.object-icon img.wide {
+  width: 20px;
+  background: #fff;
+  border-radius: 3px;
+}
+
+.object-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.object-title,
+.object-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.object-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.object-detail {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.object-page {
+  flex: none;
+  padding-left: 2px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.object-remove {
+  flex: none;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  margin: 0 2px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--ink-muted);
+  opacity: 0.55;
+}
+
+.object-row:hover .object-remove,
+.object-row.hot .object-remove,
+.object-row.selected .object-remove,
+.object-row:focus-within .object-remove {
+  opacity: 1;
+}
+
+.object-remove:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.object-remove svg {
+  width: 14px;
+  height: 14px;
+}
+
+.object-empty {
+  margin: 0;
+  padding: 4px 16px 12px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---- Hover highlight on the page: an accent ring, a tint and the list number ---------------- */
+
+.object-glow {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 6px color-mix(in oklch, var(--accent) 18%, transparent);
+}
+
+.object-badge {
+  position: absolute;
+  z-index: 9;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--ff-sans);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 1.5px #fff,
+    0 1px 3px rgb(0 0 0 / 0.3);
+}

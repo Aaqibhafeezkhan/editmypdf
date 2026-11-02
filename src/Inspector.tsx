@@ -27,6 +27,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ObjectList } from "./ObjectList.tsx";
+import type { ObjectHover, ObjectRow } from "./objects.ts";
 import {
   Select,
   SelectContent,
@@ -291,6 +293,12 @@ export function Inspector({
   onDelete,
   content,
   patch,
+  objects,
+  selectedId,
+  hover,
+  onHoverObject,
+  onSelectObject,
+  onRemoveObject,
 }: {
   tool: Tool;
   shape: ShapeId;
@@ -321,6 +329,13 @@ export function Inspector({
   content: ContentElement | null;
   // The selected text patch, whose text may already differ from the page's.
   patch: PatchAnnotation | null;
+  // Every inserted mark in insertion order, for the numbered list above the attributes.
+  objects: ObjectRow[];
+  selectedId: string | null;
+  hover: ObjectHover | null;
+  onHoverObject: (id: string | null) => void;
+  onSelectObject: (id: string) => void;
+  onRemoveObject: (id: string) => void;
 }) {
   const view = panelFor(tool, selectedKind, shape, selectedShape, content);
   const missing = view.panel === "content" && patch?.role === "text" ? patchMissingGlyphs(patch) : [];
@@ -335,14 +350,20 @@ export function Inspector({
   const title = showInk && view.panel === "stroke" ? brushById(stroke.brush).label : view.title;
   const dashValue = DASHES.find((item) => item.dash === stroke.dash)?.id ?? "solid";
   const opacity = Math.round(stroke.opacity * 100);
+  const pageCount = new Set(objects.map((row) => row.page)).size;
+  const objectsDetail =
+    objects.length === 0
+      ? "Nothing inserted yet"
+      : `${objects.length} ${objects.length === 1 ? "object" : "objects"} on ${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
 
   return (
     <aside className={open ? "inspector" : "inspector collapsed"} aria-label="Properties">
       <div className="inspector-body">
+      <section className="inspector-pane" aria-label="Objects">
       <div className="flex items-start gap-2 px-2.5 py-2.5">
         <div className="min-w-0 flex-1 px-1.5 pt-0.5" aria-hidden={!open}>
-          <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{view.detail}</p>
+          <h2 className="text-sm font-semibold tracking-tight">Objects</h2>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{objectsDetail}</p>
         </div>
         <Button
           type="button"
@@ -357,6 +378,28 @@ export function Inspector({
       </div>
 
       <div className="inspector-scroll" inert={!open}>
+        <ScrollArea className="min-h-0 flex-1">
+          <ObjectList
+            objects={objects}
+            selectedId={selectedId}
+            hover={hover}
+            onHover={onHoverObject}
+            onSelect={onSelectObject}
+            onRemove={onRemoveObject}
+          />
+        </ScrollArea>
+      </div>
+      </section>
+
+      <section className="inspector-pane" aria-label="Attributes" inert={!open}>
+      <div className="flex items-start gap-2 px-2.5 py-2.5">
+        <div className="min-w-0 flex-1 px-1.5 pt-0.5">
+          <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{view.detail}</p>
+        </div>
+      </div>
+
+      <div className="inspector-scroll">
         <ScrollArea className="min-h-0 flex-1">
           <div className="grid gap-5 px-4 pt-1 pb-4">
             {view.panel === "text" && (
@@ -673,6 +716,7 @@ export function Inspector({
           </div>
         </ScrollArea>
       </div>
+      </section>
       </div>
     </aside>
   );
