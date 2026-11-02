@@ -1163,6 +1163,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
             applyText(autoWidth ? { autoWidth, height: null } : { autoWidth }, false)
           }
           content={selected && selected.kind !== "patch" ? null : contentSelection}
+          patch={selected?.kind === "patch" ? selected : null}
         />
       </div>
     </div>

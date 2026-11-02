@@ -9,12 +9,13 @@ function readInspectorOpen(): boolean {
     return true;
   }
 }
-import { contentDetail, contentLabel, type ContentElement } from "./content.ts";
+import { contentDetail, contentLabel, patchMissingGlyphs, type ContentElement, type ContentKind } from "./content.ts";
 import {
   AlignCenter,
   AlignLeft,
   AlignRight,
   Bold,
+  Info,
   Italic,
   PanelRightClose,
   PanelRightOpen,
@@ -39,11 +40,26 @@ import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { brushById, DASHES } from "./brushes.ts";
 import { SHAPE_LABEL, type ShapeId } from "./shapes.ts";
-import type { Align, Annotation, FontId, LineCap, StrokeStyle, TextStyle, Tool } from "./types.ts";
+import type { Align, Annotation, FontId, LineCap, PatchAnnotation, StrokeStyle, TextStyle, Tool } from "./types.ts";
 import { FONT_OPTIONS, SWATCHES } from "./types.ts";
 
 function keepFocus(event: { preventDefault: () => void }) {
   event.preventDefault();
+}
+
+// Tells the user that typed characters the page's font lacks are shown in a substitute face and
+// make the edit an image on download.
+function missingGlyphNote(missing: string[], kind: ContentKind | undefined): string {
+  const shown = missing.slice(0, 6).map((char) => `\u201c${char}\u201d`);
+  const rest = missing.length - shown.length;
+  const list =
+    rest > 0
+      ? `${shown.join(", ")} and ${rest} more`
+      : shown.length === 1
+        ? shown[0]
+        : `${shown.slice(0, -1).join(", ")} or ${shown[shown.length - 1]}`;
+  const noun = kind === "paragraph" || kind === "heading" ? kind : "line";
+  return `The page's font has no ${list}. ${missing.length === 1 ? "It is" : "They are"} shown in a substitute face, and on download this ${noun} is written as an image instead of text.`;
 }
 
 function strokePanel(id: ShapeId, selected: boolean) {
@@ -274,6 +290,7 @@ export function Inspector({
   canDelete,
   onDelete,
   content,
+  patch,
 }: {
   tool: Tool;
   shape: ShapeId;
@@ -302,8 +319,11 @@ export function Inspector({
   canDelete: boolean;
   onDelete: () => void;
   content: ContentElement | null;
+  // The selected text patch, whose text may already differ from the page's.
+  patch: PatchAnnotation | null;
 }) {
   const view = panelFor(tool, selectedKind, shape, selectedShape, content);
+  const missing = view.panel === "content" && patch?.role === "text" ? patchMissingGlyphs(patch) : [];
   const [open, setOpen] = useState(readInspectorOpen);
   useEffect(() => {
     try {
@@ -631,6 +651,13 @@ export function Inspector({
 
             {view.panel === "content" && content?.text && (
               <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{content.text}</p>
+            )}
+
+            {missing.length > 0 && (
+              <p role="status" className="flex gap-2 text-xs leading-relaxed text-muted-foreground">
+                <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                <span>{missingGlyphNote(missing, content?.kind)}</span>
+              </p>
             )}
 
             {view.panel === "empty" && (
