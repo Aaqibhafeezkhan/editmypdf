@@ -327,10 +327,12 @@ export function PageStage({
     };
   }, [focusId, onConsumeFocus]);
 
+  // Drawing tools take the keyboard away from whichever editor had it, a page's own text or a
+  // text field alike, so typing never lands in a field the user has moved on from.
   useEffect(() => {
     if (tool === "select" || tool === "text") return;
     for (const element of textareas.current.values()) {
-      if (document.activeElement === element && element.dataset.kind === "content") element.blur();
+      if (document.activeElement === element) element.blur();
     }
   }, [tool]);
 
@@ -431,12 +433,15 @@ export function PageStage({
   const finishDrag = (event: ReactPointerEvent<HTMLElement>) => {
     const frame = frameRef.current;
     requestAnimationFrame(() => frame?.classList.remove("interacting"));
+    // An editor armed before the pointer went up gets its focus now. Only that one: a text field
+    // this release creates arms itself afterwards and must not lose its focus to the previous
+    // field, and an arm already consumed by the editor's own focus handler is left alone.
     const armed = armFocus.current;
     if (armed) {
       requestAnimationFrame(() => {
-        if (!textareas.current.has(armed)) return;
+        if (armFocus.current !== armed || !textareas.current.has(armed)) return;
         focusText(armed);
-        if (armFocus.current === armed) armFocus.current = null;
+        armFocus.current = null;
       });
     }
     const drag = dragRef.current;
@@ -1258,6 +1263,9 @@ export function PageStage({
                   caretColor: annotation.color,
                 }}
                 onFocus={() => {
+                  // The arm is spent once the field has focus; left set, the ref callback above
+                  // would hand focus back to this field on every later render.
+                  if (armFocus.current === annotation.id) armFocus.current = null;
                   textBaseline.current = getAnnotations();
                   epochOnFocus.current = getEpoch();
                   onSelect(annotation.id);
