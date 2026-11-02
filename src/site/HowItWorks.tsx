@@ -1,11 +1,30 @@
+import type { MouseEvent } from "react";
 import { Link } from "react-router";
-import { ArrowRight, Ban, CaseSensitive, FileOutput, FileSearch, Ruler, TextCursorInput, Workflow } from "lucide-react";
+import {
+  ArrowRight,
+  Ban,
+  BookOpen,
+  CaseSensitive,
+  FileOutput,
+  FileSearch,
+  Layers,
+  Lock,
+  MemoryStick,
+  Ruler,
+  ScanLine,
+  Scissors,
+  TextCursorInput,
+  Type,
+  Workflow,
+} from "lucide-react";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { useMeta } from "./useMeta.ts";
+import "./how.css";
 
 const STEPS = [
   {
     n: "01",
+    short: "Read the page",
     icon: FileSearch,
     title: "The page is read, not just drawn",
     summary: "pdf.js renders the page and hands over its text items and the drawing operators that produced them.",
@@ -26,6 +45,7 @@ const STEPS = [
   },
   {
     n: "02",
+    short: "Fix the fonts",
     icon: CaseSensitive,
     title: "The fonts become typeable",
     summary: "A corrected copy of each embedded font is registered so every character maps to the glyph the page used.",
@@ -41,6 +61,7 @@ const STEPS = [
   },
   {
     n: "03",
+    short: "Fit every line",
     icon: Ruler,
     title: "Every line is fitted to its printed width",
     summary: "Letter and word spacing are solved per line so the editor opens exactly as wide as the page drew it.",
@@ -64,6 +85,7 @@ const STEPS = [
   },
   {
     n: "04",
+    short: "Type in place",
     icon: TextCursorInput,
     title: "You type in the page's own face",
     summary: "A click samples the page's pixels, snapshots the neighbours and opens a styled-span editor in place.",
@@ -85,6 +107,7 @@ const STEPS = [
   },
   {
     n: "05",
+    short: "Write the PDF",
     icon: FileOutput,
     title: "The download is a real PDF with real text",
     summary: "The original strings leave the content stream and your words are written in a subset of the page's font.",
@@ -107,13 +130,30 @@ const STEPS = [
 ];
 
 const LIMITS = [
-  "Scanned pages are images; there is no OCR, so their text cannot be edited, only covered.",
-  "Password-protected PDFs are refused.",
-  "Text drawn by a Type 3 font or by a font the PDF did not embed opens in a fallback face and exports as an image.",
-  "Text inside form XObjects (reused drawing blocks) is covered on export rather than removed.",
-  "There is no merging, splitting, page reordering, compression, conversion or form filling.",
-  "Everything happens in memory, so a very large file is limited by what your browser can hold.",
+  { icon: ScanLine, text: "Scanned pages are images; there is no OCR, so their text cannot be edited, only covered." },
+  { icon: Lock, text: "Password-protected PDFs are refused." },
+  {
+    icon: Type,
+    text: "Text drawn by a Type 3 font or by a font the PDF did not embed opens in a fallback face and exports as an image.",
+  },
+  { icon: Layers, text: "Text inside form XObjects (reused drawing blocks) is covered on export rather than removed." },
+  { icon: Scissors, text: "There is no merging, splitting, page reordering, compression, conversion or form filling." },
+  { icon: MemoryStick, text: "Everything happens in memory, so a very large file is limited by what your browser can hold." },
 ];
+
+// The sticky header's height plus a little, so a step scrolled to sits below it.
+const HEADER_OFFSET = 96;
+
+// Scrolls to a step under the sticky header without handing the hash to the router.
+function jump(event: MouseEvent<HTMLAnchorElement>, id: string) {
+  const node = document.getElementById(id);
+  if (!node) return;
+  event.preventDefault();
+  const top = node.getBoundingClientRect().top + window.scrollY - HEADER_OFFSET;
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
+  history.replaceState(null, "", `#${id}`);
+}
 
 export function HowItWorks() {
   useMeta({
@@ -135,55 +175,80 @@ export function HowItWorks() {
   });
   return (
     <>
-      <section className="section container page-narrow tone-violet">
-        <p className="eyebrow">
-          <Workflow aria-hidden="true" /> How it works
-        </p>
-        <h1 className="display">From a PDF's own glyphs to a cursor you can type with.</h1>
-        <p className="lede">
-          A PDF is not a document with paragraphs. It is a list of drawing instructions that happen to
-          place glyphs. This is how {PRODUCT.name} turns those instructions back into text you can edit,
-          and back again into a PDF.
-        </p>
-      </section>
-      <section className="container page-narrow tone-violet">
-        <ol className="timeline">
+      <section className="section container tone-violet">
+        <div className="section-head">
+          <p className="eyebrow">
+            <Workflow aria-hidden="true" /> How it works
+          </p>
+          <h1 className="display">From a PDF's own glyphs to a cursor you can type with.</h1>
+          <p className="lede">
+            A PDF is not a document with paragraphs. It is a list of drawing instructions that happen to
+            place glyphs. This is how {PRODUCT.name} turns those instructions back into text you can edit,
+            and back again into a PDF.
+          </p>
+        </div>
+        <ol className="how-overview" aria-label="The five steps">
           {STEPS.map((step) => (
-            <li key={step.n} className="tl-item" data-reveal>
-              <span className="tl-marker" aria-hidden="true">
-                <step.icon />
+            <li key={step.n}>
+              <a href={`#step-${step.n}`} onClick={(event) => jump(event, `step-${step.n}`)}>
+                <span className="icon-tile" aria-hidden="true">
+                  <step.icon />
+                </span>
+                <span className="how-overview-n">{step.n}</span>
+                <span className="how-overview-t">{step.short}</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="container tone-violet">
+        <ol className="how-steps">
+          {STEPS.map((step) => (
+            <li key={step.n} id={`step-${step.n}`} className="how-step" data-reveal>
+              <span className="how-step-marker" aria-hidden="true">
+                <span className="icon-tile lg">
+                  <step.icon />
+                </span>
               </span>
-              <div className="tl-card">
-                <span className="tl-n">Step {step.n}</span>
+              <div className="how-step-card">
+                <span className="how-step-n">Step {step.n}</span>
                 <h2>{step.title}</h2>
-                <p className="tl-summary">{step.summary}</p>
-                <div className="tl-body">{step.body}</div>
+                <p className="how-step-summary">{step.summary}</p>
+                <div className="how-step-body">{step.body}</div>
               </div>
             </li>
           ))}
         </ol>
       </section>
-      <section className="section container page-narrow tone-coral">
+
+      <section className="section container tone-coral">
         <div className="section-head">
           <p className="eyebrow">
             <Ban aria-hidden="true" /> Limits
           </p>
           <h2 className="h2">What it does not do</h2>
+          <p className="lede">
+            {PRODUCT.name} does one job, editing the text on the page. These are the cases it leaves alone,
+            and the <Link to={ROUTES.compare}>comparisons</Link> say which tools do them well.
+          </p>
         </div>
         <ul className="limits-grid" data-reveal>
           {LIMITS.map((limit) => (
-            <li key={limit}>
-              <Ban aria-hidden="true" />
-              <span>{limit}</span>
+            <li key={limit.text} className="card limit-card">
+              <span className="icon-tile" aria-hidden="true">
+                <limit.icon />
+              </span>
+              <span>{limit.text}</span>
             </li>
           ))}
         </ul>
         <p className="actions">
           <Link to={ROUTES.app} className="btn btn-primary btn-lg">
-            Open a PDF <ArrowRight aria-hidden="true" />
+            Open a PDF <ArrowRight className="btn-arrow" aria-hidden="true" />
           </Link>
           <Link to={ROUTES.blog} className="btn btn-secondary btn-lg">
-            Read the engineering posts
+            <BookOpen className="btn-lead" aria-hidden="true" /> Read the engineering posts
           </Link>
         </p>
       </section>
