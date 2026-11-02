@@ -150,7 +150,7 @@ export function SiteLayout() {
               <a href={PRODUCT.libraries.writer.url} rel="noopener noreferrer" target="_blank">
                 pdf-lib
               </a>
-              . Source on{" "}
+              . Open source under the MIT licence on{" "}
               <a href={PRODUCT.repository} rel="noopener noreferrer" target="_blank">
                 GitHub
               </a>
