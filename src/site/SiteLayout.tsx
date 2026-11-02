@@ -67,7 +67,9 @@ export function SiteLayout() {
         </div>
       </header>
       <main id="main" className="site-main">
-        <Outlet />
+        <div key={pathname} className="page-transition">
+          <Outlet />
+        </div>
       </main>
       <footer className="site-footer">
         <div className="container footer-grid">

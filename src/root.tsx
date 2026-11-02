@@ -30,9 +30,11 @@ function EditorRoute() {
   const { id = "" } = useParams();
   const sessionId = decodeURIComponent(id);
   return (
-    <Suspense fallback={<Loading />}>
-      <Editor key={sessionId} sessionId={sessionId} />
-    </Suspense>
+    <div key={sessionId} className="page-transition app-route">
+      <Suspense fallback={<Loading />}>
+        <Editor key={sessionId} sessionId={sessionId} />
+      </Suspense>
+    </div>
   );
 }
 
@@ -55,9 +57,11 @@ const router = createBrowserRouter([
   {
     path: "/app",
     element: (
-      <Suspense fallback={<Loading />}>
-        <AppHome />
-      </Suspense>
+      <div className="page-transition app-route">
+        <Suspense fallback={<Loading />}>
+          <AppHome />
+        </Suspense>
+      </div>
     ),
   },
   { path: "/edit/:id", Component: EditorRoute },
