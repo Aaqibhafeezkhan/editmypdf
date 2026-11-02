@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { Link } from "react-router";
 import { getDocument } from "pdfjs-dist";
@@ -12,9 +12,12 @@ import {
   MousePointerClick,
   Sparkles,
   Trash2,
+  TriangleAlert,
   Upload,
 } from "lucide-react";
+import { Popover as PopoverPrimitive } from "radix-ui";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVisitCounter } from "./counter.ts";
 import { PRODUCT, publicUrl, routeHref, ROUTES } from "./data/product.ts";
 import { createBlankPdf, loadPdf } from "./pdf.ts";
@@ -97,16 +100,25 @@ function usePreviews(sessions: SessionInfo[]): Map<string, Preview> {
   return previews;
 }
 
+// A stored document. Remove asks first in a small panel anchored to the button: the card clips its
+// own box, so the panel is portalled and positioned by the popover, above the button when there is
+// room and below it otherwise.
 function DocumentCard({
   session,
   preview,
+  confirming,
+  onConfirmingChange,
   onRemove,
 }: {
   session: SessionInfo;
   preview: Preview | undefined;
+  confirming: boolean;
+  onConfirmingChange: (open: boolean) => void;
   onRemove: () => void;
 }) {
-  const [confirming, setConfirming] = useState(false);
+  const titleId = useId();
+  const descriptionId = useId();
+  const keepRef = useRef<HTMLButtonElement>(null);
   const path = ROUTES.edit(session.id);
   const href = routeHref(path);
   const open = (event: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; button: number; preventDefault: () => void }) => {
@@ -137,35 +149,58 @@ function DocumentCard({
           Updated {formatWhen(session.updatedAt)}
         </span>
         <div className="doc-actions">
-          {confirming ? (
-            <>
-              <span className="doc-confirm">Delete this document and its edits?</span>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-                Keep
-              </Button>
-              <Button type="button" size="sm" variant="destructive" className="doc-remove" onClick={onRemove}>
-                <Trash2 />
-                Delete
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button type="button" size="sm" variant="outline" onClick={() => navigate(path)}>
-                Open
-              </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => navigate(path)}>
+            Open
+          </Button>
+          <Popover open={confirming} onOpenChange={onConfirmingChange}>
+            <PopoverTrigger asChild>
               <Button
                 type="button"
                 size="sm"
                 variant="destructive"
                 className="doc-remove"
                 aria-label={`Remove ${session.name}`}
-                onClick={() => setConfirming(true)}
               >
                 <Trash2 />
                 Remove
               </Button>
-            </>
-          )}
+            </PopoverTrigger>
+            <PopoverContent
+              className="doc-confirm"
+              role="alertdialog"
+              aria-labelledby={titleId}
+              aria-describedby={descriptionId}
+              side="top"
+              align="end"
+              sideOffset={8}
+              collisionPadding={16}
+              onOpenAutoFocus={(event) => {
+                // Land on the safe choice; Escape, an outside click or "No" give focus back to Remove.
+                event.preventDefault();
+                keepRef.current?.focus({ preventScroll: true });
+              }}
+            >
+              <div className="doc-confirm-body">
+                <span className="doc-confirm-icon" aria-hidden="true">
+                  <TriangleAlert />
+                </span>
+                <div className="doc-confirm-text">
+                  <strong id={titleId}>Delete this document?</strong>
+                  <p id={descriptionId}>Its edits in this browser are deleted too.</p>
+                </div>
+              </div>
+              <div className="doc-confirm-actions">
+                <Button ref={keepRef} type="button" size="sm" variant="ghost" onClick={() => onConfirmingChange(false)}>
+                  No
+                </Button>
+                <Button type="button" size="sm" variant="destructive" className="doc-confirm-yes" onClick={onRemove}>
+                  <Trash2 />
+                  Yes, delete
+                </Button>
+              </div>
+              <PopoverPrimitive.Arrow className="doc-confirm-arrow" width={12} height={12} aria-hidden="true" />
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
     </li>
@@ -182,6 +217,8 @@ export function AppHome() {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState<"open" | "blank" | "sample" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The card whose Remove is asking for confirmation; one at a time.
+  const [confirming, setConfirming] = useState<string | null>(null);
   const previewMap = usePreviews(sessions);
 
   useEffect(() => {
@@ -417,7 +454,10 @@ export function AppHome() {
                   key={session.id}
                   session={session}
                   preview={previewMap.get(session.id)}
+                  confirming={confirming === session.id}
+                  onConfirmingChange={(open) => setConfirming(open ? session.id : null)}
                   onRemove={() => {
+                    setConfirming(null);
                     removeSession(session.id);
                     previews.delete(session.id);
                     setSessions(listSessions());
