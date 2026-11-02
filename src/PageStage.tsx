@@ -695,12 +695,25 @@ export function PageStage({
       // Rendering it waits on pdf.js's worker, which is still reading the neighbouring pages for
       // several seconds after a document opens, so the first click on a heavy page would open
       // nothing for that long. The page's own canvas stands in until the detail is ready.
+      // The page's own canvas can stand in only once it has been painted; before that it is a
+      // blank bitmap, and the backdrop and the pictures of the neighbours would come out empty.
+      const painted = (() => {
+        if (canvas.width < 2 || canvas.height < 2) return false;
+        try {
+          const pixel = canvas.getContext("2d")?.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data;
+          return !!pixel && (pixel[3] ?? 0) > 0;
+        } catch {
+          return false;
+        }
+      })();
       let source = canvas;
       try {
-        source = await Promise.race([
-          detailCanvas(page),
-          new Promise<HTMLCanvasElement>((resolve) => window.setTimeout(() => resolve(canvas), 250)),
-        ]);
+        source = painted
+          ? await Promise.race([
+              detailCanvas(page),
+              new Promise<HTMLCanvasElement>((resolve) => window.setTimeout(() => resolve(canvas), 250)),
+            ])
+          : await detailCanvas(page);
       } catch {
         source = canvas;
       }

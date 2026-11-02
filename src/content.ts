@@ -1,7 +1,16 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
 import { collectGlyphUse, editableFamily, familyBytes, missingGlyphs, rememberCoverage, type GlyphUse } from "./fontFix.ts";
 import { measureWidth } from "./textLayout.ts";
-import { collectType3Glyphs, registerType3Fonts, type3FaceBytes, type3Families, type Type3Glyph, type Type3Member } from "./type3Font.ts";
+import { loadPdf, type LoadedPdf } from "./pdf.ts";
+import {
+  collectType3Glyphs,
+  linkType3Documents,
+  registerType3Fonts,
+  type3FaceBytes,
+  type3Families,
+  type Type3Glyph,
+  type Type3Member,
+} from "./type3Font.ts";
 import type { PatchAnnotation, Point, TextAlign, TextSpan } from "./types.ts";
 
 export type ContentKind = "text" | "heading" | "paragraph" | "table" | "line" | "image" | "shape";
@@ -235,24 +244,33 @@ export type PageFont = {
 // drew with the same typeface.
 let type3Scan: Promise<void> | null = null;
 
-// Reads the Type3 fonts of every page of a document into their pool, in the background. Pages
-// whose content was read are already in the pool and are skipped.
-export function scanType3Fonts(pages: PDFPageProxy[]): Promise<void> {
+// Reads the Type3 fonts of every page of a document into their pool, in the background, from a
+// second copy of the file that is never painted: pdf.js caches a glyph procedure's path as a
+// Path2D, in place, when it paints the glyph, so the shown document's procedures lose their
+// numbers page by page, while the copy's keep them. `docId` is the shown document's pdf.js id,
+// which the copy's pool is shared with.
+export function scanType3Fonts(bytes: Uint8Array, docId: string): Promise<void> {
   const scan = (async () => {
-    for (const page of pages) {
-      if (contentCache.has(page)) continue;
-      try {
-        const list = await page.getOperatorList({ annotationMode: AnnotationMode.DISABLE });
-        const glyphs = collectType3Glyphs(list.fnArray, list.argsArray);
-        const members: Type3Member[] = [];
-        for (const [name, drawn] of glyphs) {
-          const font = await fontObject(page, name);
-          if (font?.isType3Font) members.push({ name, font, glyphs: drawn });
+    let shadow: LoadedPdf | null = null;
+    try {
+      shadow = await loadPdf(bytes, "shadow");
+      linkType3Documents(docId, shadow.doc.loadingTask.docId);
+      for (const page of shadow.pages) {
+        try {
+          const list = await page.getOperatorList({ annotationMode: AnnotationMode.DISABLE });
+          const glyphs = collectType3Glyphs(list.fnArray, list.argsArray);
+          const members: Type3Member[] = [];
+          for (const [name, drawn] of glyphs) {
+            const font = await fontObject(page, name);
+            if (font?.isType3Font) members.push({ name, font, glyphs: drawn });
+          }
+          if (members.length > 0) registerType3Fonts(members);
+        } catch {
+          // A page that cannot be read adds nothing; the faces keep what they have.
         }
-        if (members.length > 0) registerType3Fonts(members);
-      } catch {
-        // A page that cannot be read adds nothing; the faces keep what they have.
       }
+    } catch {
+      // Without the copy the faces are built from the shown document's procedures alone.
     }
   })();
   type3Scan = scan;
