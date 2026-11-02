@@ -1,0 +1,58 @@
+# Builds the site and publishes dist/ to GitHub Pages on every push to main. Before the first run,
+# choose "GitHub Actions" as the source under Settings → Pages; README.md ("Publishing on GitHub
+# Pages") has the steps. The build takes its base path and address from the Pages configuration, so
+# the same workflow serves https://<owner>.github.io/<repo>/ and a custom domain.
+name: Publish to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a run already in progress is allowed to finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Reads the site's address from the Pages settings: base_path is "/<repo>" for a project site
+      # and "" for a user site or a custom domain; base_url is the full address, lowercased as
+      # GitHub serves it.
+      - name: Read the Pages configuration
+        id: pages
+        uses: actions/configure-pages@v5
+      - name: Build
+        run: npm run build
+        env:
+          VITE_BASE: ${{ steps.pages.outputs.base_path }}/
+          VITE_SITE_URL: ${{ steps.pages.outputs.base_url }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

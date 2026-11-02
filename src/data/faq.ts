@@ -5,7 +5,7 @@ export type FaqEntry = { question: string; answer: string };
 
 export const FAQ: FaqEntry[] = [
   {
-    question: "Does Stet upload my PDF anywhere?",
+    question: "Does PDF Edit upload my PDF anywhere?",
     answer:
       "No. The file is read by pdf.js inside a web worker in your browser, edited there, and written back with pdf-lib in the same tab. The only network requests the app makes are for its own code, fonts and emoji images. There is no account, no analytics script and no server that ever sees your document. See the [privacy page](/privacy) for exactly what is stored and where.",
   },
@@ -22,7 +22,7 @@ export const FAQ: FaqEntry[] = [
   {
     question: "Does the downloaded PDF contain real text or a picture of my edit?",
     answer:
-      "Real text, in the page's own font. On export, Stet removes the original strings under your edit from the page's content stream, embeds a subset of the font pdf.js decoded, and writes your words as text positioned exactly where the editor showed them. If a face cannot be embedded (a Type 3 font, or a font the page did not embed) or you typed a character the font has no glyph for, that one edit is painted as an image instead so the page still looks right.",
+      "Real text, in the page's own font. On export, PDF Edit removes the original strings under your edit from the page's content stream, embeds a subset of the font pdf.js decoded, and writes your words as text positioned exactly where the editor showed them. If a face cannot be embedded (a Type 3 font, or a font the page did not embed) or you typed a character the font has no glyph for, that one edit is painted as an image instead so the page still looks right.",
   },
   {
     question: "What happens if I type a character the PDF's font does not have?",
@@ -32,7 +32,7 @@ export const FAQ: FaqEntry[] = [
   {
     question: "Can I edit a scanned PDF?",
     answer:
-      "Not its text. A scan is a picture with no text to edit, and Stet does not do optical character recognition. You can still draw, type new text boxes and sign on top of it. Tools that offer OCR are listed in the [comparisons](/compare).",
+      "Not its text. A scan is a picture with no text to edit, and PDF Edit does not do optical character recognition. You can still draw, type new text boxes and sign on top of it. Tools that offer OCR are listed in the [comparisons](/compare).",
   },
   {
     question: "Can it open password-protected PDFs?",
@@ -51,16 +51,11 @@ export const FAQ: FaqEntry[] = [
   {
     question: "Can I merge, split, compress, convert or OCR a PDF?",
     answer:
-      "No. Stet is an editor, not a converter. It opens one PDF, lets you change what is on its pages, and writes a new PDF. For those other jobs the [comparison pages](/compare) say which tools do them well.",
+      "No. PDF Edit is an editor, not a converter. It opens one PDF, lets you change what is on its pages, and writes a new PDF. For those other jobs the [comparison pages](/compare) say which tools do them well.",
   },
   {
     question: "What else can I put on a page?",
     answer:
       "Text boxes in Helvetica, Times or Courier with size, colour, bold, italic, underline and alignment; pencil strokes with seven brush styles; lines and arrows; more than seventy shapes with fill and stroke; emoji; and a signature drawn by hand or typed in a script face. Everything can be moved, resized, rotated and undone.",
-  },
-  {
-    question: "Why is it called Stet?",
-    answer:
-      "Stet is the proofreader's mark that means *let it stand*: it tells the typesetter to keep what is on the page. That is the whole idea here. You change one line and the rest of the page stands exactly as it was.",
   },
 ];

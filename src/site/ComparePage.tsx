@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router";
 import { ArrowRight, Check, ChevronRight, Minus, Scale } from "lucide-react";
-import { competitorBySlug, COMPETITORS, FEATURE_LABELS, STET, triWord, type Competitor, type Tool } from "../data/competitors.ts";
+import { competitorBySlug, COMPETITORS, FEATURE_LABELS, OURS, triWord, type Competitor, type Tool } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
 import { Mark, Where } from "./Marks.tsx";
@@ -104,12 +104,12 @@ function Comparison({ tool }: { tool: Competitor }) {
                 }
                 us={
                   <>
-                    <Where where={STET.processing.where} />
-                    <span className="cell-note">{STET.processing.note}</span>
+                    <Where where={OURS.processing.where} />
+                    <span className="cell-note">{OURS.processing.note}</span>
                   </>
                 }
               />
-              <Row names={names} label="File retention" them={tool.processing.retention} us={STET.processing.retention} />
+              <Row names={names} label="File retention" them={tool.processing.retention} us={OURS.processing.retention} />
               <Row
                 names={names}
                 label="Account"
@@ -133,7 +133,7 @@ function Comparison({ tool }: { tool: Competitor }) {
                     </span>
                   </>
                 }
-                us={STET.free.summary}
+                us={OURS.free.summary}
               />
               <Row
                 names={names}
@@ -181,12 +181,12 @@ function Comparison({ tool }: { tool: Competitor }) {
                 us={
                   <>
                     <Mark value="yes" />
-                    <span className="cell-note">{STET.textEditing.note}</span>
+                    <span className="cell-note">{OURS.textEditing.note}</span>
                   </>
                 }
               />
               {features.map((key) => (
-                <Row key={key} names={names} label={FEATURE_LABELS[key]} them={<Mark value={tool.features[key]} />} us={<Mark value={STET.features[key]} />} />
+                <Row key={key} names={names} label={FEATURE_LABELS[key]} them={<Mark value={tool.features[key]} />} us={<Mark value={OURS.features[key]} />} />
               ))}
             </tbody>
           </table>

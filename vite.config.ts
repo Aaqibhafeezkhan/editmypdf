@@ -1,29 +1,13 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
-import { COMPETITORS } from "./src/data/competitors.ts";
 import { POSTS } from "./src/data/posts.ts";
+import { PUBLIC_ROUTES } from "./src/data/routes.ts";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
-
-// Every public route of the site, for the sitemap. Editor documents (/edit/<id>) exist only in
-// one browser and are left out.
-function routes(): { path: string; lastmod?: string }[] {
-  return [
-    { path: "/" },
-    { path: "/app" },
-    { path: "/how-it-works" },
-    { path: "/pricing" },
-    { path: "/privacy" },
-    { path: "/faq" },
-    { path: "/blog" },
-    ...POSTS.map((post) => ({ path: `/blog/${post.slug}`, lastmod: post.date })),
-    { path: "/compare" },
-    ...COMPETITORS.map((tool) => ({ path: `/compare/${tool.slug}` })),
-  ];
-}
 
 function escapeXml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -35,48 +19,100 @@ function feed(origin: string): string {
     (post) =>
       `  <item>\n    <title>${escapeXml(post.title)}</title>\n    <link>${origin}/blog/${post.slug}</link>\n    <guid isPermaLink="true">${origin}/blog/${post.slug}</guid>\n    <pubDate>${new Date(`${post.date}T09:00:00Z`).toUTCString()}</pubDate>\n    <description>${escapeXml(post.description)}</description>\n  </item>`,
   );
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n<channel>\n  <title>Stet blog</title>\n  <link>${origin}/blog</link>\n  <description>Engineering notes on editing PDF text in the browser.</description>\n  <language>en</language>\n${items.join("\n")}\n</channel>\n</rss>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n<channel>\n  <title>PDF Edit blog</title>\n  <link>${origin}/blog</link>\n  <description>Engineering notes on editing PDF text in the browser.</description>\n  <language>en</language>\n${items.join("\n")}\n</channel>\n</rss>\n`;
 }
 
-// Serves /sitemap.xml and /feed.xml in development and writes them into the build. Set
-// VITE_SITE_URL to the site's origin so the entries are absolute; without it they are root-relative.
-function sitemap(origin: string): Plugin {
-  const xml = () =>
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${routes()
+// Crawlers' files: sitemap.xml, feed.xml and robots.txt, served in development and written into the
+// build. Their addresses are absolute when VITE_SITE_URL is set (the full address the site is served
+// at, such as https://owner.github.io/repo) and root-relative under the base path otherwise. The
+// route list is src/data/routes.ts, shared with the prerender.
+function siteFiles(siteUrl: string): Plugin {
+  // Resolved once the config is final, so a base given on the command line counts too.
+  let base = "/";
+  let origin = siteUrl;
+  const sitemap = () =>
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${PUBLIC_ROUTES
       .map(
         (route) =>
           `  <url><loc>${origin}${route.path}</loc>${route.lastmod ? `<lastmod>${route.lastmod}</lastmod>` : ""}</url>`,
       )
       .join("\n")}\n</urlset>\n`;
+  // Editor documents exist only in one browser, so /edit/ is kept out of search results.
+  const robots = () => `User-agent: *\nAllow: ${base}\nDisallow: ${base}edit/\n\nSitemap: ${origin}/sitemap.xml\n`;
+  const files: Record<string, { type: string; body: () => string }> = {
+    "sitemap.xml": { type: "application/xml", body: sitemap },
+    "feed.xml": { type: "application/rss+xml", body: () => feed(origin) },
+    "robots.txt": { type: "text/plain", body: robots },
+  };
   return {
-    name: "sitemap",
+    name: "site-files",
+    // The prerender's server build (scripts/prerender.mjs) needs none of these.
+    apply: (_config, env) => !env.isSsrBuild,
+    configResolved(config) {
+      base = config.base;
+      if (!siteUrl) origin = base.replace(/\/$/, "");
+    },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        if (request.url === "/sitemap.xml") {
-          response.setHeader("Content-Type", "application/xml");
-          response.end(xml());
+        const name = request.url?.startsWith(base) ? request.url.slice(base.length) : undefined;
+        const file = name ? files[name] : undefined;
+        if (!file) {
+          next();
           return;
         }
-        if (request.url === "/feed.xml") {
-          response.setHeader("Content-Type", "application/rss+xml");
-          response.end(feed(origin));
-          return;
-        }
-        next();
+        response.setHeader("Content-Type", file.type);
+        response.end(file.body());
       });
     },
     generateBundle() {
-      this.emitFile({ type: "asset", fileName: "sitemap.xml", source: xml() });
-      this.emitFile({ type: "asset", fileName: "feed.xml", source: feed(origin) });
+      for (const [fileName, file] of Object.entries(files)) {
+        this.emitFile({ type: "asset", fileName, source: file.body() });
+      }
     },
   };
 }
 
+// `vite preview` answers /pricing with /index.html, which after prerendering is the landing page; a
+// static host answers it with /pricing/index.html. This makes the preview do the same, so the
+// prerendered pages can be checked with `npm run preview` (under the base path, when there is one).
+function prerenderedPages(): Plugin {
+  return {
+    name: "prerendered-pages",
+    configurePreviewServer(server) {
+      const outDir = path.resolve(root, server.config.build.outDir);
+      const base = server.config.base;
+      server.middlewares.use((request, _response, next) => {
+        const [pathname = "", query] = (request.url ?? "").split("?");
+        const route = pathname.startsWith(base) ? pathname.slice(base.length) : "";
+        if (
+          request.method === "GET" &&
+          route.length > 0 &&
+          !route.endsWith("/") &&
+          !route.includes("..") &&
+          !path.extname(route) &&
+          existsSync(path.join(outDir, route, "index.html"))
+        ) {
+          request.url = `${pathname}/index.html${query ? `?${query}` : ""}`;
+        }
+        next();
+      });
+    },
+  };
+}
+
+// The path the site is served under: "/" (the default) or "/<repo>/" for a GitHub Pages project
+// site. Read from VITE_BASE at build time; either "/repo" or "/repo/" is accepted.
+function basePath(value: string | undefined): string {
+  const trimmed = (value ?? "").replace(/^\/+|\/+$/g, "");
+  return trimmed ? `/${trimmed}/` : "/";
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, root, "VITE_");
-  const origin = (env.VITE_SITE_URL ?? "").replace(/\/$/, "");
+  const siteUrl = (env.VITE_SITE_URL ?? "").replace(/\/$/, "");
   return {
-    plugins: [react(), tailwindcss(), sitemap(origin)],
+    base: basePath(env.VITE_BASE),
+    plugins: [react(), tailwindcss(), siteFiles(siteUrl), prerenderedPages()],
     resolve: {
       alias: {
         "@": path.resolve(root, "src"),

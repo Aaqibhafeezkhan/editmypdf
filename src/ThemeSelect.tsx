@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -9,7 +9,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { applyTheme, isThemeChoice, readTheme, storeTheme, type ThemeChoice } from "./theme.ts";
+import { applyTheme, isThemeChoice, readTheme, storeTheme, subscribeTheme, type ThemeChoice } from "./theme.ts";
 
 const OPTIONS: { id: ThemeChoice; label: string; icon: typeof Sun }[] = [
   { id: "system", label: "System", icon: Monitor },
@@ -17,12 +17,17 @@ const OPTIONS: { id: ThemeChoice; label: string; icon: typeof Sun }[] = [
   { id: "dark", label: "Dark", icon: Moon },
 ];
 
+const serverTheme = (): ThemeChoice => "system";
+
 export function ThemeSelect() {
-  const [theme, setTheme] = useState<ThemeChoice>(readTheme);
+  // The choice lives in localStorage, which prerendered HTML cannot know: while that markup is
+  // hydrated the server's "system" is used, and React re-renders with the stored choice right after.
+  const theme = useSyncExternalStore(subscribeTheme, readTheme, serverTheme);
   const Current = OPTIONS.find((option) => option.id === theme)?.icon ?? Monitor;
 
+  // main.tsx applies the stored theme on load and storeTheme applies a new choice; this only follows
+  // the operating system while the choice is "system".
   useEffect(() => {
-    applyTheme(theme);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => applyTheme(theme);
     media.addEventListener("change", onChange);
@@ -48,7 +53,6 @@ export function ThemeSelect() {
           value={theme}
           onValueChange={(value) => {
             if (!isThemeChoice(value)) return;
-            setTheme(value);
             storeTheme(value);
           }}
         >

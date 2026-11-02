@@ -208,28 +208,35 @@ export function PrivacyDiagram() {
     <div className="pd" aria-label="Diagram: the PDF is parsed, edited, stored and written inside the browser; no server is involved">
       <div className="pd-browser">
         <span className="pd-browser-label">Your browser tab</span>
-        <div className="pd-node">
-          <FileText /> <span>Your PDF</span>
-        </div>
-        <span className="pd-arrow" />
-        <div className="pd-node">
-          <Cpu /> <span>pdf.js worker</span>
-        </div>
-        <span className="pd-arrow" />
-        <div className="pd-node">
-          <HardDrive /> <span>pdf-lib</span>
-        </div>
-        <span className="pd-arrow" />
-        <div className="pd-node">
-          <FileDown /> <span>Download</span>
+        <div className="pd-flow">
+          <div className="pd-node">
+            <FileText /> <span>Your PDF</span>
+          </div>
+          <span className="pd-arrow" />
+          <div className="pd-node">
+            <Cpu /> <span>pdf.js worker</span>
+          </div>
+          <span className="pd-arrow" />
+          <div className="pd-node">
+            <HardDrive /> <span>pdf-lib</span>
+          </div>
+          <span className="pd-arrow" />
+          <div className="pd-node">
+            <FileDown /> <span>Download</span>
+          </div>
         </div>
         <div className="pd-store">
-          <Database /> <span>IndexedDB keeps the document between visits</span>
+          <Database /> <span>IndexedDB keeps the document between visits, on this device only.</span>
         </div>
       </div>
       <div className="pd-outside">
-        <CloudOff />
-        <span>No server. No upload. Nothing to breach.</span>
+        <span className="pd-cloud" aria-hidden="true">
+          <CloudOff />
+        </span>
+        <span>
+          <strong>No server.</strong> The file has nowhere to go. The application is static files; there is no
+          endpoint that could receive a document.
+        </span>
       </div>
     </div>
   );

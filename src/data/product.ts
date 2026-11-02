@@ -1,12 +1,12 @@
 // Facts about the product that the site repeats in many places. Change them here.
 
 export const PRODUCT = {
-  // Working name; the repository and the package are still called "pdf-editor".
-  name: "Stet",
-  nameIsProvisional: true,
+  // The npm package and the repository are called "pdf-editor".
+  name: "PDF Edit",
+  nameIsProvisional: false,
   tagline: "Edit the text in a PDF without disturbing the page.",
   description:
-    "Stet is a free PDF editor that runs entirely in your browser. Click any heading, line or paragraph and retype it in the page's own font, size, colour and spacing. Nothing is uploaded, and no account is needed.",
+    "PDF Edit is a free PDF editor that runs entirely in your browser. Click any heading, line or paragraph and retype it in the page's own font, size, colour and spacing. Nothing is uploaded, and no account is needed.",
   shortDescription: "Free browser PDF editor that edits the page's own text in its own font. No uploads, no account.",
   repository: "https://github.com/vr-patel/pdf-editor",
   // The stack the privacy claims rest on. Verified against the source: pdf.js parses and renders in
@@ -35,9 +35,28 @@ export const ROUTES = {
   faq: "/faq",
 } as const;
 
+// The path the site is served under, without a trailing slash: "" at the root of a host and
+// "/<repo>" on GitHub Pages (Vite's base URL, set with VITE_BASE at build time).
+export const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// The address of a route as the browser sees it, for a plain <a href>. react-router's Link and
+// navigate() add the base themselves and take the route path.
+export function routeHref(path: string): string {
+  return `${BASE_PATH}${path}`;
+}
+
+// The address of a file in public/, which is served under the base path.
+export function publicUrl(file: string): string {
+  return `${import.meta.env.BASE_URL}${file.replace(/^\//, "")}`;
+}
+
+// The site's address including the base path, without a trailing slash, for absolute URLs in meta
+// tags and JSON-LD: VITE_SITE_URL when it is set (the full address the site is served at, such as
+// https://owner.github.io/repo), otherwise the browser's origin plus the base path, and at build time
+// with nothing configured the base path alone, which makes the URLs root-relative.
 export function siteOrigin(): string {
   const configured = import.meta.env.VITE_SITE_URL as string | undefined;
   if (configured) return configured.replace(/\/$/, "");
-  if (typeof window !== "undefined") return window.location.origin;
-  return "";
+  if (typeof window !== "undefined") return `${window.location.origin}${BASE_PATH}`;
+  return BASE_PATH;
 }

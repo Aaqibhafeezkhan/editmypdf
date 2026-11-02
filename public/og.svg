@@ -11,14 +11,21 @@
   <rect width="1200" height="630" fill="#121211"/>
   <rect width="1200" height="630" fill="url(#glow)"/>
   <rect width="1200" height="630" fill="url(#dots)"/>
-  <g transform="translate(80,76)">
-    <rect width="64" height="64" rx="16" fill="#2b57d0"/>
-    <rect x="14" y="19" width="36" height="8" rx="4" fill="#ffffff"/>
-    <circle cx="19" cy="43" r="4.2" fill="#ffffff"/>
-    <circle cx="32" cy="43" r="4.2" fill="#ffffff"/>
-    <circle cx="45" cy="43" r="4.2" fill="#ffffff"/>
+  <g transform="translate(80,76) scale(2)">
+    <rect width="32" height="32" rx="8" fill="#2b57d0"/>
+    <g transform="translate(16 16) scale(0.78) translate(-16 -16)" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+      <g stroke-width="2.4">
+        <path d="M18 3H9a2 2 0 0 0-2 2v22a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10z"/>
+        <path d="M18 3v7h7"/>
+      </g>
+      <g stroke-width="1.8">
+        <path d="M10.6 23.2v-7.2h1a1.8 1.8 0 0 1 0 3.6h-1"/>
+        <path d="M14.7 23.2v-7.2h0.9a1.9 3.6 0 0 1 0 7.2h-0.9z"/>
+        <path d="M21.5 16h-2.7v7.2M18.8 19.6h2.2"/>
+      </g>
+    </g>
   </g>
-  <text x="164" y="124" font-family="Instrument Serif, Iowan Old Style, Georgia, serif" font-size="48" fill="#f3f1ec">Stet</text>
+  <text x="164" y="124" font-family="Instrument Serif, Iowan Old Style, Georgia, serif" font-size="48" fill="#f3f1ec">PDF Edit</text>
   <text x="80" y="268" font-family="Instrument Serif, Iowan Old Style, Georgia, serif" font-size="84" fill="#f3f1ec">Edit the text in a PDF</text>
   <text x="80" y="362" font-family="Instrument Serif, Iowan Old Style, Georgia, serif" font-size="84" font-style="italic" fill="#8fb0ff">without disturbing the page.</text>
   <text x="80" y="438" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="28" fill="#c3c0b7">Free browser PDF editor. The page's own font, no upload, no account.</text>

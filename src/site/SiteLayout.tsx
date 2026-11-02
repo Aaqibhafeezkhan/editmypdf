@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation } from "react-router";
 import { ArrowRight, Menu, X } from "lucide-react";
 import { ThemeSelect } from "../ThemeSelect.tsx";
-import { PRODUCT, ROUTES, siteOrigin } from "../data/product.ts";
+import { PRODUCT, publicUrl, ROUTES, siteOrigin } from "../data/product.ts";
 import { Logo } from "./Logo.tsx";
 import "./site.css";
 
@@ -180,7 +180,7 @@ export function SiteLayout() {
             <Link to={ROUTES.post("exactly-as-the-page-prints-it")}>Opening text exactly as printed</Link>
             <Link to={ROUTES.post("exporting-real-text")}>Exporting edits as real text</Link>
             <Link to={ROUTES.blog}>All posts</Link>
-            <a href="/feed.xml">RSS feed</a>
+            <a href={publicUrl("feed.xml")}>RSS feed</a>
           </nav>
         </div>
         <div className="container footer-bottom">
