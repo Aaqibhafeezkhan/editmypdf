@@ -1,6 +1,6 @@
 # Builds the site and publishes dist/ to GitHub Pages on every push to main. Before the first run,
-# choose "GitHub Actions" as the source under Settings → Pages; README.md ("Publishing on GitHub
-# Pages") has the steps. The build takes its base path and address from the Pages configuration, so
+# choose "GitHub Actions" as the source under Settings → Pages; README.md ("How a change goes
+# live") has the steps. The build takes its base path and address from the Pages configuration, so
 # the same workflow serves https://<owner>.github.io/<repo>/ and a custom domain.
 name: Publish to GitHub Pages
 

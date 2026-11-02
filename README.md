@@ -5,6 +5,10 @@ own embedded font, and writes the result back as real text. It also annotates: p
 text boxes, emoji and signatures. Nothing is uploaded; pdf.js reads the file in a web worker and
 pdf-lib writes the new one in the same tab.
 
+Live at **[vr-patel.github.io/pdf-editor](https://vr-patel.github.io/pdf-editor/)**, published from
+`main` by GitHub Actions; [How a change goes live](#how-a-change-goes-live) describes the path from a
+pull request to the site.
+
 ## Run it
 
 ```bash
@@ -51,25 +55,49 @@ paths: GitHub Pages picks up `404.html` by itself, Cloudflare Pages and similar 
 of the landing page before the app takes over. The build also writes an empty `.nojekyll` so GitHub
 Pages serves files whose names begin with an underscore.
 
-## Publishing on GitHub Pages
+## How a change goes live
 
-The workflow in `.github/workflows/pages.yml` builds the site and deploys `dist/` on every push to
-`main`, and can also be run by hand from the Actions tab. To publish for the first time:
+The site is served by GitHub Pages at https://vr-patel.github.io/pdf-editor/ and is rebuilt from
+`main` by the workflow in `.github/workflows/pages.yml`. Nothing is deployed by hand, and no branch
+other than `main` is ever deployed.
 
-1. Get the code onto `main`: merge the open pull requests, or push the branch to `main`.
+1. Work on a branch and open a pull request against `main`. While the pull request is open its page
+   says "This branch has not been deployed"; that is expected, since pull request branches are not
+   built or published anywhere.
+2. Merge the pull request. The merge is a push to `main`, which starts the "Publish to GitHub
+   Pages" run under the **Actions** tab.
+3. The run installs dependencies (`npm ci`), reads the site's address from the Pages settings
+   (`actions/configure-pages`, which sets `VITE_BASE` to `/pdf-editor/` and `VITE_SITE_URL` to the
+   site's address), runs `npm run build`, uploads `dist/` and deploys it. It takes about a minute.
+   The run's summary and the merge commit on GitHub both link to the deployment.
+4. The site is updated as soon as the run is green. A failed run leaves the previous deployment in
+   place, so a broken build never takes the site down; the run's log says what failed.
+
+A run can also be started by hand from the Actions tab (**Run workflow** on "Publish to GitHub
+Pages"), for example to redeploy without a code change. Only one deployment runs at a time; a run
+already in progress finishes before the next one starts.
+
+A tab that loaded the site before a deployment still refers to the previous build's files, which
+the deployment replaced, so the next route it opens would fail to load. `src/main.tsx` catches that
+(Vite's `vite:preloadError`) and reloads the tab once, so visitors land on the new build instead of
+an error screen. A second failure within a minute is shown as an error, so a file that is really
+missing cannot cause a reload loop.
+
+The editor's documents live in the browser's IndexedDB under the site's origin; a deployment does
+not touch them.
+
+### Setting up Pages for a new copy of the repository
+
+The workflow is already in the repository; a fork or a fresh copy only needs Pages switched on:
+
+1. Get the code onto `main`.
 2. In the repository on GitHub, open **Settings → Pages** and under **Build and deployment** set
-   **Source** to **GitHub Actions**. Nothing else needs choosing there; the workflow is already in
-   the repository.
+   **Source** to **GitHub Actions**. Nothing else needs choosing there.
 3. Open the **Actions** tab. The "Publish to GitHub Pages" run that the push started (or one you
    start with **Run workflow**) builds the site and deploys it; the first run takes two or three
    minutes.
-4. The site is at `https://<owner>.github.io/<repo>/`, in lowercase, for example
-   `https://vr-patel.github.io/pdf-editor/`. The address is also shown on the workflow run and under
-   Settings → Pages.
-
-The workflow reads the site's address from the Pages configuration (`actions/configure-pages`), so
-`VITE_BASE` becomes `/<repo>/` and `VITE_SITE_URL` becomes the project site's address without
-editing anything. The editor's documents live in the browser's IndexedDB under that origin.
+4. The site is at `https://<owner>.github.io/<repo>/`, in lowercase. The address is also shown on
+   the workflow run and under Settings → Pages.
 
 ### A custom domain
 
@@ -114,7 +142,9 @@ to `404.html`.
 - `src/site/Logo.tsx`, `public/favicon.svg`, `public/og.svg`: the mark, a document with a folded
   corner and "PDF" inside it. `public/og.png` and `public/apple-touch-icon.png` are rendered from
   the SVGs (with sharp, outside the project).
-- `.github/workflows/pages.yml`: the GitHub Pages deployment (below).
+- `.github/workflows/pages.yml`: the GitHub Pages deployment (see How a change goes live).
+- `src/main.tsx`: the browser entry: hydrates prerendered pages and reloads a tab once when a
+  deployment has replaced the files it loaded.
 - `src/data/routes.ts`: every public route, for the sitemap and the prerender.
 - `src/entry-server.tsx`, `scripts/prerender.mjs`: build-time rendering of the site (above).
 - `src/App.tsx`, `src/App.css`, `src/AppHome.tsx`: the editor shell and the documents screen.
