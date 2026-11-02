@@ -15,7 +15,8 @@ import {
 import { ThemeSelect } from "../ThemeSelect.tsx";
 import { competitorBySlug } from "../data/competitors.ts";
 import { ToolMark } from "./CompareCard.tsx";
-import { PRODUCT, publicUrl, ROUTES, siteOrigin } from "../data/product.ts";
+import { ANALYTICS, PRODUCT, publicUrl, ROUTES, siteOrigin } from "../data/product.ts";
+import { Analytics } from "./Analytics.tsx";
 import { Logo } from "./Logo.tsx";
 import "./site.css";
 
@@ -313,6 +314,7 @@ export function SiteLayout() {
         </div>
       </footer>
       <ScrollRestoration getKey={(location) => location.pathname} />
+      {ANALYTICS.enabled && <Analytics />}
     </div>
   );
 }

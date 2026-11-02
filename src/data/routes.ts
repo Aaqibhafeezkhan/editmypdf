@@ -10,19 +10,24 @@ export type PublicRoute = {
   shell?: boolean;
 };
 
+// The day the site's pages last changed in substance (ISO date), for the sitemap. Bump it when a
+// page's content changes; the comparisons take the day their facts were checked.
+export const PAGES_UPDATED = "2026-11-02";
+export const COMPARISONS_UPDATED = "2026-11-02";
+
 // Every public route of the site, in sitemap order. Editor documents (/edit/<id>) exist only in one
 // browser and are left out. The sitemap, the RSS feed and scripts/prerender.mjs all read this list,
 // so a new page or post appears everywhere at once.
 export const PUBLIC_ROUTES: PublicRoute[] = [
-  { path: "/" },
-  { path: "/app", shell: true },
-  { path: "/how-it-works" },
-  { path: "/pricing" },
-  { path: "/privacy" },
-  { path: "/terms" },
-  { path: "/faq" },
-  { path: "/blog" },
+  { path: "/", lastmod: PAGES_UPDATED },
+  { path: "/app", shell: true, lastmod: PAGES_UPDATED },
+  { path: "/how-it-works", lastmod: PAGES_UPDATED },
+  { path: "/pricing", lastmod: COMPARISONS_UPDATED },
+  { path: "/privacy", lastmod: PAGES_UPDATED },
+  { path: "/terms", lastmod: PAGES_UPDATED },
+  { path: "/faq", lastmod: PAGES_UPDATED },
+  { path: "/blog", lastmod: POSTS[0]?.date ?? PAGES_UPDATED },
   ...POSTS.map((post) => ({ path: `/blog/${post.slug}`, lastmod: post.date })),
-  { path: "/compare" },
-  ...COMPETITORS.map((tool) => ({ path: `/compare/${tool.slug}` })),
+  { path: "/compare", lastmod: COMPARISONS_UPDATED },
+  ...COMPETITORS.map((tool) => ({ path: `/compare/${tool.slug}`, lastmod: COMPARISONS_UPDATED })),
 ];

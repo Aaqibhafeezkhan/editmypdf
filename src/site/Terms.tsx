@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { CloudOff, Code, FileCheck, Gift, ScrollText, UserX } from "lucide-react";
-import { PRODUCT, ROUTES } from "../data/product.ts";
+import { ANALYTICS, PRODUCT, ROUTES } from "../data/product.ts";
 import { useMeta } from "./useMeta.ts";
 
 // The date the wording below last changed. Edit it with the text.
@@ -10,7 +10,11 @@ const POINTS = [
   { icon: Gift, title: "Free to use", body: "For anyone, for any document, with no plan, trial or limit." },
   { icon: FileCheck, title: "Provided as is", body: "Without a warranty. Keep your original; it is never modified." },
   { icon: Code, title: "Open source", body: "The code is published under the MIT licence." },
-  { icon: UserX, title: "No account", body: "Nothing to sign up for, and nothing collected about you." },
+  {
+    icon: UserX,
+    title: "No account",
+    body: ANALYTICS.enabled ? "Nothing to sign up for; visits are counted only if you agree." : "Nothing to sign up for, and nothing collected about you.",
+  },
   { icon: CloudOff, title: "Files stay on your device", body: "The editor runs in your browser. Nothing is uploaded." },
 ];
 
@@ -79,9 +83,12 @@ export function Terms() {
 
         <h2>No account, nothing collected</h2>
         <p>
-          There is nothing to sign up for. The site sets no cookies, runs no analytics and includes no
-          third-party scripts. The <Link to={ROUTES.privacy}>privacy page</Link> lists exactly what the app
-          stores in your browser and how to remove it.
+          There is nothing to sign up for.{" "}
+          {ANALYTICS.enabled
+            ? "The site's pages count visits with Google Analytics only after you agree in the notice; the editor pages run no third-party script and set no cookies."
+            : "The site sets no cookies, runs no analytics and includes no third-party scripts."}{" "}
+          The <Link to={ROUTES.privacy}>privacy page</Link> lists exactly what the app stores in your browser
+          and how to remove it.
         </p>
 
         <h2>Your files stay yours, and stay on your device</h2>

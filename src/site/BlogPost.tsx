@@ -105,6 +105,7 @@ function Article({ slug }: { slug: string }) {
     description: post.description,
     type: "article",
     keywords: post.tags,
+    article: { published: post.date, tags: post.tags },
     jsonLd: [
       {
         "@context": "https://schema.org",

@@ -41,7 +41,7 @@ import {
 import { COMPETITORS } from "../data/competitors.ts";
 import { FAQ } from "../data/faq.ts";
 import { POSTS } from "../data/posts.ts";
-import { PRODUCT, ROUTES } from "../data/product.ts";
+import { ANALYTICS, PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
 import { EditorWindow } from "./EditorWindow.tsx";
 import { faqJsonLd } from "./Faq.tsx";
@@ -64,7 +64,13 @@ const STEPS = [
 const PRIVACY_POINTS = [
   { icon: CloudOff, title: "No upload", body: "The code has no endpoint to send a file to." },
   { icon: UserX, title: "No account", body: "Nothing to sign up for and nothing logged." },
-  { icon: EyeOff, title: "No tracking", body: "No analytics, no error reporter, no third-party script." },
+  {
+    icon: EyeOff,
+    title: ANALYTICS.enabled ? "Nothing beside your document" : "No tracking",
+    body: ANALYTICS.enabled
+      ? "The editor loads no analytics and no third-party script; the site's pages count visits only if you agree."
+      : "No analytics, no error reporter, no third-party script.",
+  },
   { icon: Database, title: "Stored on this device", body: "IndexedDB keeps your documents between visits. Clear site data to remove them." },
 ];
 
@@ -291,7 +297,7 @@ export function Landing() {
             <Code aria-hidden="true" /> Open source
           </li>
           <li>
-            <EyeOff aria-hidden="true" /> No analytics, no tracking
+            <EyeOff aria-hidden="true" /> {ANALYTICS.enabled ? "No tracking in the editor" : "No analytics, no tracking"}
           </li>
           <li>
             <Globe aria-hidden="true" /> Chrome, Edge, Firefox, Safari

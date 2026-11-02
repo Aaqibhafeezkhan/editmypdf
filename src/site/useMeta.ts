@@ -13,8 +13,13 @@ export type PageMeta = {
   image?: string;
   keywords?: string[];
   noindex?: boolean;
+  // For a blog post: the dates and tags go out as article:* tags.
+  article?: { published: string; modified?: string; tags?: string[] };
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
 };
+
+// The site card's dimensions and alt text, the same for every page that uses it.
+const CARD = { width: "1200", height: "630", alt: "PDF Edit: edit the text in a PDF without disturbing the page" };
 
 // The head tags a page resolves to, with URLs made absolute where the origin is known.
 export type ResolvedMeta = {
@@ -26,6 +31,13 @@ export type ResolvedMeta = {
   type: "website" | "article";
   url: string;
   image: string;
+  imageWidth: string;
+  imageHeight: string;
+  imageAlt: string;
+  locale: string;
+  articlePublished: string;
+  articleModified: string;
+  articleTags: string[];
   // Serialised JSON-LD, or "" when the page has none.
   jsonLd: string;
 };
@@ -42,6 +54,13 @@ export function resolveMeta(meta: PageMeta, pathname: string): ResolvedMeta {
     type: meta.type ?? "website",
     url: `${origin}${pathname === "/" ? "/" : pathname.replace(/\/$/, "")}`,
     image: image.startsWith("http") ? image : `${origin}${image}`,
+    imageWidth: meta.image ? "" : CARD.width,
+    imageHeight: meta.image ? "" : CARD.height,
+    imageAlt: meta.image ? "" : CARD.alt,
+    locale: "en_GB",
+    articlePublished: meta.article?.published ?? "",
+    articleModified: meta.article?.modified ?? meta.article?.published ?? "",
+    articleTags: meta.article?.tags ?? [],
     jsonLd: meta.jsonLd ? JSON.stringify(meta.jsonLd) : "",
   };
 }
@@ -66,7 +85,13 @@ function setTag(selector: string, create: () => HTMLElement, apply: (node: HTMLE
   apply(node);
 }
 
+// Sets the tag, or removes it when the page has no value (a post's article tags must not
+// linger on the next page).
 function setMeta(attribute: "name" | "property", key: string, content: string) {
+  if (!content) {
+    document.head.querySelectorAll(`meta[${attribute}="${key}"]`).forEach((node) => node.remove());
+    return;
+  }
   setTag(
     `meta[${attribute}="${key}"]`,
     () => {
@@ -85,7 +110,8 @@ export function useMeta(meta: PageMeta): void {
   const { pathname } = useLocation();
   const resolved = resolveMeta(meta, pathname);
   if (import.meta.env.SSR) rendered = resolved;
-  const { title, description, robots, keywords, type, url, image, jsonLd } = resolved;
+  const { title, description, robots, keywords, type, url, image, imageWidth, imageHeight, imageAlt, locale, articlePublished, articleModified, jsonLd } = resolved;
+  const articleTags = resolved.articleTags.join("\n");
   useEffect(() => {
     document.title = title;
     setMeta("name", "description", description);
@@ -97,6 +123,19 @@ export function useMeta(meta: PageMeta): void {
     setMeta("property", "og:type", type);
     setMeta("property", "og:url", url);
     setMeta("property", "og:image", image);
+    setMeta("property", "og:image:width", imageWidth);
+    setMeta("property", "og:image:height", imageHeight);
+    setMeta("property", "og:image:alt", imageAlt);
+    setMeta("property", "og:locale", locale);
+    setMeta("property", "article:published_time", articlePublished);
+    setMeta("property", "article:modified_time", articleModified);
+    document.head.querySelectorAll('meta[property="article:tag"]').forEach((node) => node.remove());
+    for (const tag of articleTags ? articleTags.split("\n") : []) {
+      const node = document.createElement("meta");
+      node.setAttribute("property", "article:tag");
+      node.setAttribute("content", tag);
+      document.head.append(node);
+    }
     setMeta("name", "twitter:card", "summary_large_image");
     setMeta("name", "twitter:title", title);
     setMeta("name", "twitter:description", description);
@@ -120,7 +159,7 @@ export function useMeta(meta: PageMeta): void {
     } else {
       existing?.remove();
     }
-  }, [title, description, robots, keywords, type, url, image, jsonLd]);
+  }, [title, description, robots, keywords, type, url, image, imageWidth, imageHeight, imageAlt, locale, articlePublished, articleModified, articleTags, jsonLd]);
 }
 
 // A BreadcrumbList for a page two or three levels deep.

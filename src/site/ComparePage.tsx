@@ -34,7 +34,9 @@ function Row({ label, them, us, names }: RowProps) {
 function Comparison({ tool }: { tool: Competitor }) {
   const title = `${PRODUCT.name} vs ${tool.name}`;
   useMeta({
-    title,
+    // The name is already in the title, so no " — PDF Edit" suffix.
+    title: `${title}: where files go, what is free, fonts`,
+    titleSuffix: false,
     description: `${tool.name} compared with ${PRODUCT.name}: where files are processed, free limits, pricing, and whether editing text keeps the original font. Facts checked ${tool.checkedAt}.`,
     keywords: [`${tool.name} alternative`, `${tool.name} vs ${PRODUCT.name}`, `${tool.name} pricing`, "edit PDF text free", "PDF editor comparison"],
     jsonLd: [
