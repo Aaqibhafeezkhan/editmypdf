@@ -28,3 +28,7 @@ samples
 
 # The owner's SEO plan: kept locally, not published with the code.
 docs/seo-plan.md
+
+# The Claude desktop app's local state: dev-server launch entries and worktrees. Not needed by the
+# build or the site.
+.claude/
