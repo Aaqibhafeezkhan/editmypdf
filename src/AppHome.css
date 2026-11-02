@@ -357,7 +357,9 @@
   transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out), transform var(--duration) var(--ease-out);
 }
 
-.doc-card:hover {
+/* A card stays lifted while its confirm panel is open, so the panel anchored to it does not drift. */
+.doc-card:hover,
+.doc-card:has(.doc-remove[data-state="open"]) {
   border-color: var(--rule-strong);
   box-shadow: var(--elev-2);
   transform: translateY(-2px);
@@ -469,10 +471,88 @@
   background: color-mix(in oklab, var(--bad) 22%, var(--bad-soft));
 }
 
+/* The confirm panel. It is portalled by the popover (the card clips its own box) and anchored to
+   Remove, so its own border, radius and shadow replace the generic popover ones. */
 .doc-confirm {
-  flex-basis: 100%;
+  width: 300px;
+  max-width: var(--radix-popover-content-available-width);
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--round-lg);
+  background: var(--panel);
+  color: var(--ink-0);
+  box-shadow: var(--elev-3);
+}
+
+.doc-confirm-body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+
+.doc-confirm-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--round-full);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.doc-confirm-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.doc-confirm-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.doc-confirm-text strong {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  letter-spacing: var(--ls-tight);
+}
+
+.doc-confirm-text p {
+  margin: 0;
   color: var(--ink-1);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.doc-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+/* The destructive choice is the filled one. Paper on the danger colour reads in both themes: light
+   text on the deep red of light mode, dark text on the lighter red of dark mode. */
+.doc-confirm-yes {
+  background: var(--bad);
+  color: var(--paper-0);
+}
+
+.doc-confirm-yes:hover {
+  background: color-mix(in oklab, var(--bad) 90%, var(--ink-0));
+}
+
+/* The arrow is a square turned 45°, with borders on the two edges that form the tip. The popover
+   turns the wrapper around when the panel sits below the button, so the tip points at it either way. */
+.doc-confirm-arrow {
+  width: 12px;
+  height: 12px;
+  background: var(--panel);
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  fill: none;
+  transform: translateY(-50%) rotate(45deg);
 }
 
 .home-empty {
