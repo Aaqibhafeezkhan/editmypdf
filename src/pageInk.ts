@@ -153,6 +153,15 @@ function inspectRun(
   } catch {
     return null;
   }
+  // A canvas nothing has been painted on yet is transparent, which would read as black paper.
+  let painted = false;
+  for (let index = 3; index < pixels.length; index += 4) {
+    if ((pixels[index] ?? 0) > 0) {
+      painted = true;
+      break;
+    }
+  }
+  if (!painted) return null;
   const background = sampleBackground(pixels, region.w, region.h);
   const underline = element.kind === "paragraph" ? null : findUnderline(pixels, region.w, region.h, background);
   return {
