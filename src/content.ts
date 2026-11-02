@@ -1,7 +1,7 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
-import { collectGlyphUse, editableFamily, familyBytes, type GlyphUse } from "./fontFix.ts";
+import { collectGlyphUse, editableFamily, familyBytes, missingGlyphs, type GlyphUse } from "./fontFix.ts";
 import { measureWidth } from "./textLayout.ts";
-import type { Point, TextAlign, TextSpan } from "./types.ts";
+import type { PatchAnnotation, Point, TextAlign, TextSpan } from "./types.ts";
 
 export type ContentKind = "text" | "heading" | "paragraph" | "table" | "line" | "image" | "shape";
 
@@ -182,10 +182,15 @@ type TextFace = Pick<
   | "pdfFont"
 >;
 
-// The subset of pdf.js's font object that decides how the text is drawn on the canvas.
+// The subset of pdf.js's font object that decides how the text is drawn on the canvas. The name
+// and the serif and monospace flags are extra properties, present because the document is opened
+// with fontExtraProperties.
 type PdfFontObject = {
   loadedName?: string;
   fallbackName?: string;
+  name?: string;
+  isSerifFont?: boolean;
+  isMonospace?: boolean;
   bold?: boolean;
   italic?: boolean;
   black?: boolean;
@@ -363,7 +368,7 @@ async function resolveFaces(
     [...names].map(async (name) => {
       const font = await fontObject(page, name);
       const family = font?.isType3Font ? null : await editableFamily(name, font?.data, glyphUse.get(name));
-      faces.set(name, faceFor(name, font, styles[name], family));
+      faces.set(name, await faceFor(name, font, styles[name], family));
       fonts.set(name, { data: font?.data ?? null, fixed: family ? familyBytes(family) : null, type3: font?.isType3Font === true });
     }),
   );
@@ -539,8 +544,8 @@ function fontObject(page: PDFPageProxy, name: string): Promise<PdfFontObject | n
   });
 }
 
-function faceFor(name: string, font: PdfFontObject | null, style: PdfFontStyle | undefined, fixed: string | null): Face {
-  const fallback = font?.fallbackName || style?.fontFamily || "sans-serif";
+async function faceFor(name: string, font: PdfFontObject | null, style: PdfFontStyle | undefined, fixed: string | null): Promise<Face> {
+  const fallback = await fallbackFamily(font, style);
   const weight = font?.black ? 900 : font?.bold ? 700 : 400;
   const slant: Face["style"] = font?.italic ? "italic" : "normal";
   const matrix = font?.fontMatrix?.[0];
@@ -552,6 +557,138 @@ function faceFor(name: string, font: PdfFontObject | null, style: PdfFontStyle |
     return { family: `"${loaded}", ${fallback}`, weight, style: slant, unitScale };
   }
   return { family: fallback, weight, style: slant, unitScale };
+}
+
+type FaceKind = "serif" | "sans" | "mono";
+
+// Faces most systems have, by the name a PDF font goes by, so a character the embedded face lacks
+// comes from the real font when it is installed.
+const KNOWN_FAMILIES: [RegExp, string, FaceKind][] = [
+  [/courier/i, "Courier New", "mono"],
+  [/consolas/i, "Consolas", "mono"],
+  [/menlo/i, "Menlo", "mono"],
+  [/monaco/i, "Monaco", "mono"],
+  [/lucida\s*console/i, "Lucida Console", "mono"],
+  [/times/i, "Times New Roman", "serif"],
+  [/georgia/i, "Georgia", "serif"],
+  [/garamond/i, "Garamond", "serif"],
+  [/palatino|book\s*antiqua/i, "Palatino", "serif"],
+  [/cambria/i, "Cambria", "serif"],
+  [/baskerville/i, "Baskerville", "serif"],
+  [/century\s*schoolbook/i, "Century Schoolbook", "serif"],
+  [/arial/i, "Arial", "sans"],
+  [/helvetica/i, "Helvetica", "sans"],
+  [/verdana/i, "Verdana", "sans"],
+  [/tahoma/i, "Tahoma", "sans"],
+  [/trebuchet/i, "Trebuchet MS", "sans"],
+  [/calibri/i, "Calibri", "sans"],
+  [/segoe/i, "Segoe UI", "sans"],
+  [/gill\s*sans/i, "Gill Sans", "sans"],
+  [/futura/i, "Futura", "sans"],
+  [/avenir/i, "Avenir", "sans"],
+  [/optima/i, "Optima", "sans"],
+  [/century\s*gothic/i, "Century Gothic", "sans"],
+];
+
+// Words in a font's name that say what kind of face it is, tried in an order that keeps "Sans
+// Serif" sans, "Roboto Slab" serif, and "Helvetica Neue Roman" sans: Roman names the regular
+// style of many sans faces, so it only counts when nothing else in the name does.
+const MONO_HINT =
+  /mono|typewriter|\bcode\b|courier|consol|cmtt\d|inconsolata|letter\s*gothic|andale|menlo|monaco|cousine|nimbusmon|gyrecursor/i;
+const SANS_WORD = /sans|grotesk|grotesque/i;
+const SERIF_HINT =
+  /serif|slab|times|georgia|garamond|baskerville|cambria|palatino|palladio|minion|caslon|century|bodoni|didot|charter|constantia|plantin|sabon|bembo|caecilia|rockwell|utopia|nimbusrom|libertin|merriweather|lora\b|playfair|spectral|crimson|literata|tinos|caladea|gelasio|termes|pagella|bonum|schola|cm(?:r|bx|ti|sl|mi|bxti|bxsl)\d|sf(?:rm|bx|ti)\d|lmroman|computer\s*modern|bookman|antiqua|schoolbook|goudy|perpetua|trajan|warnock|chaparral|hoefler|cochin|clarendon|janson|jenson|walbaum|cormorant|vollkorn|gentium|cardo|alegreya|domine|arvo|bitter|zilla/i;
+const SANS_HINT =
+  /gothic|arial|arimo|helvetica|verdana|tahoma|calibri|carlito|segoe|roboto|lato\b|\binter\b|myriad|frutiger|univers|futura|avenir|gill|optima|trebuchet|cmss\d|sfss\d|lmsans|heros|adventor|nimbussan|geist|montserrat|poppins|raleway|ubuntu|cantarell|nunito|oswald|franklin|akzidenz|\bdin\b|avant|gotham|proxima|aptos/i;
+const ROMAN_HINT = /roman/i;
+
+// Words in a font's name that say it is bold or italic. pdf.js sets its own bold and italic flags
+// only for fonts it had to substitute; an embedded face says so in its name alone.
+const BOLD_NAME = /bold|black|heavy|cm(?:bx|b|ssbx|bxti|bxsl)\d|sfbx\d/i;
+const ITALIC_NAME = /italic|oblique|slanted|kursiv|cm(?:ti|bxti|sl|bxsl|mi)\d|sfti\d/i;
+
+const GENERIC: Record<FaceKind, { faces: string[]; generic: string }> = {
+  serif: { faces: ["Georgia", "Times New Roman"], generic: "serif" },
+  sans: { faces: ["Helvetica", "Arial"], generic: "sans-serif" },
+  mono: { faces: ["Menlo", "Courier New"], generic: "monospace" },
+};
+
+// The families a character the face lacks is drawn in, in the order the browser tries them: the
+// bold or italic of the faces below when the font is one, the font the PDF names when most
+// systems have it, faces of the same kind that most systems have, then the generic family.
+// pdf.js picks its generic from the PDF's font flags, which many generators set wrongly (a text
+// serif flagged plain, so a missing letter came out sans-serif); the font's own name is trusted
+// first, and the flags only when the name says nothing.
+async function fallbackFamily(font: PdfFontObject | null, style: PdfFontStyle | undefined): Promise<string> {
+  const name = (font?.name ?? "").replace(/^[A-Z]{6}\+/, "");
+  const known = KNOWN_FAMILIES.find(([pattern]) => pattern.test(name));
+  const kind = known?.[2] ?? kindOf(name, font, style);
+  const faces = [...new Set([...(known ? [known[1]] : []), ...GENERIC[kind].faces])];
+  const bold = font?.bold || font?.black || (font?.bold == null && BOLD_NAME.test(name));
+  const italic = font?.italic ?? ITALIC_NAME.test(name);
+  const styled = await styledAlias(faces, !!bold, italic);
+  return [...(styled ? [`"${styled}"`] : []), ...faces.map((face) => `"${face}"`), GENERIC[kind].generic].join(", ");
+}
+
+function kindOf(name: string, font: PdfFontObject | null, style: PdfFontStyle | undefined): FaceKind {
+  if (MONO_HINT.test(name)) return "mono";
+  if (SANS_WORD.test(name)) return "sans";
+  if (SERIF_HINT.test(name)) return "serif";
+  if (SANS_HINT.test(name)) return "sans";
+  if (ROMAN_HINT.test(name)) return "serif";
+  if (font?.isMonospace) return "mono";
+  if (font?.isSerifFont) return "serif";
+  const flagged = font?.fallbackName || style?.fontFamily || "";
+  if (flagged === "monospace") return "mono";
+  if (flagged === "serif") return "serif";
+  return "sans";
+}
+
+// Aliases registered for the bold or italic of system faces, by alias name.
+const aliases = new Map<string, Promise<string | null>>();
+
+// The bold or italic (or both) of the given system faces under a family name of its own, declared
+// regular, so a span can list it after the embedded font without also asking the browser to slant
+// or thicken the embedded glyphs, which pdf.js registers as regular whatever their design. Null
+// when neither is wanted or none of the faces is installed; the browser then goes on to the
+// regular faces.
+function styledAlias(faces: string[], bold: boolean, italic: boolean): Promise<string | null> {
+  if ((!bold && !italic) || typeof document === "undefined" || typeof FontFace === "undefined") return Promise.resolve(null);
+  const slug = faces.map((face) => face.toLowerCase().replace(/[^a-z0-9]+/g, "-")).join("-");
+  const name = `stet-fallback-${slug}-${bold ? "bold" : ""}${italic ? "italic" : ""}`;
+  const cached = aliases.get(name);
+  if (cached) return cached;
+  const styles = bold && italic ? ["Bold Italic", "Bold Oblique"] : bold ? ["Bold"] : ["Italic", "Oblique"];
+  // Full names first, then the PostScript names Microsoft and Apple give these faces.
+  const sources = faces.flatMap((face) =>
+    styles.flatMap((style) => [`local("${face} ${style}")`, `local("${face}-${style.replace(/ /g, "")}")`]),
+  );
+  const pending = (async () => {
+    try {
+      const face = new FontFace(name, sources.join(", "));
+      await face.load();
+      document.fonts.add(face);
+      return name;
+    } catch {
+      return null;
+    }
+  })();
+  aliases.set(name, pending);
+  return pending;
+}
+
+// The characters of a text patch that the faces it is set in have no glyph for, each once: the
+// browser draws them in the face's fallback family, and the export paints the patch as an image.
+export function patchMissingGlyphs(patch: Pick<PatchAnnotation, "text" | "pdfFont" | "spans">): string[] {
+  const spans =
+    patch.spans.length > 0 && patch.spans.map((span) => span.text).join("") === patch.text
+      ? patch.spans
+      : [{ text: patch.text, pdfFont: patch.pdfFont }];
+  const missing: string[] = [];
+  for (const span of spans) {
+    for (const char of missingGlyphs(span.pdfFont, span.text)) if (!missing.includes(char)) missing.push(char);
+  }
+  return missing;
 }
 
 function fontRegistered(family: string): boolean {

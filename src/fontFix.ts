@@ -8,6 +8,9 @@ type Subtable = { platform: number; encoding: number; offset: number };
 
 const registered = new Map<string, Promise<string | null>>();
 const cmaps = new Map<string, Map<number, number>>();
+// The code points each page drew with a font, by pdf.js font name: whatever the page shows is
+// covered, whichever glyph the converted font's own cmap happens to name for it.
+const drawn = new Map<string, Set<number>>();
 const bytesByFamily = new Map<string, Uint8Array>();
 let serial = 0;
 
@@ -50,13 +53,9 @@ export function collectGlyphUse(fnArray: number[], argsArray: unknown[]): Map<st
 // Registers (once per distinct mapping) a copy of the font whose Unicode cmap follows the page,
 // and resolves to its family name. Null when the font bytes cannot be rewritten.
 export function editableFamily(loadedName: string, data: Uint8Array | null | undefined, use: GlyphUse | undefined): Promise<string | null> {
-  if (!data || data.length < 12 || !use || use.size === 0 || typeof document === "undefined") return Promise.resolve(null);
-  let existing = cmaps.get(loadedName);
-  if (!existing) {
-    existing = unicodeMap(data);
-    cmaps.set(loadedName, existing);
-  }
-  if (existing.size === 0) return Promise.resolve(null);
+  const existing = coverageOf(loadedName, data);
+  if (use) rememberDrawn(loadedName, use);
+  if (!data || !existing || existing.size === 0 || !use || use.size === 0 || typeof document === "undefined") return Promise.resolve(null);
   // Only characters whose Unicode entry points at a different glyph than the page used need fixing,
   // so pages that agree with the font share one registered face.
   const chosen = new Map<number, number>();
@@ -113,6 +112,47 @@ export function familyBytes(family: string): Uint8Array | null {
 // Every Unicode code point an OpenType font maps to a glyph, with the glyph's index.
 export function fontUnicodeMap(bytes: Uint8Array): Map<number, number> {
   return unicodeMap(bytes);
+}
+
+// The Unicode cmap of a font pdf.js converted, read once per pdf.js font name; null without bytes.
+function coverageOf(loadedName: string, data: Uint8Array | null | undefined): Map<number, number> | null {
+  if (!data || data.length < 12) return null;
+  let map = cmaps.get(loadedName);
+  if (!map) {
+    map = unicodeMap(data);
+    cmaps.set(loadedName, map);
+  }
+  return map;
+}
+
+function rememberDrawn(loadedName: string, use: GlyphUse): void {
+  let codes = drawn.get(loadedName);
+  if (!codes) {
+    codes = new Set();
+    drawn.set(loadedName, codes);
+  }
+  for (const unicode of use.keys()) {
+    const code = unicode.codePointAt(0);
+    if (code != null) codes.add(code);
+  }
+}
+
+// The characters of `text` that the font pdf.js loaded as `loadedName` has no glyph for, each once
+// in order of first appearance: the browser draws them in the face's fallback family instead.
+// Whitespace never counts (a converted font has no space glyph; spaces always come from the
+// fallback), nor does anything the page itself drew with the font. Empty when the font's coverage
+// is unknown (a system font, a Type3 font), so nothing is reported on a guess.
+export function missingGlyphs(loadedName: string, text: string): string[] {
+  const map = cmaps.get(loadedName);
+  if (!map || map.size === 0) return [];
+  const used = drawn.get(loadedName);
+  const missing: string[] = [];
+  for (const char of text) {
+    const code = char.codePointAt(0);
+    if (code == null || /\s/u.test(char) || map.has(code) || used?.has(code) || missing.includes(char)) continue;
+    missing.push(char);
+  }
+  return missing;
 }
 
 function unicodeMap(bytes: Uint8Array): Map<number, number> {
