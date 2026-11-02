@@ -168,6 +168,10 @@ type ItemSpacing = {
   text: string;
   // Two-byte space codes inside the item, whose word spacing pdf.js wrongly added to its width.
   phantomInside: number;
+  // Space glyphs the stream drew between the item's letters, and their summed advance in text
+  // space at the selected size.
+  spaces: number;
+  spaceAdvance: number;
 };
 
 type TextFace = Pick<
@@ -398,6 +402,7 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
   let font = "";
   let phantom = 0;
   let fill = "#111111";
+  let fillAlpha = 1;
   let renderMode = 0;
   const show = (glyphs: unknown, op: number) => {
     if (!Array.isArray(glyphs)) return;
@@ -420,7 +425,9 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
           width: number(width, 0),
           op,
           phantom,
-          color: fill,
+          // Text painted with a constant alpha reads as a lighter colour: a web page's grey
+          // byline is often black at half opacity.
+          color: inkOver(fill, fillAlpha),
           bold: renderMode === 2 || renderMode === 6,
         });
       }
@@ -432,22 +439,36 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
   // The text state is part of the graphics state: q saves it and Q brings it back, so a Tc set
   // inside one text object does not leak into the next.
-  const saved: { charSpacing: number; wordSpacing: number; fontSize: number; font: string; fill: string; renderMode: number }[] = [];
+  const saved: {
+    charSpacing: number;
+    wordSpacing: number;
+    fontSize: number;
+    font: string;
+    fill: string;
+    fillAlpha: number;
+    renderMode: number;
+  }[] = [];
   const fillOps = new Set([OPS.setFillRGBColor, OPS.setFillGray, OPS.setFillCMYKColor, OPS.setFillColor, OPS.setFillColorN]);
   for (let index = 0; index < fnArray.length; index += 1) {
     const fn = fnArray[index];
     const args = argsArray[index];
     if (fn === OPS.save) {
-      saved.push({ charSpacing, wordSpacing, fontSize, font, fill, renderMode });
+      saved.push({ charSpacing, wordSpacing, fontSize, font, fill, fillAlpha, renderMode });
       continue;
     }
     if (fn === OPS.restore) {
       const state = saved.pop();
-      if (state) ({ charSpacing, wordSpacing, fontSize, font, fill, renderMode } = state);
+      if (state) ({ charSpacing, wordSpacing, fontSize, font, fill, fillAlpha, renderMode } = state);
       continue;
     }
     if (fn != null && fillOps.has(fn)) {
       fill = paintColor(args) ?? fill;
+      continue;
+    }
+    if (fn === OPS.setGState && Array.isArray(args) && Array.isArray(args[0])) {
+      for (const entry of args[0] as unknown[]) {
+        if (Array.isArray(entry) && entry[0] === "ca" && typeof entry[1] === "number") fillAlpha = entry[1];
+      }
       continue;
     }
     if (fn === OPS.setTextRenderingMode) {
@@ -499,6 +520,8 @@ function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, 
     let last: GlyphState | null = null;
     let letters = 0;
     let advance = 0;
+    let spaces = 0;
+    let spaceAdvance = 0;
     let spelled = "";
     while (position < text.length && cursor < stream.length) {
       const char = text[position] ?? "";
@@ -508,6 +531,11 @@ function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, 
       }
       let skipped = false;
       while (cursor < stream.length && !(stream[cursor]?.text ?? "").trim()) {
+        const space = stream[cursor];
+        if (first && space) {
+          spaces += 1;
+          spaceAdvance += space.width * (faces.get(space.font)?.unitScale ?? 0.001) * space.fontSize;
+        }
         cursor += 1;
         skipped = true;
       }
@@ -540,7 +568,7 @@ function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, 
     }
     if (first) {
       const phantomInside = last && last.op === first.op ? Math.max(0, last.phantom - first.phantom) : 0;
-      states.set(index, { state: first, letters, advance, text: spelled, phantomInside });
+      states.set(index, { state: first, letters, advance, text: spelled, phantomInside, spaces, spaceAdvance });
     }
   });
   return states;
@@ -861,9 +889,21 @@ function runSpacing(
     }
     return { text, letterSpacing: Math.round(letterSpacing * 1000) / 1000, wordSpacing: 0 };
   }
+  const chars = [...text].length;
   if (matched && letterCount > 1 && matched.letters === letterCount && textScale > 0) {
     const natural = measureWidth(letters, measure);
-    if (natural > 0) {
+    // What the stream's glyph advances say the item should measure. When that disagrees with
+    // the width the page drew (a font whose declared widths are not its own advances: an
+    // instance of a variable face, say, that the page set 5% tighter than the face's metrics),
+    // the glyph advances say nothing about the letters, and the page's text is simply narrower
+    // all over. The face is then tightened in proportion, letters and spaces alike, instead of
+    // the whole difference landing on the spaces and gluing the words together.
+    const declared = (matched.advance + matched.spaceAdvance) * textScale + letterSpacing * (chars - 1);
+    const proportional = matched.spaces === spaceCount && Math.abs(declared - width) > width * 0.02;
+    if (natural > 0 && proportional) {
+      const whole = measureWidth(text, { ...measure, letterSpacing, wordSpacing: 0 }) - letterSpacing;
+      if (whole > 0 && chars > 1) letterSpacing += ((width - whole) * (natural / whole)) / (chars - 1);
+    } else if (natural > 0) {
       const mismatch = (matched.advance * textScale - natural) / letterCount;
       letterSpacing += Math.max(-fontSize * 0.04, Math.min(fontSize * 0.05, mismatch));
     }
@@ -901,6 +941,22 @@ function spaceFit(
     gap: Math.abs(gap) < 0.005 ? 0 : Math.round(gap * 1000) / 1000,
     spread: Math.abs(spread) < 0.0005 ? 0 : Math.round(spread * 1000) / 1000,
   };
+}
+
+// The colour `hex` ink shows when painted over white paper at `alpha`.
+function inkOver(hex: string, alpha: number): string {
+  if (!(alpha < 0.995)) return hex;
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!match?.[1]) return hex;
+  const mix = Math.max(0, Math.min(1, alpha));
+  return `#${[0, 2, 4]
+    .map((offset) => {
+      const channel = Number.parseInt(match[1]!.slice(offset, offset + 2), 16);
+      return Math.round(channel * mix + 255 * (1 - mix))
+        .toString(16)
+        .padStart(2, "0");
+    })
+    .join("")}`;
 }
 
 // Whether two ink colours read as the same colour: the same to the eye, if not to the byte.
