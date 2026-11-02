@@ -329,6 +329,71 @@ button {
   font-size: var(--fs-sm);
 }
 
+/* ---- Error page for a route that threw ----------------------------------- */
+
+.app-error {
+  min-height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-8) var(--gutter);
+  text-align: center;
+  color: var(--ink-1);
+}
+
+.app-error h1 {
+  margin: var(--sp-2) 0 0;
+  font-family: var(--ff-display);
+  font-size: var(--fs-2xl);
+  font-weight: 400;
+  line-height: var(--lh-tight);
+  color: var(--ink-0);
+}
+
+.app-error p {
+  margin: 0;
+  max-width: 44ch;
+  line-height: var(--lh-relaxed);
+}
+
+.app-error a {
+  color: var(--accent-ink);
+}
+
+.app-error pre {
+  max-width: min(60ch, 100%);
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--round-md);
+  background: var(--paper-2);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+}
+
+.app-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--sp-3);
+}
+
+.app-error-actions button {
+  min-height: 2.75rem;
+  padding: 0 var(--sp-5);
+  border: 0;
+  border-radius: var(--round-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
 @theme inline {
   --font-sans: var(--ff-sans);
   --font-heading: var(--ff-display);

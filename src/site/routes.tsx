@@ -11,6 +11,7 @@ import { Privacy } from "./Privacy.tsx";
 import { Terms } from "./Terms.tsx";
 import { Faq } from "./Faq.tsx";
 import { NotFound } from "./NotFound.tsx";
+import { RouteError } from "./RouteError.tsx";
 
 // The marketing site: one layout with a page per child. root.tsx adds the editor routes next to it
 // in the browser; entry-server.tsx renders this tree alone at build time, so the PDF libraries never
@@ -19,6 +20,7 @@ export const siteRoutes: RouteObject[] = [
   {
     path: "/",
     Component: SiteLayout,
+    errorElement: <RouteError />,
     children: [
       { index: true, Component: Landing },
       { path: "blog", Component: Blog },

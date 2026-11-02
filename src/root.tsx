@@ -2,21 +2,12 @@ import { lazy, Suspense } from "react";
 import { createBrowserRouter, RouterProvider, useParams } from "react-router";
 import { BASE_PATH } from "./data/product.ts";
 import { attachRouter } from "./router.ts";
-import { LogoMark } from "./site/Logo.tsx";
+import { Loading, RouteError } from "./site/RouteError.tsx";
 import { siteRoutes } from "./site/routes.tsx";
 
 // The editor and its PDF libraries load only when a document route is opened.
 const Editor = lazy(() => import("./App.tsx").then((module) => ({ default: module.Editor })));
 const AppHome = lazy(() => import("./AppHome.tsx").then((module) => ({ default: module.AppHome })));
-
-function Loading() {
-  return (
-    <div className="app-loading" role="status" aria-live="polite">
-      <LogoMark size={36} />
-      <span>Opening…</span>
-    </div>
-  );
-}
 
 function EditorRoute() {
   const { id = "" } = useParams();
@@ -34,6 +25,7 @@ const router = createBrowserRouter([
   ...siteRoutes,
   {
     path: "/app",
+    errorElement: <RouteError />,
     element: (
       <div className="page-transition app-route">
         <Suspense fallback={<Loading />}>
@@ -42,7 +34,7 @@ const router = createBrowserRouter([
       </div>
     ),
   },
-  { path: "/edit/:id", Component: EditorRoute },
+  { path: "/edit/:id", Component: EditorRoute, errorElement: <RouteError /> },
 ], { basename: BASE_PATH });
 
 attachRouter(router);
