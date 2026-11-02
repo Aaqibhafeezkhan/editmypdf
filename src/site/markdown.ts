@@ -38,6 +38,20 @@ export const marked = new Marked({
   },
 });
 
+export type Heading = { id: string; text: string; depth: 2 | 3 };
+
+// The second- and third-level headings of a post, with the ids the renderer above gives them, for
+// a table of contents built before the Markdown reaches the DOM (so it prerenders too).
+export function headingsOf(markdown: string): Heading[] {
+  return marked
+    .lexer(markdown)
+    .filter((token): token is Tokens.Heading => token.type === "heading" && (token.depth === 2 || token.depth === 3))
+    .map((token) => {
+      const html = marked.parseInline(token.text, { async: false }) as string;
+      return { id: slugify(html), text: html.replace(/<[^>]+>/g, ""), depth: token.depth as 2 | 3 };
+    });
+}
+
 export function wordCount(markdown: string): number {
   return markdown
     .replace(/<[^>]+>/g, " ")

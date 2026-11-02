@@ -1516,38 +1516,6 @@
 
 /* ---- Blog covers and call to action -------------------------------------- */
 
-.post-card-cover {
-  padding: 0;
-  overflow: hidden;
-}
-
-.post-card-cover > *:not(.post-cover) {
-  margin-inline: var(--sp-5);
-}
-
-.post-cover {
-  display: grid;
-  place-items: center;
-  height: 120px;
-  border-bottom: 1px solid var(--rule);
-  background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 24%, var(--paper-1)), var(--paper-2));
-}
-
-.post-cover span {
-  font-family: var(--ff-display);
-  font-size: 3rem;
-  line-height: 1;
-  color: var(--accent-ink);
-}
-
-.post-card-cover .card-meta {
-  margin-top: var(--sp-4);
-}
-
-.post-card-cover .link-arrow {
-  margin-bottom: var(--sp-5);
-}
-
 .cta {
   position: relative;
   overflow: hidden;

@@ -40,14 +40,14 @@ import {
 } from "lucide-react";
 import { COMPETITORS } from "../data/competitors.ts";
 import { FAQ } from "../data/faq.ts";
-import { formatDate, POSTS } from "../data/posts.ts";
+import { POSTS } from "../data/posts.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
 import { EditorWindow } from "./EditorWindow.tsx";
 import { faqJsonLd } from "./Faq.tsx";
 import { Markdown } from "./Markdown.tsx";
-import { readingTime } from "./markdown.ts";
 import { GlanceTable } from "./GlanceTable.tsx";
+import { PostCard } from "./PostCard.tsx";
 import { useMeta } from "./useMeta.ts";
 import { AnnotateVisual, BeforeAfter, ExportVisual, FidelityDemo, PrivacyDiagram, SpansVisual } from "./Visuals.tsx";
 import "./landing.css";
@@ -75,7 +75,6 @@ const COMPARE_POINTS = [
   { icon: BadgeCheck, title: "Free, with no limits", body: "No task counter, watermark or file size cap, because there are no tiers." },
   { icon: Scale, title: "Honest about the rest", body: "Where another tool is the better choice, its page says so." },
 ];
-const COVERS = ["Tj", "¶", "ƒ", "Aa", "{ }", "Tc"];
 
 const USE_CASES = [
   {
@@ -561,22 +560,9 @@ export function Landing() {
           </p>
           <h2 className="h2">Engineering notes, not announcements.</h2>
         </div>
-        <div className="card-grid" data-reveal>
-          {posts.map((post, index) => (
-            <Link key={post.slug} to={ROUTES.post(post.slug)} className="card post-card-cover">
-              <span className="post-cover" aria-hidden="true">
-                <span>{COVERS[index % COVERS.length]}</span>
-              </span>
-              <div className="card-meta">
-                <time dateTime={post.date}>{formatDate(post.date)}</time>
-                <span>{readingTime(post.body)} min read</span>
-              </div>
-              <h3>{post.title}</h3>
-              <p>{post.description}</p>
-              <span className="link-arrow">
-                Read <ArrowRight aria-hidden="true" />
-              </span>
-            </Link>
+        <div className="post-grid" data-reveal>
+          {posts.map((post) => (
+            <PostCard key={post.slug} post={post} />
           ))}
         </div>
         <p className="actions centered">
