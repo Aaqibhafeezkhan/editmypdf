@@ -583,6 +583,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
           return { x: pdfX ?? x, y: pdfY ?? y };
         },
         pageRotation,
+        current.pages,
       );
       const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
@@ -608,7 +609,8 @@ export function Editor({ sessionId }: { sessionId: string }) {
       const typing =
         target instanceof HTMLTextAreaElement ||
         target instanceof HTMLInputElement ||
-        target instanceof HTMLSelectElement;
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
       const meta = event.metaKey || event.ctrlKey;
       if (meta && event.key.toLowerCase() === "z") {
         event.preventDefault();
@@ -1000,7 +1002,6 @@ export function Editor({ sessionId }: { sessionId: string }) {
                   key={`${sessionId}-${index}`}
                   page={page}
                   pageIndex={index}
-                  pdfBytes={loaded.bytes}
                   scale={scale}
                   baseWidth={loaded.viewports[index]?.width ?? 612}
                   baseHeight={loaded.viewports[index]?.height ?? 792}

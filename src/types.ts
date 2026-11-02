@@ -2,6 +2,8 @@ export type FontId = "helvetica" | "times" | "courier";
 
 export type Align = "left" | "center" | "right";
 
+export type TextAlign = Align | "justify";
+
 export type Tool = "select" | "pencil" | "shape" | "emoji" | "signature" | "text" | "eraser";
 
 export type Point = { x: number; y: number };
@@ -165,11 +167,19 @@ export type SignatureAnnotation = Base & {
   rotation: number;
 };
 
-export type PatchGlyph = {
-  char: string;
-  src: string;
-  advance: number;
-  w: number;
+// One run of a text patch set in its own face. A patch's spans, in order, concatenate to its text.
+export type TextSpan = {
+  text: string;
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
+  fontSize: number;
+  color: string;
+  // pdf.js name of the font the run was set in; identifies the face when the page is read again.
+  pdfFont: string;
+  // The run's own extra advance after every character, in page units, when it differs from the
+  // patch's (a tracked word inside a line); absent means the patch's applies.
+  letterSpacing?: number;
 };
 
 export type PatchTail = {
@@ -196,16 +206,43 @@ export type PatchAnnotation = Base & {
   h: number;
   rotation: number;
   text: string;
-  fontName: string;
-  fallback: string;
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
   fontSize: number;
   color: string;
+  // pdf.js name of the font a single-face patch is set in (a mixed-face patch names them per
+  // span); it finds the face's bytes when the edit is written back as text. Empty for graphics
+  // and for patches saved before it existed.
+  pdfFont: string;
   ascent: number;
-  tracking: number;
   lineHeight: number;
+  align: TextAlign;
+  indent: number;
+  // Extra advance after every character, in page units, as the PDF set the run (character
+  // spacing, or glyph advances wider than the converted font's own).
+  letterSpacing: number;
+  // Extra advance after every space, in page units (the PDF's word spacing).
+  wordSpacing: number;
+  // Offsets of newlines in `text` that only exist because the page's column ran out of room. They
+  // keep the page's own line breaks until the text is edited, when they become spaces and the text
+  // flows again. Empty once edited.
+  softBreaks: number[];
+  // Extra advance after every space on each of the page's own lines, in page units, for as long
+  // as that line is untouched: a generator may stretch a line only part of the way to the column.
+  lineGaps: number[];
+  // How far each of the page's own lines sits below where an even line pitch would put it, in
+  // page units, for as long as that line is untouched: pages rarely space their lines evenly to
+  // the point.
+  lineOffsets: number[];
+  // How far in from the block's left edge each of the page's own lines starts, in page units, for
+  // as long as that line is untouched: a list or a table of contents indents its lines unevenly.
+  lineIndents: number[];
+  wrap: boolean;
+  // Styled runs when the text mixes faces (a bold or italic word inside a paragraph); empty for a
+  // single-face patch, whose face is the fields above.
+  spans: TextSpan[];
   image: string;
-  glyphs: PatchGlyph[];
-  spaceAdvance: number;
   underlineOffset: number;
   underlineColor: string;
   backdrop: string;

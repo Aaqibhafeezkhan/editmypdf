@@ -10,6 +10,7 @@ import type {
   LineAnnotation,
   ShapeAnnotation,
   TextAnnotation,
+  TextSpan,
 } from "./types.ts";
 
 const INDEX_KEY = "pdf-editor:sessions";
@@ -122,19 +123,29 @@ function decode(value: string): Uint8Array {
   return bytes;
 }
 
-function glyphList(value: unknown): PatchAnnotation["glyphs"] {
-  if (!Array.isArray(value)) return [];
-  const glyphs: PatchAnnotation["glyphs"] = [];
+// Styled runs of an older or hand-edited patch; dropped when they do not add up to its text.
+function spanList(value: unknown, text: string): TextSpan[] {
+  if (!Array.isArray(value) || value.length === 0) return [];
+  const spans: TextSpan[] = [];
   for (const item of value) {
     if (!item || typeof item !== "object") continue;
-    const glyph = item as PatchAnnotation["glyphs"][number];
-    if (typeof glyph.char !== "string" || glyph.char.length === 0 || glyph.char.length > 8) continue;
-    if (typeof glyph.src !== "string" || !glyph.src.startsWith("data:image/png") || glyph.src.length > 250_000) continue;
-    const advance = typeof glyph.advance === "number" && Number.isFinite(glyph.advance) ? glyph.advance : 0;
-    const w = typeof glyph.w === "number" && Number.isFinite(glyph.w) ? glyph.w : advance;
-    glyphs.push({ char: glyph.char, src: glyph.src, advance, w });
+    const span = item as TextSpan;
+    if (typeof span.text !== "string") continue;
+    const number = (field: unknown, fallback: number) => (typeof field === "number" && Number.isFinite(field) ? field : fallback);
+    spans.push({
+      text: span.text,
+      fontFamily: typeof span.fontFamily === "string" && span.fontFamily ? span.fontFamily : "sans-serif",
+      fontWeight: number(span.fontWeight, 400),
+      fontStyle: span.fontStyle === "italic" ? "italic" : "normal",
+      fontSize: number(span.fontSize, 12),
+      color: typeof span.color === "string" ? span.color : "#111111",
+      pdfFont: typeof span.pdfFont === "string" ? span.pdfFont : "",
+      ...(typeof span.letterSpacing === "number" && Number.isFinite(span.letterSpacing)
+        ? { letterSpacing: span.letterSpacing }
+        : {}),
+    });
   }
-  return glyphs;
+  return spans.map((span) => span.text).join("") === text ? spans : [];
 }
 
 function tailList(value: unknown): PatchAnnotation["tails"] {
@@ -225,13 +236,35 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
         role,
         text,
         originText: typeof patch.originText === "string" ? patch.originText : text,
-        fontName: typeof patch.fontName === "string" ? patch.fontName : "",
-        fallback: typeof patch.fallback === "string" ? patch.fallback : "sans-serif",
+        fontFamily: typeof patch.fontFamily === "string" && patch.fontFamily ? patch.fontFamily : "sans-serif",
+        fontWeight: number(patch.fontWeight, 400),
+        fontStyle: patch.fontStyle === "italic" ? "italic" : "normal",
         fontSize: number(patch.fontSize, 12),
         color: typeof patch.color === "string" ? patch.color : "#111111",
+        pdfFont: typeof patch.pdfFont === "string" ? patch.pdfFont : "",
         ascent: number(patch.ascent, 0.8),
-        tracking: number(patch.tracking, 1),
         lineHeight: number(patch.lineHeight, number(patch.h, 12)),
+        align:
+          patch.align === "center" || patch.align === "right" || patch.align === "justify" ? patch.align : "left",
+        indent: number(patch.indent, 0),
+        letterSpacing: number(patch.letterSpacing, 0),
+        wordSpacing: number(patch.wordSpacing, 0),
+        softBreaks: Array.isArray(patch.softBreaks)
+          ? patch.softBreaks.filter(
+              (offset): offset is number => typeof offset === "number" && Number.isInteger(offset) && text[offset] === "\n",
+            )
+          : [],
+        lineGaps: Array.isArray(patch.lineGaps)
+          ? patch.lineGaps.map((gap) => number(gap, 0))
+          : [],
+        lineOffsets: Array.isArray(patch.lineOffsets)
+          ? patch.lineOffsets.map((offset) => number(offset, 0))
+          : [],
+        lineIndents: Array.isArray(patch.lineIndents)
+          ? patch.lineIndents.map((indent) => number(indent, 0))
+          : [],
+        wrap: patch.wrap === true,
+        spans: role === "text" ? spanList(patch.spans, text) : [],
         image: role === "text" ? "" : image,
         rotation: 0,
         x: number(patch.x, 0),
@@ -242,8 +275,6 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
         originY: number(patch.originY, number(patch.y, 0)),
         originW: number(patch.originW, number(patch.w, 1)),
         originH: number(patch.originH, number(patch.h, 1)),
-        glyphs: glyphList(patch.glyphs),
-        spaceAdvance: number(patch.spaceAdvance, 0),
         underlineOffset: number(patch.underlineOffset, -1),
         underlineColor: typeof patch.underlineColor === "string" ? patch.underlineColor : patch.color,
         backdrop: typeof patch.backdrop === "string" ? patch.backdrop : "#ffffff",

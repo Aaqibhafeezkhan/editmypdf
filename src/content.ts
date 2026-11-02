@@ -1,8 +1,13 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
-import { assignFaces, loadPageFaces } from "./pdfFonts.ts";
-import type { Point } from "./types.ts";
+import { collectGlyphUse, editableFamily, familyBytes, type GlyphUse } from "./fontFix.ts";
+import { measureWidth } from "./textLayout.ts";
+import type { Point, TextAlign, TextSpan } from "./types.ts";
 
 export type ContentKind = "text" | "heading" | "paragraph" | "table" | "line" | "image" | "shape";
+
+// A styled run of a content element, with the page box its glyphs occupy so its colour can be
+// read from the rendered page.
+export type ContentSpan = TextSpan & { box: { x: number; y: number; w: number; h: number } };
 
 export type ContentElement = {
   id: string;
@@ -13,13 +18,38 @@ export type ContentElement = {
   w: number;
   h: number;
   text: string;
-  fontName: string;
+  // CSS font-family list that reproduces the PDF face, usually the font pdf.js registered for the page.
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
   fontSize: number;
   ascent: number;
-  fallback: string;
   color: string;
   baseline: number;
+  // Baseline-to-baseline distance for a paragraph; the box height for a single run.
+  lineHeight: number;
+  align: TextAlign;
+  // First-line indent of a paragraph, in page units; negative for a hanging indent, where every
+  // line but the first starts that far in.
+  indent: number;
+  // Extra advance after every character, in page units, that the PDF gave the text beyond the
+  // face's own glyph widths.
+  letterSpacing: number;
+  // Extra advance after every space, in page units.
+  wordSpacing: number;
+  // Offsets of the newlines in `text` that only break because the column ran out of room.
+  softBreaks: number[];
+  // Extra word spacing of each original line of a paragraph, in page units.
+  lineGaps: number[];
+  // How far below an even line pitch each original line of a paragraph sits, in page units.
+  lineOffsets: number[];
+  // How far in from the block's left edge each original line of a paragraph starts, in page units.
+  lineIndents: number[];
+  // pdf.js name of the font the text was set in; identifies the face across runs.
   pdfFont: string;
+  // Styled runs when the text mixes faces (a bold word inside regular text), concatenating to
+  // `text`; empty when the whole element is set in one face.
+  spans: ContentSpan[];
 };
 
 export function isTextContent(kind: ContentKind): boolean {
@@ -37,9 +67,9 @@ const LABEL: Record<ContentKind, string> = {
 };
 
 const DETAIL: Record<ContentKind, string> = {
-  text: "Click the line and type. Its font and size stay as they are",
-  heading: "Click the heading and type. Its font and size stay as they are",
-  paragraph: "Click the paragraph and type. Its font and size stay as they are",
+  text: "Click the line and type. It keeps its font, size and colour",
+  heading: "Click the heading and type. It keeps its font, size and colour",
+  paragraph: "Click the paragraph and type. Text wraps inside the paragraph and keeps its font, size and colour",
   table: "Drag to move it, or use the handles to resize",
   line: "Drag to move it, or use the handles to resize",
   image: "Drag to move it, or use the handles to resize",
@@ -66,47 +96,138 @@ type TextRun = {
 
 type Box = { x: number; y: number; w: number; h: number };
 
+// How pdf.js draws a font: the CSS face, and the scale that turns its glyph advances into text
+// space (the font matrix's first entry, 1/1000 for nearly every font).
+type Face = { family: string; weight: number; style: "normal" | "italic"; unitScale: number };
+
 type Run = Box & {
   baseline: number;
   size: number;
   text: string;
   angle: number;
-  fontName: string;
   pdfFont: string;
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
   ascent: number;
-  fallback: string;
   color: string;
+  letterSpacing: number;
+  wordSpacing: number;
 };
 
+// A line of text. Its face fields describe the dominant run; `spans` lists every run in order.
 type Line = Box & {
   baseline: number;
   size: number;
   text: string;
   heading: boolean;
-  fontName: string;
   pdfFont: string;
+  fontFamily: string;
+  fontWeight: number;
+  fontStyle: "normal" | "italic";
   ascent: number;
-  fallback: string;
   color: string;
+  letterSpacing: number;
+  wordSpacing: number;
+  spans: ContentSpan[];
 };
 
-type TextFace = {
-  fontName: string;
+// The spacing state of the content stream at one drawn glyph, with the glyph's own advance in
+// the font's units.
+type GlyphState = {
+  text: string;
+  charSpacing: number;
+  wordSpacing: number;
   fontSize: number;
-  ascent: number;
-  fallback: string;
-  color: string;
-  baseline: number;
-  pdfFont: string;
+  font: string;
+  width: number;
+  // Index of the operator that drew the glyph: its place in the page's paint order.
+  op: number;
+  // How many two-byte space codes were drawn before this glyph since the text position was last
+  // set. pdf.js adds the word spacing to those when it reads text positions but not when it draws
+  // them, so the positions it reports drift right by that many word spacings.
+  phantom: number;
+};
+
+// Something opaque the page painted (an image, a filled shape) and when.
+type Cover = Box & { order: number };
+
+// What the content stream says about one text item: the state its first glyph was drawn in, how
+// many of its letters were matched to glyphs, those glyphs' summed advance in text space at the
+// selected font size, and the item's text as the stream spells it (letters, with a space only
+// where the stream drew one).
+type ItemSpacing = {
+  state: GlyphState;
+  letters: number;
+  advance: number;
+  text: string;
+  // Two-byte space codes inside the item, whose word spacing pdf.js wrongly added to its width.
+  phantomInside: number;
+};
+
+type TextFace = Pick<
+  ContentElement,
+  | "fontFamily"
+  | "fontWeight"
+  | "fontStyle"
+  | "fontSize"
+  | "ascent"
+  | "color"
+  | "baseline"
+  | "lineHeight"
+  | "align"
+  | "indent"
+  | "letterSpacing"
+  | "wordSpacing"
+  | "pdfFont"
+>;
+
+// The subset of pdf.js's font object that decides how the text is drawn on the canvas.
+type PdfFontObject = {
+  loadedName?: string;
+  fallbackName?: string;
+  bold?: boolean;
+  italic?: boolean;
+  black?: boolean;
+  isType3Font?: boolean;
+  systemFontInfo?: { css?: string } | null;
+  data?: Uint8Array | null;
+  fontMatrix?: number[] | null;
+};
+
+type ObjectStore = {
+  has(id: string): boolean;
+  get(id: string, callback?: (value: unknown) => void): unknown;
 };
 
 const IDENTITY = [1, 0, 0, 1, 0, 0];
 
-export async function readPageContent(
-  page: PDFPageProxy,
-  pageIndex: number,
-  pdfBytes?: Uint8Array,
-): Promise<ContentElement[]> {
+const contentCache = new WeakMap<PDFPageProxy, Promise<ContentElement[]>>();
+
+// The bytes of a font a page draws with, as pdf.js converted them: the copy with the corrected
+// cmap when the editor registered one, and the converted font itself. Both null for a font pdf.js
+// drew without bytes (a system font).
+export type PageFont = { data: Uint8Array | null; fixed: Uint8Array | null; type3: boolean };
+
+const fontCache = new WeakMap<PDFPageProxy, Map<string, PageFont>>();
+
+// The fonts of a page that readPageContent has read, by pdf.js font name.
+export function pageFonts(page: PDFPageProxy): Map<string, PageFont> | undefined {
+  return fontCache.get(page);
+}
+
+export function readPageContent(page: PDFPageProxy, pageIndex: number): Promise<ContentElement[]> {
+  const cached = contentCache.get(page);
+  if (cached) return cached;
+  const pending = extractPageContent(page, pageIndex).catch((error: unknown) => {
+    contentCache.delete(page);
+    throw error;
+  });
+  contentCache.set(page, pending);
+  return pending;
+}
+
+async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promise<ContentElement[]> {
   const viewport = page.getViewport({ scale: 1 });
   const [textResult, graphics] = await Promise.all([
     page.getTextContent(),
@@ -115,26 +236,48 @@ export async function readPageContent(
       .then((list) => ({
         ...readGraphics(list.fnArray, list.argsArray, viewport),
         colors: textColors(list.fnArray, list.argsArray),
+        glyphUse: collectGlyphUse(list.fnArray, list.argsArray),
+        glyphs: glyphStream(list.fnArray, list.argsArray),
       }))
-      .catch(() => ({ rules: [] as Box[], shapes: [] as Box[], images: [] as Box[], colors: [] as string[] })),
+      .catch(() => ({
+        rules: [] as Box[],
+        shapes: [] as Box[],
+        images: [] as Box[],
+        covers: [] as Cover[],
+        colors: [] as string[],
+        glyphUse: new Map<string, GlyphUse>(),
+        glyphs: [] as GlyphState[],
+      })),
   ]);
+  const styles = textResult.styles as Record<string, PdfFontStyle>;
+  const faces = await resolveFaces(page, textResult.items, styles, graphics.glyphUse);
+  await loadFaces(faces);
   const runs = textRuns(
     textResult.items,
-    textResult.styles as Record<string, PdfFontStyle>,
+    styles,
     viewport,
     graphics.colors,
+    faces,
+    itemSpacing(textResult.items, graphics.glyphs, faces),
+    graphics.covers,
   );
-  if (pdfBytes && runs.length > 0) {
-    const faces = await loadPageFaces(pdfBytes, pageIndex);
-    await assignFaces(runs, faces);
-  }
   const lines = groupLines(runs);
   const tables = findTables(graphics.rules, viewport.width, viewport.height);
   const shapes = graphics.shapes.filter((shape) => !tables.some((table) => containsCenter(table, shape)));
   markHeadings(lines);
   const blocks = groupBlocks(lines, graphics.rules);
   const elements: ContentElement[] = [];
-  const push = (kind: ContentKind, box: Box, text: string, face?: TextFace) => {
+  const push = (
+    kind: ContentKind,
+    box: Box,
+    text: string,
+    face?: TextFace,
+    spans: ContentSpan[] = [],
+    softBreaks: number[] = [],
+    lineGaps: number[] = [],
+    lineOffsets: number[] = [],
+    lineIndents: number[] = [],
+  ) => {
     if (box.w < 0.5 || box.h < 0.5) return;
     elements.push({
       id: "",
@@ -145,46 +288,285 @@ export async function readPageContent(
       w: box.w,
       h: box.h,
       text: text.trim(),
-      fontName: face?.fontName ?? "",
+      fontFamily: face?.fontFamily ?? "sans-serif",
+      fontWeight: face?.fontWeight ?? 400,
+      fontStyle: face?.fontStyle ?? "normal",
       fontSize: face?.fontSize ?? 0,
       ascent: face?.ascent ?? 0.8,
-      fallback: face?.fallback ?? "sans-serif",
       color: face?.color ?? "#111111",
       baseline: face?.baseline ?? box.y + box.h * 0.8,
+      lineHeight: face?.lineHeight ?? box.h,
+      align: face?.align ?? "left",
+      indent: face?.indent ?? 0,
+      letterSpacing: face?.letterSpacing ?? 0,
+      wordSpacing: face?.wordSpacing ?? 0,
+      softBreaks,
+      lineGaps,
+      lineOffsets,
+      lineIndents,
       pdfFont: face?.pdfFont ?? "",
+      spans: faceCount(spans) > 1 ? spans : [],
     });
   };
   for (const block of blocks) {
+    const first = block.lines[0];
+    if (!first) continue;
     if (block.lines.length === 1) {
-      const line = block.lines[0];
-      if (line) push(line.heading ? "heading" : "text", line, line.text, faceOf(line));
+      const fit = fitLine(first, first.letterSpacing);
+      push(first.heading ? "heading" : "text", first, first.text, faceOf(first), fit.spans);
       continue;
     }
-    const kind = block.lines.every((line) => line.heading) ? "heading" : "paragraph";
-    const first = block.lines[0];
-    for (const line of block.lines) push(line.heading ? "heading" : "text", line, line.text, faceOf(line));
-    if (first) {
-      push(kind, union(block.lines), block.lines.map((line) => line.text).join("\n"), {
-        ...faceOf(first),
-        fontSize: Math.max(...block.lines.map((line) => line.size)),
-      });
-    }
+    const face = blockFace(block.lines);
+    const box = union(block.lines);
+    const flowed = blockContent(block.lines, face, box);
+    push(
+      "paragraph",
+      box,
+      flowed.text,
+      face,
+      flowed.spans,
+      flowed.softBreaks,
+      flowed.lineGaps,
+      flowed.lineOffsets,
+      flowed.lineIndents,
+    );
   }
   for (const rule of graphics.rules) push("line", rule, "");
   for (const shape of shapes) push("shape", shape, textInside(lines, shape));
   for (const image of graphics.images) push("image", image, "");
   for (const table of tables) push("table", table, textInside(lines, table));
-  elements.forEach((element, index) => {
-    element.id = `${pageIndex}:${index}`;
-  });
+  // Ids come from where an element sits so an edit keeps pointing at the same text when the page
+  // is read again later, even if other elements are grouped differently.
+  const seen = new Map<string, number>();
+  for (const element of elements) {
+    const base = `${pageIndex}:${element.kind}:${Math.round(element.x)}:${Math.round(element.y)}:${Math.round(element.w)}`;
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    element.id = count > 0 ? `${base}#${count}` : base;
+  }
   return elements;
+}
+
+// Resolves each text item's font to the CSS pdf.js itself draws it with: the embedded face it
+// registered on the document, a matched system font, or the generic fallback with bold/italic flags.
+async function resolveFaces(
+  page: PDFPageProxy,
+  items: unknown[],
+  styles: Record<string, PdfFontStyle>,
+  glyphUse: Map<string, GlyphUse>,
+): Promise<Map<string, Face>> {
+  const names = new Set<string>();
+  for (const item of items) if (isTextRun(item) && item.fontName) names.add(item.fontName);
+  const faces = new Map<string, Face>();
+  const fonts = new Map<string, PageFont>();
+  await Promise.all(
+    [...names].map(async (name) => {
+      const font = await fontObject(page, name);
+      const family = font?.isType3Font ? null : await editableFamily(name, font?.data, glyphUse.get(name));
+      faces.set(name, faceFor(name, font, styles[name], family));
+      fonts.set(name, { data: font?.data ?? null, fixed: family ? familyBytes(family) : null, type3: font?.isType3Font === true });
+    }),
+  );
+  fontCache.set(page, fonts);
+  return faces;
+}
+
+// Makes sure the faces are usable before any text is measured against them.
+async function loadFaces(faces: Map<string, Face>): Promise<void> {
+  if (typeof document === "undefined") return;
+  const css = new Set([...faces.values()].map((face) => `${face.style} ${face.weight} 12px ${face.family}`));
+  await Promise.all([...css].map((font) => document.fonts.load(font).catch(() => [])));
+}
+
+// Every glyph the page draws, in order, with the character and word spacing in force when it was
+// drawn and the size the font was selected at.
+function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
+  const out: GlyphState[] = [];
+  let charSpacing = 0;
+  let wordSpacing = 0;
+  let fontSize = 1;
+  let font = "";
+  let phantom = 0;
+  const show = (glyphs: unknown, op: number) => {
+    if (!Array.isArray(glyphs)) return;
+    for (const glyph of glyphs) {
+      if (!glyph || typeof glyph !== "object") continue;
+      const { unicode, isSpace, width, originalCharCode } = glyph as {
+        unicode?: unknown;
+        isSpace?: unknown;
+        width?: unknown;
+        originalCharCode?: unknown;
+      };
+      const text = isSpace ? " " : typeof unicode === "string" ? unicode : "";
+      if (text) out.push({ text, charSpacing, wordSpacing, fontSize, font, width: number(width, 0), op, phantom });
+      // A space drawn as a two-byte code: the renderer gives it no word spacing, the text reader does.
+      if (!isSpace && originalCharCode === 0x20) phantom += 1;
+    }
+  };
+  const number = (value: unknown, fallback: number) =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  // The text state is part of the graphics state: q saves it and Q brings it back, so a Tc set
+  // inside one text object does not leak into the next.
+  const saved: { charSpacing: number; wordSpacing: number; fontSize: number; font: string }[] = [];
+  for (let index = 0; index < fnArray.length; index += 1) {
+    const fn = fnArray[index];
+    const args = argsArray[index];
+    if (fn === OPS.save) {
+      saved.push({ charSpacing, wordSpacing, fontSize, font });
+      continue;
+    }
+    if (fn === OPS.restore) {
+      const state = saved.pop();
+      if (state) ({ charSpacing, wordSpacing, fontSize, font } = state);
+      continue;
+    }
+    // Setting the text position anew discards the drift accumulated along the line.
+    if (
+      fn === OPS.beginText ||
+      fn === OPS.endText ||
+      fn === OPS.setTextMatrix ||
+      fn === OPS.moveText ||
+      fn === OPS.setLeadingMoveText ||
+      fn === OPS.nextLine ||
+      fn === OPS.nextLineShowText ||
+      fn === OPS.nextLineSetSpacingShowText
+    ) {
+      phantom = 0;
+    }
+    if (!Array.isArray(args)) continue;
+    if (fn === OPS.setCharSpacing) charSpacing = number(args[0], 0);
+    else if (fn === OPS.setWordSpacing) wordSpacing = number(args[0], 0);
+    else if (fn === OPS.setFont) {
+      font = typeof args[0] === "string" ? args[0] : font;
+      fontSize = Math.abs(number(args[1], 1)) || 1;
+    } else if (fn === OPS.showText || fn === OPS.nextLineShowText) show(args[0], index);
+    else if (fn === OPS.nextLineSetSpacingShowText) {
+      wordSpacing = number(args[0], wordSpacing);
+      charSpacing = number(args[1], charSpacing);
+      show(args[2], index);
+    }
+  }
+  return out;
+}
+
+// Pairs each text item with the content stream's glyphs, by walking the glyph stream alongside
+// the items' text. Spaces are skipped on both sides, since pdf.js adds and drops them freely, and
+// a short look-ahead resyncs the two when a character has no glyph. Each item gets the state its
+// first glyph was drawn in and the summed advance of the glyphs matched to its letters.
+function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, Face>): Map<number, ItemSpacing> {
+  const states = new Map<number, ItemSpacing>();
+  if (stream.length === 0) return states;
+  let cursor = 0;
+  items.forEach((item, index) => {
+    if (!isTextRun(item)) return;
+    const text = item.str;
+    let position = 0;
+    let first: GlyphState | null = null;
+    let last: GlyphState | null = null;
+    let letters = 0;
+    let advance = 0;
+    let spelled = "";
+    while (position < text.length && cursor < stream.length) {
+      const char = text[position] ?? "";
+      if (!char.trim()) {
+        position += 1;
+        continue;
+      }
+      let skipped = false;
+      while (cursor < stream.length && !(stream[cursor]?.text ?? "").trim()) {
+        cursor += 1;
+        skipped = true;
+      }
+      const glyph = stream[cursor];
+      if (!glyph) break;
+      if (text.startsWith(glyph.text, position)) {
+        if (first && skipped) spelled += " ";
+        first ??= glyph;
+        last = glyph;
+        letters += glyph.text.length;
+        advance += glyph.width * (faces.get(glyph.font)?.unitScale ?? 0.001) * glyph.fontSize;
+        spelled += glyph.text;
+        position += glyph.text.length;
+        cursor += 1;
+        continue;
+      }
+      let found = -1;
+      for (let ahead = 1; ahead <= 8 && cursor + ahead < stream.length; ahead += 1) {
+        const candidate = stream[cursor + ahead];
+        if (candidate && candidate.text.trim() && text.startsWith(candidate.text, position)) {
+          found = cursor + ahead;
+          break;
+        }
+      }
+      if (found >= 0) {
+        cursor = found;
+        continue;
+      }
+      position += 1;
+    }
+    if (first) {
+      const phantomInside = last && last.op === first.op ? Math.max(0, last.phantom - first.phantom) : 0;
+      states.set(index, { state: first, letters, advance, text: spelled, phantomInside });
+    }
+  });
+  return states;
+}
+
+function fontObject(page: PDFPageProxy, name: string): Promise<PdfFontObject | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (font: PdfFontObject | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(font);
+    };
+    const timer = window.setTimeout(() => finish(null), 4000);
+    try {
+      const store = (page as unknown as { commonObjs?: ObjectStore }).commonObjs;
+      if (!store) {
+        finish(null);
+        return;
+      }
+      if (store.has(name)) {
+        finish((store.get(name) as PdfFontObject | null) ?? null);
+        return;
+      }
+      store.get(name, (font) => finish((font as PdfFontObject | null) ?? null));
+    } catch {
+      finish(null);
+    }
+  });
+}
+
+function faceFor(name: string, font: PdfFontObject | null, style: PdfFontStyle | undefined, fixed: string | null): Face {
+  const fallback = font?.fallbackName || style?.fontFamily || "sans-serif";
+  const weight = font?.black ? 900 : font?.bold ? 700 : 400;
+  const slant: Face["style"] = font?.italic ? "italic" : "normal";
+  const matrix = font?.fontMatrix?.[0];
+  const unitScale = typeof matrix === "number" && Number.isFinite(matrix) && matrix !== 0 ? Math.abs(matrix) : 0.001;
+  if (font?.systemFontInfo?.css) return { family: font.systemFontInfo.css, weight, style: slant, unitScale };
+  const loaded = font?.loadedName || name;
+  if (fixed) return { family: `"${fixed}", "${loaded}", ${fallback}`, weight, style: slant, unitScale };
+  if (!font?.isType3Font && fontRegistered(loaded)) {
+    return { family: `"${loaded}", ${fallback}`, weight, style: slant, unitScale };
+  }
+  return { family: fallback, weight, style: slant, unitScale };
+}
+
+function fontRegistered(family: string): boolean {
+  if (typeof document === "undefined") return false;
+  let found = false;
+  document.fonts.forEach((face) => {
+    if (face.family.replace(/^["']|["']$/g, "") === family) found = true;
+  });
+  return found;
 }
 
 export function contentAt(elements: ContentElement[], point: Point): ContentElement | null {
   const hits = elements.filter((element) => contains(element, point, 0));
-  const runs = hits.filter((element) => element.kind === "text" || element.kind === "heading");
-  const pool = runs.length > 0 ? runs : hits.filter((element) => element.kind !== "paragraph");
-  const ranked = pool.length > 0 ? pool : hits;
+  const texts = hits.filter((element) => isTextContent(element.kind));
+  const ranked = texts.length > 0 ? texts : hits;
   let best: ContentElement | null = null;
   let bestArea = Infinity;
   for (const element of ranked) {
@@ -211,38 +593,142 @@ function textRuns(
   styles: Record<string, PdfFontStyle>,
   viewport: PageViewport,
   colors: string[],
+  faces: Map<string, Face>,
+  spacing: Map<number, ItemSpacing>,
+  covers: Cover[] = [],
 ): Run[] {
   const runs: Run[] = [];
   let colorIndex = 0;
-  for (const item of items) {
-    if (!isTextRun(item) || !item.str.trim()) continue;
+  items.forEach((item, index) => {
+    if (!isTextRun(item) || !item.str.trim()) return;
     const color = colors[colorIndex] ?? "#111111";
     colorIndex += 1;
     const tx = Util.transform(viewport.transform, item.transform);
     const fontSize = Math.hypot(tx[2], tx[3]) || item.height || 12;
-    if (fontSize < 2 || item.width < 0.5) continue;
+    if (fontSize < 2 || item.width < 0.5) return;
     const style = styles[item.fontName];
     const ascent = ascentRatio(style);
     const angle = Math.atan2(tx[1], tx[0]) + (style?.vertical ? Math.PI / 2 : 0);
     const top = tx[5] - fontSize * ascent;
+    const matched = spacing.get(index);
+    // Word spacing pdf.js added to two-byte space codes when it read the positions, which the
+    // page never drew: the item sits that much further left, and is that much narrower.
+    const phantomSpacing = matched ? matched.state.wordSpacing * (fontSize / matched.state.fontSize) : 0;
+    const drift = Math.abs(angle) < 0.08 && Number.isFinite(phantomSpacing) ? phantomSpacing : 0;
+    const x = tx[4] - drift * (matched?.state.phantom ?? 0);
+    const width = Math.max(0.5, item.width - drift * (matched?.phantomInside ?? 0));
     const box =
       Math.abs(angle) < 0.08
-        ? { x: tx[4], y: top, w: item.width, h: fontSize }
+        ? { x, y: top, w: width, h: fontSize }
         : rotatedBox(tx[4], tx[5], item.width, fontSize, ascent, angle);
+    const face: Face = faces.get(item.fontName) ?? {
+      family: style?.fontFamily || "sans-serif",
+      weight: 400,
+      style: "normal",
+      unitScale: 0.001,
+    };
+    // Text the page later painted over (an edit flattened to an image by an earlier export, a
+    // filled box) is not on the page as the reader sees it, so it is not offered for editing.
+    if (matched && hidden(box, matched.state.op, covers)) return;
+    const { text, letterSpacing, wordSpacing } = runSpacing(item, width, fontSize, face, matched);
     runs.push({
       ...box,
       baseline: tx[5],
       size: fontSize,
-      text: item.str,
+      text,
       angle,
-      fontName: item.fontName,
       pdfFont: item.fontName,
+      fontFamily: face.family,
+      fontWeight: face.weight,
+      fontStyle: face.style,
       ascent,
-      fallback: style?.fontFamily || "sans-serif",
       color,
+      letterSpacing,
+      wordSpacing,
     });
-  }
+  });
   return runs;
+}
+
+// An item's text and the letter and word spacing that make the face set it as wide as the page
+// drew it. Letter spacing is the stream's Tc plus any difference between the page's glyph advances
+// and the face's own (a substituted font, or a converted one whose advances pdf.js adjusted),
+// spread over the letters. Word spacing then takes whatever is left: the page's own space advance,
+// with its Tw, against the face's, which for a converted font is the fallback family's space
+// because the converted font has no space glyph at all. Words the page positioned one by one carry
+// no spaces and get none; the gaps between them are measured when they are joined into a line.
+function runSpacing(
+  item: TextRun,
+  width: number,
+  fontSize: number,
+  face: Face,
+  matched: ItemSpacing | undefined,
+): { text: string; letterSpacing: number; wordSpacing: number } {
+  // Spacing operators are in text space; the item's size against the selected size scales them.
+  const state = matched?.state;
+  const textScale = state ? fontSize / state.fontSize : 0;
+  let letterSpacing = clampSpacing(state ? state.charSpacing * textScale : 0, fontSize, 0.5);
+  const measure = { fontFamily: face.family, fontWeight: face.weight, fontStyle: face.style, fontSize };
+  let text = item.str;
+  let letterCount = [...text.replace(/\s+/g, "")].length;
+  let spaceCount = [...text].length - letterCount;
+  // Tracked text (a wide Tc) reaches pdf.js as a space after nearly every letter. The stream knows
+  // which spaces the page really drew, and the tracking is letter spacing.
+  if (matched && letterCount >= 3 && spaceCount >= letterCount - 2 && letterSpacing > fontSize * 0.04) {
+    text = matched.text;
+    letterCount = [...text.replace(/\s+/g, "")].length;
+    spaceCount = [...text].length - letterCount;
+  }
+  const letters = text.replace(/\s+/g, "");
+  if (spaceCount === 0) {
+    // Without spaces the page's own width says everything: its Tc, glyph advances that differ
+    // from the face's, and any kerning shifts, spread over the gaps between the letters.
+    const natural = measureWidth(letters, measure);
+    if (letterCount > 1 && natural > 0) {
+      const spread = (width - natural) / (letterCount - 1);
+      letterSpacing = Math.max(-fontSize * 0.08, Math.min(fontSize * 0.5, spread));
+    }
+    return { text, letterSpacing: Math.round(letterSpacing * 1000) / 1000, wordSpacing: 0 };
+  }
+  if (matched && letterCount > 1 && matched.letters === letterCount && textScale > 0) {
+    const natural = measureWidth(letters, measure);
+    if (natural > 0) {
+      const mismatch = (matched.advance * textScale - natural) / letterCount;
+      letterSpacing += Math.max(-fontSize * 0.04, Math.min(fontSize * 0.05, mismatch));
+    }
+  }
+  letterSpacing = Math.round(letterSpacing * 1000) / 1000;
+  // CSS letter spacing also follows the last glyph; the page's width stops at its ink.
+  const natural = measureWidth(text, { ...measure, letterSpacing, wordSpacing: 0 }) - letterSpacing;
+  return { text, letterSpacing, wordSpacing: natural > 0 ? spaceFit(width - natural, spaceCount, measure) : 0 };
+}
+
+// The word spacing that spreads `extra` width over `spaces` spaces, kept within what a space can
+// reasonably absorb.
+function spaceFit(extra: number, spaces: number, face: Parameters<typeof measureWidth>[1]): number {
+  if (spaces <= 0) return 0;
+  const space = measureWidth(" ", face);
+  const clamped = Math.max(-space * 0.9, Math.min(face.fontSize * 3, extra / spaces));
+  return Math.abs(clamped) < 0.005 ? 0 : Math.round(clamped * 1000) / 1000;
+}
+
+// Whether a run drawn by operator `op` lies wholly under opaque paint that came after it.
+function hidden(box: Box, op: number, covers: Cover[]): boolean {
+  const pad = 0.6;
+  return covers.some(
+    (cover) =>
+      cover.order > op &&
+      cover.x <= box.x + pad &&
+      cover.y <= box.y + pad &&
+      cover.x + cover.w >= box.x + box.w - pad &&
+      cover.y + cover.h >= box.y + box.h - pad,
+  );
+}
+
+function clampSpacing(value: number, fontSize: number, maxEm: number): number {
+  if (!Number.isFinite(value) || Math.abs(value) < 0.005) return 0;
+  if (value > fontSize * maxEm || value < -fontSize * 0.5) return 0;
+  return Math.round(value * 1000) / 1000;
 }
 
 function isTextRun(item: unknown): item is TextRun {
@@ -295,31 +781,38 @@ function groupLines(runs: Run[]): Line[] {
       const first = current[0];
       if (!first) return;
       const box = union(current);
-      const face = dominantFace(current);
+      const spans = spanRuns(current);
+      const face = dominantFace(current, spans);
       lines.push({
         ...box,
         baseline: first.baseline,
         size: Math.max(...current.map((run) => run.size)),
-        text: joinRuns(current),
+        text: spans.map((span) => span.text).join(""),
         heading: false,
-        fontName: face.fontName,
-        pdfFont: first.pdfFont,
+        pdfFont: face.pdfFont,
+        fontFamily: face.fontFamily,
+        fontWeight: face.fontWeight,
+        fontStyle: face.fontStyle,
         ascent: face.ascent,
-        fallback: face.fallback,
         color: face.color,
+        letterSpacing: face.letterSpacing,
+        wordSpacing: face.wordSpacing,
+        spans,
       });
       current = [];
     };
     for (const run of row) {
       const previous = current[current.length - 1];
       const gap = previous ? run.x - (previous.x + previous.w) : 0;
-      const differentFace =
+      // A bold or italic word stays in its line as a span of its own; only a change of size, a wide
+      // gap, or a list marker set apart from its item starts a new line.
+      const differentSize = !!previous && Math.abs(previous.size - run.size) > 0.4;
+      const afterMarker =
         !!previous &&
-        (previous.fontName !== run.fontName ||
-          previous.pdfFont !== run.pdfFont ||
-          previous.color !== run.color ||
-          Math.abs(previous.size - run.size) > 0.4);
-      if (previous && (differentFace || gap > Math.max(previous.size, run.size) * 1.5)) flush();
+        current.length === 1 &&
+        isListMarker(previous.text) &&
+        (previous.pdfFont !== run.pdfFont || gap > run.size * 0.45);
+      if (previous && (differentSize || afterMarker || gap > Math.max(previous.size, run.size) * 1.5)) flush();
       current.push(run);
     }
     flush();
@@ -327,16 +820,101 @@ function groupLines(runs: Run[]): Line[] {
   return lines;
 }
 
-function joinRuns(runs: Run[]): string {
-  let text = "";
+function isListMarker(text: string): boolean {
+  // An em dash is left out: it opens wrapped lines as a run of its own far more often than a list.
+  return /^(?:[\u2022\u25E6\u2023\u2043\u25AA\u25CF\u25A0\u25A1\u00B7\u2013*-]|\(?\d{1,3}[.)]|\(?[a-zA-Z][.)]|[ivxIVX]{1,4}[.)])$/.test(
+    text.trim(),
+  );
+}
+
+// Joins a line's runs, left to right, into spans: adjacent runs in one face become one span, a gap
+// wider than a sliver becomes a space, and whitespace collapses the way the text would read.
+function spanRuns(runs: Run[]): ContentSpan[] {
+  const spans: ContentSpan[] = [];
   let end = 0;
   for (const run of runs) {
-    const gap = text ? run.x - end : 0;
-    if (text && gap > run.size * 0.18) text += " ";
-    text += run.text;
+    let text = run.text.replace(/[ \t]+/g, " ");
+    const last = spans[spans.length - 1];
+    if (last) {
+      const gap = run.x - end;
+      if (gap > run.size * 0.18 && !last.text.endsWith(" ") && !text.startsWith(" ")) last.text += " ";
+      else if (last.text.endsWith(" ") && text.startsWith(" ")) text = text.slice(1);
+    } else text = text.trimStart();
     end = run.x + run.w;
+    if (!text) continue;
+    if (last && sameSpanFace(last, run)) {
+      last.text += text;
+      last.box = union([last.box, run]);
+    } else {
+      spans.push({
+        text,
+        fontFamily: run.fontFamily,
+        fontWeight: run.fontWeight,
+        fontStyle: run.fontStyle,
+        fontSize: run.size,
+        color: run.color,
+        pdfFont: run.pdfFont,
+        letterSpacing: run.letterSpacing,
+        box: { x: run.x, y: run.y, w: run.w, h: run.h },
+      });
+    }
   }
-  return text.replace(/[ \t]+/g, " ").trim();
+  const last = spans[spans.length - 1];
+  if (last) last.text = last.text.trimEnd();
+  return mergeSpans(spans);
+}
+
+function sameSpanFace(
+  a: Pick<TextSpan, "fontFamily" | "fontWeight" | "fontStyle" | "fontSize" | "color" | "letterSpacing">,
+  b: Pick<TextSpan, "fontFamily" | "fontWeight" | "fontStyle" | "color" | "letterSpacing"> & { fontSize?: number; size?: number },
+): boolean {
+  const size = b.fontSize ?? b.size ?? a.fontSize;
+  return (
+    a.fontFamily === b.fontFamily &&
+    a.fontWeight === b.fontWeight &&
+    a.fontStyle === b.fontStyle &&
+    a.color === b.color &&
+    Math.abs(a.fontSize - size) < 0.05 &&
+    sameTracking(a.letterSpacing, b.letterSpacing)
+  );
+}
+
+// Whether two runs are tracked alike. Letter spacing is what makes a run exactly as wide as the
+// page drew it, so runs only join when theirs agree to the rounding they are stored at.
+function sameTracking(a: number | undefined, b: number | undefined): boolean {
+  return Math.abs((a ?? 0) - (b ?? 0)) < 0.0015;
+}
+
+// Drops empty spans, folds whitespace-only spans into a neighbour and merges neighbours in one face.
+function mergeSpans(spans: ContentSpan[]): ContentSpan[] {
+  const merged: ContentSpan[] = [];
+  for (const span of spans) {
+    if (!span.text) continue;
+    const last = merged[merged.length - 1];
+    if (last && (sameSpanFace(last, span) || !span.text.trim())) {
+      last.text += span.text;
+      last.box = union([last.box, span.box]);
+      continue;
+    }
+    if (last && !last.text.trim()) {
+      merged[merged.length - 1] = { ...span, text: last.text + span.text, box: union([last.box, span.box]) };
+      continue;
+    }
+    merged.push({ ...span, box: { ...span.box } });
+  }
+  return merged;
+}
+
+// How many faces the spans use, colour aside: the colours pdf.js reports per run are unreliable.
+// A run tracked differently from its neighbours counts as a face of its own.
+function faceCount(spans: ContentSpan[]): number {
+  const faces = new Set(
+    spans.map(
+      (span) =>
+        `${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${Math.round(span.fontSize * 4)}|${Math.round((span.letterSpacing ?? 0) * 100)}`,
+    ),
+  );
+  return faces.size;
 }
 
 function markHeadings(lines: Line[]) {
@@ -349,6 +927,11 @@ function markHeadings(lines: Line[]) {
 
 function groupBlocks(lines: Line[], rules: Box[]): { lines: Line[] }[] {
   const sorted = [...lines].sort((a, b) => a.y - b.y || a.x - b.x);
+  const markers = sorted.filter((line) => isListMarker(line.text));
+  // A line with a list marker to its left starts an item, so a new block, whatever sits above it.
+  const marked = new Set(
+    sorted.filter((line) => !isListMarker(line.text) && markers.some((marker) => markerBeside(marker, line))),
+  );
   const blocks: { lines: Line[] }[] = [];
   let current: Line[] = [];
   const flush = () => {
@@ -356,16 +939,29 @@ function groupBlocks(lines: Line[], rules: Box[]): { lines: Line[] }[] {
     current = [];
   };
   for (const line of sorted) {
+    // A marker is a block of its own and never interrupts the item it belongs to.
+    if (isListMarker(line.text)) {
+      blocks.push({ lines: [line] });
+      continue;
+    }
     const previous = current[current.length - 1];
-    if (!previous || !sameBlock(previous, line, rules)) flush();
+    if (!previous || marked.has(line) || !sameBlock(previous, line, rules)) flush();
     current.push(line);
   }
   flush();
   return blocks;
 }
 
+function markerBeside(marker: Line, line: Line): boolean {
+  const size = Math.max(marker.size, line.size);
+  if (Math.abs(marker.baseline - line.baseline) > size * 0.45) return false;
+  const gap = line.x - (marker.x + marker.w);
+  return gap > -1 && gap < size * 4;
+}
+
 function sameBlock(previous: Line, next: Line, rules: Box[]): boolean {
   if (previous.heading !== next.heading) return false;
+  if (!facesFlow(previous, next)) return false;
   const size = Math.max(previous.size, next.size, 1);
   if (Math.abs(previous.size - next.size) / size > 0.18) return false;
   const gap = next.y - (previous.y + previous.h);
@@ -384,25 +980,46 @@ function sameBlock(previous: Line, next: Line, rules: Box[]): boolean {
   });
 }
 
+// Whether the text of one line can continue into the next: they share a dominant face, or the
+// next line's face already appears in the previous one (a paragraph whose first words are bold).
+// The reverse pairing, a single-face line above a mixed line that merely contains its face, is
+// left apart: that is what a heading followed by a paragraph with a bold lead-in looks like, and
+// pdf.js cannot tell a heading face from a bold one when the weight is baked into the font.
+function facesFlow(previous: Line, next: Line): boolean {
+  if (previous.pdfFont === next.pdfFont) return true;
+  return previous.spans.some((span) => span.pdfFont === next.pdfFont);
+}
+
 function readGraphics(
   fnArray: number[],
   argsArray: unknown[],
   viewport: PageViewport,
-): { rules: Box[]; shapes: Box[]; images: Box[] } {
-  const stack: number[][] = [];
+): { rules: Box[]; shapes: Box[]; images: Box[]; covers: Cover[] } {
+  const stack: { ctm: number[]; fillAlpha: number }[] = [];
   let ctm = IDENTITY.slice();
+  let fillAlpha = 1;
   const rules: Box[] = [];
   const shapes: Box[] = [];
   const images: Box[] = [];
+  // Opaque paint in paint order, so text drawn earlier and lying under it can be told hidden.
+  const covers: Cover[] = [];
   for (let index = 0; index < fnArray.length; index += 1) {
     const fn = fnArray[index];
     const args = argsArray[index];
     if (fn === OPS.save) {
-      stack.push(ctm.slice());
+      stack.push({ ctm: ctm.slice(), fillAlpha });
       continue;
     }
     if (fn === OPS.restore || fn === OPS.paintFormXObjectEnd) {
-      ctm = stack.pop() ?? IDENTITY.slice();
+      const state = stack.pop();
+      ctm = state?.ctm ?? IDENTITY.slice();
+      fillAlpha = state?.fillAlpha ?? 1;
+      continue;
+    }
+    if (fn === OPS.setGState && Array.isArray(args) && Array.isArray(args[0])) {
+      for (const entry of args[0] as unknown[]) {
+        if (Array.isArray(entry) && entry[0] === "ca" && typeof entry[1] === "number") fillAlpha = entry[1];
+      }
       continue;
     }
     if (fn === OPS.transform) {
@@ -411,7 +1028,7 @@ function readGraphics(
       continue;
     }
     if (fn === OPS.paintFormXObjectBegin) {
-      stack.push(ctm.slice());
+      stack.push({ ctm: ctm.slice(), fillAlpha });
       const matrix = Array.isArray(args) ? asMatrix(args[0]) : null;
       if (matrix) ctm = Util.transform(ctm, matrix);
       continue;
@@ -422,7 +1039,11 @@ function readGraphics(
       const minMax = args[2] as ArrayLike<number> | null;
       const path = Array.isArray(args[1]) ? (args[1][0] as ArrayLike<number> | null) : null;
       const box = pathBox(minMax, ctm, viewport);
-      if (!box || coversPage(box, viewport)) continue;
+      if (!box) continue;
+      // Only a filled polygon counts as a cover: a curved shape's box says little about what it hides.
+      const filled = paint !== OPS.stroke && paint !== OPS.closeStroke;
+      if (filled && fillAlpha >= 0.99 && isPolygon(path)) covers.push({ ...box, order: index });
+      if (coversPage(box, viewport)) continue;
       if (isRule(box) || isSegment(path)) rules.push(padRule(box));
       else if (box.w >= 8 && box.h >= 8) shapes.push(box);
       continue;
@@ -434,13 +1055,16 @@ function readGraphics(
       fn === OPS.paintInlineImageXObjectGroup
     ) {
       const box = pathBox([0, 0, 1, 1], ctm, viewport);
-      if (box && box.w >= 8 && box.h >= 8 && !coversPage(box, viewport)) images.push(box);
+      if (!box) continue;
+      if (fillAlpha >= 0.99) covers.push({ ...box, order: index });
+      if (box.w >= 8 && box.h >= 8 && !coversPage(box, viewport)) images.push(box);
     }
   }
   return {
     rules: mergeRules(uniqueBoxes(rules)),
     shapes: uniqueBoxes(shapes).slice(0, 300),
     images: uniqueBoxes(images),
+    covers,
   };
 }
 
@@ -536,6 +1160,21 @@ function asMatrix(value: unknown): number[] | null {
 
 function isSegment(path: ArrayLike<number> | null): boolean {
   return !!path && path.length === 6 && path[0] === 0 && path[3] === 1;
+}
+
+// A path made only of straight edges (moveTo, lineTo, closePath), with at least three points.
+function isPolygon(path: ArrayLike<number> | null): boolean {
+  if (!path || path.length < 9) return false;
+  let points = 0;
+  for (let index = 0; index < path.length; ) {
+    const op = path[index];
+    if (op === 0 || op === 1) {
+      points += 1;
+      index += 3;
+    } else if (op === 4) index += 1;
+    else return false;
+  }
+  return points >= 3;
 }
 
 function padRule(box: Box): Box {
@@ -639,25 +1278,250 @@ function distinct(values: number[], tolerance: number): number {
 }
 
 function faceOf(line: Line): TextFace {
+  const fit = fitLine(line, line.letterSpacing);
   return {
-    fontName: line.fontName,
+    fontFamily: line.fontFamily,
+    fontWeight: line.fontWeight,
+    fontStyle: line.fontStyle,
     fontSize: line.size,
     ascent: line.ascent,
-    fallback: line.fallback,
     color: line.color,
     baseline: line.baseline,
+    lineHeight: line.h,
+    align: "left",
+    indent: 0,
+    letterSpacing: Math.round((line.letterSpacing + fit.spread) * 1000) / 1000,
+    wordSpacing: fit.gap ?? line.wordSpacing,
     pdfFont: line.pdfFont,
   };
 }
 
-function dominantFace(runs: Run[]): Pick<Run, "fontName" | "pdfFont" | "ascent" | "fallback" | "color"> {
-  const best = [...runs].sort((a, b) => b.text.length - a.text.length)[0];
+// Sets a line exactly as wide as the page drew it, once its runs are set in their faces with
+// their letter spacing (the given one where a run has none of its own). Spaces take the
+// difference as word spacing; a line without spaces spreads it over the gaps between its letters,
+// which is where runs that abut without a space (a dot leader and its page number) leave it.
+function fitLine(line: Line, letterSpacing: number): { gap: number | null; spread: number; spans: ContentSpan[] } {
+  const gap = lineGap(line, letterSpacing);
+  if (gap != null) return { gap, spread: 0, spans: line.spans };
+  const chars = [...line.text].length;
+  if (chars < 2 || typeof document === "undefined") return { gap: null, spread: 0, spans: line.spans };
+  const natural = lineNatural(line, letterSpacing);
+  if (!(natural > 0)) return { gap: null, spread: 0, spans: line.spans };
+  const raw = (line.w - natural) / (chars - 1);
+  const spread = Math.round(Math.max(-line.size * 0.04, Math.min(line.size * 0.1, raw)) * 1000) / 1000;
+  if (Math.abs(spread) < 0.005) return { gap: null, spread: 0, spans: line.spans };
   return {
-    fontName: best?.fontName ?? "",
-    pdfFont: best?.pdfFont ?? "",
-    ascent: best?.ascent ?? 0.8,
-    fallback: best?.fallback ?? "sans-serif",
-    color: best?.color ?? "#111111",
+    gap: null,
+    spread,
+    spans: line.spans.map((span) => ({ ...span, letterSpacing: (span.letterSpacing ?? letterSpacing) + spread })),
+  };
+}
+
+// The width of a line's runs set in their faces, up to the last glyph's ink.
+function lineNatural(line: Line, letterSpacing: number): number {
+  let natural = 0;
+  let trailing = letterSpacing;
+  for (const span of line.spans) {
+    trailing = span.letterSpacing ?? letterSpacing;
+    natural += measureWidth(span.text, {
+      fontFamily: span.fontFamily,
+      fontWeight: span.fontWeight,
+      fontStyle: span.fontStyle,
+      fontSize: span.fontSize,
+      letterSpacing: trailing,
+      wordSpacing: 0,
+    });
+  }
+  return natural - trailing;
+}
+
+// The word spacing that sets a line exactly as wide as the page drew it, once its runs are set in
+// their faces with the given letter spacing: the page's own space advances, the gaps between
+// words it positioned one by one, and a justified line's stretch all land on its spaces. Null for a
+// line without spaces.
+function lineGap(line: Line, letterSpacing: number): number | null {
+  const spaces = [...line.text].filter((char) => char === " ").length;
+  if (spaces === 0 || typeof document === "undefined") return null;
+  const natural = lineNatural(line, letterSpacing);
+  if (!(natural > 0)) return null;
+  const lead = line.spans[0];
+  return spaceFit(line.w - natural, spaces, {
+    fontFamily: lead?.fontFamily ?? line.fontFamily,
+    fontWeight: lead?.fontWeight ?? line.fontWeight,
+    fontStyle: lead?.fontStyle ?? line.fontStyle,
+    fontSize: lead?.fontSize ?? line.size,
+  });
+}
+
+// The face of a multi-line block: the longest line's font, the first line's baseline, the typical
+// baseline pitch, and the alignment the lines reveal.
+function blockFace(lines: Line[]): TextFace {
+  const sorted = [...lines].sort((a, b) => a.baseline - b.baseline);
+  const first = sorted[0] ?? lines[0];
+  const lead = [...sorted].sort((a, b) => b.text.length - a.text.length)[0] ?? first;
+  if (!first || !lead) return faceOf(lines[0] as Line);
+  const pitches = sorted
+    .slice(1)
+    .map((line, index) => line.baseline - (sorted[index]?.baseline ?? line.baseline))
+    .filter((pitch) => pitch > 0);
+  const layout = blockLayout(sorted, lead.size);
+  const face = dominantSpan(sorted.flatMap((line) => line.spans));
+  const letterSpacing = median(sorted.map((line) => line.letterSpacing));
+  // The word spacing text typed into the block flows with: the page's own, read off its lines. A
+  // justified block stretches its lines by different amounts, so its least stretched line (the
+  // last one aside, which is never stretched) comes closest to the natural gap.
+  const gaps = sorted.map((line) => lineGap(line, letterSpacing));
+  const known = gaps.filter((gap): gap is number => gap != null);
+  const body = gaps.slice(0, -1).filter((gap): gap is number => gap != null);
+  const wordSpacing =
+    known.length === 0
+      ? median(sorted.map((line) => line.wordSpacing))
+      : layout.align === "justify" && body.length > 0
+        ? Math.min(...body)
+        : median(known);
+  return {
+    ...faceOf(lead),
+    ...(face
+      ? {
+          fontFamily: face.fontFamily,
+          fontWeight: face.fontWeight,
+          fontStyle: face.fontStyle,
+          color: face.color,
+          pdfFont: face.pdfFont,
+        }
+      : {}),
+    baseline: first.baseline,
+    lineHeight: median(pitches) || lead.size * 1.2,
+    letterSpacing,
+    wordSpacing,
+    align: layout.align,
+    indent: layout.indent,
+  };
+}
+
+// Joins a block's lines into editable text, keeping every line break of the page so the block
+// opens looking exactly as printed. A break the author chose (a centered or right-aligned block,
+// a line that ends although the next word would still have fit, or a hyphenated word) is a hard
+// newline; one that only exists because the column ran out of room is listed in `softBreaks`,
+// and becomes a space once the text is edited so it flows again.
+function blockContent(
+  lines: Line[],
+  face: TextFace,
+  box: Box,
+): {
+  text: string;
+  spans: ContentSpan[];
+  softBreaks: number[];
+  lineGaps: number[];
+  lineOffsets: number[];
+  lineIndents: number[];
+} {
+  const width = box.w;
+  const sorted = [...lines].sort((a, b) => a.baseline - b.baseline);
+  const slack = Math.max(1, face.fontSize * 0.3);
+  const spans: ContentSpan[] = [];
+  const softBreaks: number[] = [];
+  const lineGaps: number[] = [];
+  const lineOffsets: number[] = [];
+  const lineIndents: number[] = [];
+  let previous: Line | null = null;
+  let offset = 0;
+  for (const line of sorted) {
+    if (!line.text.trim()) continue;
+    // Where the line sits: its baseline against an even pitch from the first line, and, in a
+    // block set from the left, its start against the block's left edge (a centred or right-aligned
+    // line is placed by its alignment).
+    lineOffsets.push(Math.round((line.baseline - (face.baseline + lineOffsets.length * face.lineHeight)) * 1000) / 1000);
+    if (face.align === "left" || face.align === "justify") {
+      lineIndents.push(Math.round(Math.max(0, line.x - box.x) * 1000) / 1000);
+    }
+    const last = spans[spans.length - 1];
+    if (last && previous) {
+      const lead = { ...(line.spans[0] ?? face), letterSpacing: face.letterSpacing, wordSpacing: face.wordSpacing };
+      const firstWord = line.text.split(" ")[0] ?? "";
+      const wouldFit = previous.w + measureWidth(` ${firstWord}`, lead, previous.size) <= width + slack;
+      const hard = face.align === "center" || face.align === "right" || wouldFit || last.text.endsWith("-");
+      last.text += "\n";
+      if (!hard) softBreaks.push(offset);
+      offset += 1;
+    }
+    // Spans stay one per line and face so each keeps the box its colour is read from.
+    const fit = fitLine(line, face.letterSpacing);
+    spans.push(...fit.spans.map((span) => ({ ...span, box: { ...span.box } })));
+    lineGaps.push(fit.gap ?? face.wordSpacing);
+    offset += line.text.length;
+    previous = line;
+  }
+  return { text: spans.map((span) => span.text).join(""), spans, softBreaks, lineGaps, lineOffsets, lineIndents };
+}
+
+function blockLayout(lines: Line[], size: number): { align: TextAlign; indent: number } {
+  const box = union(lines);
+  const tolerance = Math.max(1.5, size * 0.12);
+  const left = (line: Line) => Math.abs(line.x - box.x) < tolerance;
+  const right = (line: Line) => Math.abs(line.x + line.w - (box.x + box.w)) < tolerance;
+  const centered = (line: Line) => Math.abs(line.x + line.w / 2 - (box.x + box.w / 2)) < tolerance;
+  const first = lines[0];
+  const body = lines.slice(1);
+  const butLast = lines.slice(0, -1);
+  const leftish = body.every(left);
+  const indent = first && leftish && !left(first) ? Math.max(0, first.x - box.x) : 0;
+  // Justified columns are not always flush: some generators leave a line a few points short.
+  const flush = (line: Line) => Math.abs(line.x + line.w - (box.x + box.w)) < size * 0.6;
+  const flushCount = butLast.filter(flush).length;
+  if (lines.length >= 3 && leftish && flushCount >= Math.max(2, Math.ceil(butLast.length * 0.6))) {
+    return { align: "justify", indent };
+  }
+  if (leftish) return { align: "left", indent };
+  // A hanging indent: every line but the first starts at the same point further in.
+  const hang = body[0]?.x ?? box.x;
+  if (body.length > 0 && first && body.every((line) => Math.abs(line.x - hang) < tolerance) && first.x < hang - tolerance) {
+    return { align: "left", indent: -(hang - box.x) };
+  }
+  if (lines.every(right)) return { align: "right", indent: 0 };
+  if (lines.every(centered)) return { align: "center", indent: 0 };
+  return { align: "left", indent: 0 };
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
+// The face that sets most of the text, counted across every span in that face.
+function dominantSpan(spans: TextSpan[]): TextSpan | null {
+  const totals = new Map<string, { span: TextSpan; length: number }>();
+  for (const span of spans) {
+    // Colour is left out: the colours pdf.js reports per run are unreliable and would split a face.
+    const key = `${span.pdfFont}|${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${Math.round((span.letterSpacing ?? 0) * 100)}`;
+    const entry = totals.get(key);
+    if (entry) entry.length += span.text.length;
+    else totals.set(key, { span, length: span.text.length });
+  }
+  let best: { span: TextSpan; length: number } | null = null;
+  for (const entry of totals.values()) if (!best || entry.length > best.length) best = entry;
+  return best?.span ?? null;
+}
+
+function dominantFace(
+  runs: Run[],
+  spans: TextSpan[],
+): Pick<Run, "pdfFont" | "fontFamily" | "fontWeight" | "fontStyle" | "ascent" | "color" | "letterSpacing" | "wordSpacing"> {
+  const best = dominantSpan(spans);
+  const run = runs.find((item) => item.pdfFont === best?.pdfFont) ?? runs[0];
+  const same = runs.filter((item) => item.pdfFont === run?.pdfFont);
+  // Only runs that draw spaces know the page's space advance; words set one by one say nothing.
+  const spaced = same.filter((item) => /\s/.test(item.text.trim()));
+  return {
+    letterSpacing: best?.letterSpacing ?? median(same.map((item) => item.letterSpacing)),
+    wordSpacing: spaced.length > 0 ? median(spaced.map((item) => item.wordSpacing)) : 0,
+    pdfFont: best?.pdfFont ?? run?.pdfFont ?? "",
+    fontFamily: best?.fontFamily ?? run?.fontFamily ?? "sans-serif",
+    fontWeight: best?.fontWeight ?? run?.fontWeight ?? 400,
+    fontStyle: best?.fontStyle ?? run?.fontStyle ?? "normal",
+    ascent: run?.ascent ?? 0.8,
+    color: best?.color ?? run?.color ?? "#111111",
   };
 }
 

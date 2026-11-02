@@ -325,7 +325,10 @@
 .page-frame {
   position: absolute;
   background: var(--paper);
-  border: 1px solid var(--paper-edge);
+  /* A ring outside the box, not a border: a border would shrink the canvas inside by two pixels
+     while the overlays above it keep the page's full size, so edited text would sit a little off
+     the page's own rendering. */
+  box-shadow: 0 0 0 1px var(--paper-edge);
 }
 
 .pages.view-ready .page-turn {
@@ -443,6 +446,11 @@
 .content-graphic.selected {
   outline: 1.5px solid #1d4ed8;
   outline-offset: 0;
+}
+
+/* The edited text needs more lines than the original block had, so it now covers what sat below. */
+.content-cover.overflowing {
+  outline: 1.5px dashed #d97706;
 }
 
 .content-editor {
