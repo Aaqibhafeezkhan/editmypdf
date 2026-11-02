@@ -303,6 +303,9 @@ export function SiteLayout() {
             <Link to={ROUTES.post("exporting-real-text")}>Exporting edits as real text</Link>
             <Link to={ROUTES.blog}>All posts</Link>
             <a href={publicUrl("feed.xml")}>RSS feed</a>
+            <a href={publicUrl("llms.txt")} title="This site as Markdown, for AI agents and text readers">
+              llms.txt
+            </a>
           </nav>
         </div>
         <div className="container footer-bottom">
