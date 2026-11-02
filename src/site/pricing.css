@@ -1,0 +1,305 @@
+/* ---------------------------------------------------------------------------
+   Pricing: the free block and the table of what the same edit costs elsewhere.
+   Built from the tokens in index.css and the tone classes in site.css; the
+   price figure itself is styled in compare.css (Price.tsx).
+   --------------------------------------------------------------------------- */
+
+/* ---- The free block --------------------------------------------------------- */
+
+.price-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-8);
+  max-width: 980px;
+  margin: 0 auto;
+  padding: var(--sp-8);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--round-xl);
+  background: linear-gradient(135deg, var(--paper-1), color-mix(in oklab, var(--tone) 7%, var(--paper-1)));
+  box-shadow: var(--elev-3);
+}
+
+.price-hero-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.price-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 12px;
+  border-radius: var(--round-full);
+  background: var(--tone-soft);
+  color: var(--tone-ink);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.price-badge svg {
+  width: 16px;
+  height: 16px;
+}
+
+.price-amount {
+  margin: var(--sp-5) 0 0;
+  font-family: var(--ff-display);
+  font-size: var(--fs-display);
+  line-height: 0.95;
+  letter-spacing: var(--ls-display);
+}
+
+.price-amount small {
+  display: block;
+  margin-top: var(--sp-3);
+  font-family: var(--ff-sans);
+  font-size: var(--fs-sm);
+  letter-spacing: 0;
+  color: var(--ink-2);
+}
+
+.price-hero-note {
+  margin: var(--sp-4) 0 0;
+  max-width: 36ch;
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.price-hero .actions {
+  margin-top: var(--sp-6);
+}
+
+.price-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-5);
+  display: grid;
+  align-content: center;
+  gap: var(--sp-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--round-lg);
+  background: color-mix(in oklab, var(--paper-1) 70%, transparent);
+}
+
+.price-list li {
+  display: flex;
+  gap: var(--sp-3);
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.price-list svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--tone-soft);
+  color: var(--tone-ink);
+}
+
+@media (max-width: 860px) {
+  .price-hero {
+    grid-template-columns: 1fr;
+    gap: var(--sp-6);
+    padding: var(--sp-6);
+  }
+}
+
+/* ---- What the same edit costs elsewhere -------------------------------------- */
+
+.price-table-wrap {
+  border: 1px solid var(--rule);
+  border-radius: var(--round-lg);
+  background: var(--paper-1);
+  overflow: hidden;
+}
+
+.price-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.price-table th,
+.price-table td {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: middle;
+  line-height: var(--lh-snug);
+}
+
+.price-table thead th {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  background: var(--paper-0);
+  white-space: nowrap;
+}
+
+.price-table tbody tr:last-child th,
+.price-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.price-table th[scope="row"] {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.price-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.price-table .num .price {
+  justify-items: end;
+}
+
+.price-table .num .price-figure {
+  font-size: var(--fs-md);
+}
+
+.price-table .num .price-flags {
+  justify-content: flex-end;
+}
+
+.price-table td[data-col="Plan"] {
+  max-width: 26ch;
+  color: var(--ink-1);
+  font-size: var(--fs-xs);
+}
+
+.price-table tr.us th,
+.price-table tr.us td {
+  background: var(--accent-soft);
+}
+
+.price-table tr.us th {
+  color: var(--accent-ink);
+}
+
+.price-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.price-tool:hover span {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.price-foot {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+}
+
+.price-foot p {
+  margin: 0;
+}
+
+.price-foot .as-of {
+  justify-self: start;
+}
+
+.price-foot .as-of svg {
+  width: 14px;
+  height: 14px;
+  color: var(--tone-ink);
+}
+
+.price-foot .tag {
+  vertical-align: 1px;
+}
+
+/* On a phone each row becomes a block: the tool on top, then label: value pairs. */
+@media (max-width: 720px) {
+  .price-table,
+  .price-table tbody,
+  .price-table tr,
+  .price-table th,
+  .price-table td {
+    display: block;
+  }
+
+  .price-table thead {
+    display: none;
+  }
+
+  .price-table tr {
+    padding: var(--sp-3) 0 var(--sp-2);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .price-table tr:last-child {
+    border-bottom: 0;
+  }
+
+  .price-table th[scope="row"] {
+    padding: 0 var(--sp-4) var(--sp-2);
+    border: 0;
+    white-space: normal;
+  }
+
+  .price-table td {
+    display: grid;
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+    gap: var(--sp-3);
+    align-items: start;
+    padding: var(--sp-1) var(--sp-4);
+    border: 0;
+  }
+
+  .price-table td::before {
+    content: attr(data-col);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+
+  .price-table .num {
+    text-align: left;
+    white-space: normal;
+  }
+
+  .price-table .num .price {
+    justify-items: start;
+  }
+
+  .price-table .num .price-flags {
+    justify-content: flex-start;
+  }
+
+  .price-table td[data-col="Plan"] {
+    max-width: none;
+  }
+
+  .price-table tr.us {
+    margin: var(--sp-1) var(--sp-2) var(--sp-2);
+    border-radius: var(--round-md);
+    background: var(--accent-soft);
+  }
+
+  .price-table tr.us th,
+  .price-table tr.us td {
+    background: transparent;
+  }
+}
