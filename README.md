@@ -130,10 +130,15 @@ Variables; the Pages workflow passes them on):
 - `VITE_GOOGLE_SITE_VERIFICATION`: the `content` value from Search Console's *HTML tag* method
   for a URL-prefix property. The tag is added to every page's head; verify, then submit
   `sitemap.xml` under Sitemaps.
+- `VITE_CF_BEACON_TOKEN`: the `token` from a Cloudflare Web Analytics site (set up with the bare
+  hostname, such as `vr-patel.github.io`). A cookieless counter with no identifier loads on the
+  site's pages and the documents screen, once per full page load, never on the editing page; it
+  needs no notice. The privacy page, FAQ, terms and landing page describe it automatically.
 - `VITE_GA_MEASUREMENT_ID`: a Google Analytics 4 id (`G-…`). With it set, the site's pages show a
   short notice and load the script only after the visitor chooses OK; the editor pages never load
-  it. The privacy page, FAQ, terms and landing page describe that state automatically. Without it
-  the site stays script-free and says so.
+  it. The same pages describe that state automatically.
+
+Without either variable the site stays script-free and says so.
 
 ### For AI agents
 

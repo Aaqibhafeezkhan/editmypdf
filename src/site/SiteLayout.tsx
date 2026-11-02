@@ -12,6 +12,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
+import { useVisitCounter } from "../counter.ts";
 import { ThemeSelect } from "../ThemeSelect.tsx";
 import { competitorBySlug } from "../data/competitors.ts";
 import { ToolMark } from "./CompareCard.tsx";
@@ -189,6 +190,7 @@ export function SiteLayout() {
     setOpen(true);
   };
   useReveal(pathname);
+  useVisitCounter();
 
   return (
     <div className="site">

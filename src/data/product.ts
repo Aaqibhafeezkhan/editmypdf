@@ -21,14 +21,25 @@ export const PRODUCT = {
   comparisonsCheckedAt: "November 2026",
 } as const;
 
-// Visit counting, off unless the build sets VITE_GA_MEASUREMENT_ID (a GA4 id such as G-XXXXXXX).
-// When it is on, the site shows a notice and loads the script only after the visitor agrees, on
-// the site's pages only; the privacy page, FAQ, terms and landing page describe that state. When
-// it is off, every page says the site runs no analytics, and that is true.
+// Visit counting, off unless the build sets one of two variables. VITE_CF_BEACON_TOKEN turns on
+// Cloudflare Web Analytics, a cookieless counter with no identifier, on the site's pages and the
+// documents screen (src/counter.ts). VITE_GA_MEASUREMENT_ID (a GA4 id such as G-XXXXXXX) turns on
+// Google Analytics on the site's pages only, behind a notice the visitor must accept
+// (src/site/Analytics.tsx). The privacy page, FAQ, terms and landing page describe whichever is
+// on; with neither set, every page says the site runs no analytics, and that is true.
 export const ANALYTICS = {
   id: (import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined) || undefined,
+  cloudflareToken: (import.meta.env.VITE_CF_BEACON_TOKEN as string | undefined) || undefined,
+  // Google Analytics is configured.
   get enabled(): boolean {
     return Boolean(this.id);
+  },
+  // The cookieless counter is configured.
+  get counter(): boolean {
+    return Boolean(this.cloudflareToken);
+  },
+  get any(): boolean {
+    return this.enabled || this.counter;
   },
 } as const;
 

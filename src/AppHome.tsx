@@ -15,6 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useVisitCounter } from "./counter.ts";
 import { PRODUCT, publicUrl, routeHref, ROUTES } from "./data/product.ts";
 import { createBlankPdf, loadPdf } from "./pdf.ts";
 import { navigate, plainClick } from "./router.ts";
@@ -173,6 +174,7 @@ function DocumentCard({
 
 // The documents screen: open a PDF, start a blank page, try the sample, or continue a saved one.
 export function AppHome() {
+  useVisitCounter();
   const fileRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);

@@ -13,7 +13,11 @@ const POINTS = [
   {
     icon: UserX,
     title: "No account",
-    body: ANALYTICS.enabled ? "Nothing to sign up for; visits are counted only if you agree." : "Nothing to sign up for, and nothing collected about you.",
+    body: ANALYTICS.enabled
+      ? "Nothing to sign up for; visits are counted only if you agree."
+      : ANALYTICS.counter
+        ? "Nothing to sign up for; visits are counted without cookies or identifiers."
+        : "Nothing to sign up for, and nothing collected about you.",
   },
   { icon: CloudOff, title: "Files stay on your device", body: "The editor runs in your browser. Nothing is uploaded." },
 ];
@@ -86,7 +90,9 @@ export function Terms() {
           There is nothing to sign up for.{" "}
           {ANALYTICS.enabled
             ? "The site's pages count visits with Google Analytics only after you agree in the notice; the editor pages run no third-party script and set no cookies."
-            : "The site sets no cookies, runs no analytics and includes no third-party scripts."}{" "}
+            : ANALYTICS.counter
+              ? "The site counts visits with a cookieless counter from Cloudflare, which sets no cookies and keeps no identifier; the editing page runs no third-party script at all."
+              : "The site sets no cookies, runs no analytics and includes no third-party scripts."}{" "}
           The <Link to={ROUTES.privacy}>privacy page</Link> lists exactly what the app stores in your browser
           and how to remove it.
         </p>
