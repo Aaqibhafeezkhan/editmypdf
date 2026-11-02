@@ -38,7 +38,19 @@ function siteFiles(siteUrl: string): Plugin {
       )
       .join("\n")}\n</urlset>\n`;
   // Editor documents exist only in one browser, so /edit/ is kept out of search results.
-  const robots = () => `User-agent: *\nAllow: ${base}\nDisallow: ${base}edit/\n\nSitemap: ${origin}/sitemap.xml\n`;
+  const robots = () =>
+    [
+      "User-agent: *",
+      `Allow: ${base}`,
+      `Disallow: ${base}edit/`,
+      "",
+      `Sitemap: ${origin}/sitemap.xml`,
+      "",
+      "# For AI agents and other readers that prefer text: every page has a Markdown version at",
+      "# its address with .md appended (the home page at /index.md), listed with one line each in",
+      `# ${origin}/llms.txt and concatenated in ${origin}/llms-full.txt.`,
+      "",
+    ].join("\n");
   // The web app manifest: installable, with the icons under the base path.
   const manifest = () =>
     JSON.stringify(

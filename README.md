@@ -135,6 +135,17 @@ Variables; the Pages workflow passes them on):
   it. The privacy page, FAQ, terms and landing page describe that state automatically. Without it
   the site stays script-free and says so.
 
+### For AI agents
+
+Agents and other readers that want text without the chrome get it from the build, not from
+content negotiation (GitHub Pages cannot vary a response by `Accept`): `scripts/prerender.mjs`
+converts each prerendered page's `<main>` to Markdown (turndown with GFM tables, decoration and
+sample content stripped) and writes it next to the HTML at the same address with `.md` appended
+(`/how-it-works.md`, `/blog/<slug>.md`, the home page at `/index.md`). `/llms.txt` lists every page
+with one line each in the [llms.txt](https://llmstxt.org) format, `/llms-full.txt` holds all of
+them in one file, every HTML page links its twin with `<link rel="alternate" type="text/markdown">`,
+and `robots.txt` says where they are. The files are static, so no request is made at runtime.
+
 ## Routes
 
 | Path                | What it is                                                  |
