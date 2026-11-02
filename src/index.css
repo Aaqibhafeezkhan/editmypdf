@@ -2,121 +2,178 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource/instrument-serif/latin-400.css";
+@import "@fontsource/instrument-serif/latin-400-italic.css";
 
 @custom-variant dark (&:is([data-appearance="dark"] *));
 
+/* ---------------------------------------------------------------------------
+   Design tokens. One palette, one type scale and one spacing scale for the
+   site and the editor. The editor's own surface names (--canvas, --panel,
+   --ink, --line …) are aliases of the palette so both feel like one product.
+   --------------------------------------------------------------------------- */
 :root {
   color-scheme: light;
-  --canvas: #f3f3f3;
-  --shell: #ececec;
-  --panel: #ffffff;
-  --ink: #1c1c1c;
-  --muted: oklch(0.97 0 0);
-  --label: #444444;
-  --line: #e4e4e4;
-  --line-strong: #d4d4d4;
-  --section: #ececec;
-  --field: #ffffff;
-  --accent: oklch(0.97 0 0);
-  --accent-ink: #1d4ed8;
-  --accent-soft: #e8efff;
+
+  /* Palette: warm paper neutrals and an ink blue accent. */
+  --paper-0: #f8f7f3;
+  --paper-1: #ffffff;
+  --paper-2: #efede7;
+  --paper-3: #e4e1d9;
+  --ink-0: #17160f;
+  --ink-1: #4b4941;
+  --ink-2: #7d7a70;
+  --rule: rgb(23 22 15 / 0.1);
+  --rule-strong: rgb(23 22 15 / 0.22);
+  --accent: oklch(0.5 0.19 262);
+  --accent-strong: oklch(0.42 0.18 262);
+  --accent-soft: oklch(0.95 0.03 262);
+  --accent-ink: oklch(0.42 0.18 262);
+  --on-accent: #ffffff;
+  --good: oklch(0.55 0.15 150);
+  --good-soft: oklch(0.95 0.04 150);
+  --warn: oklch(0.6 0.15 60);
+  --warn-soft: oklch(0.96 0.04 75);
+  --bad: oklch(0.55 0.2 25);
+  --bad-soft: oklch(0.95 0.03 25);
+  --selection: oklch(0.5 0.19 262 / 0.22);
+
+  /* Type. */
+  --ff-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ff-display: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --ff-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-md: 1.125rem;
+  --fs-lg: clamp(1.25rem, 1.15rem + 0.5vw, 1.5rem);
+  --fs-xl: clamp(1.5rem, 1.3rem + 1vw, 2rem);
+  --fs-2xl: clamp(1.9rem, 1.5rem + 1.8vw, 2.75rem);
+  --fs-3xl: clamp(2.4rem, 1.8rem + 2.8vw, 3.75rem);
+  --fs-display: clamp(2.9rem, 2rem + 4.2vw, 5.6rem);
+  --lh-tight: 1.05;
+  --lh-snug: 1.25;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.65;
+  --ls-tight: -0.02em;
+  --ls-display: -0.015em;
+  --ls-caps: 0.08em;
+
+  /* Spacing, 4px base. */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.25rem;
+  --sp-6: 1.5rem;
+  --sp-8: 2rem;
+  --sp-10: 2.5rem;
+  --sp-12: 3rem;
+  --sp-16: 4rem;
+  --sp-20: 5rem;
+  --sp-24: 6rem;
+  --sp-32: 8rem;
+  --gutter: clamp(1rem, 4vw, 2rem);
+  --measure: 66ch;
+  --measure-narrow: 50ch;
+  --site-width: 1120px;
+
+  /* Shape and depth. */
+  --round-sm: 6px;
+  --round-md: 10px;
+  --round-lg: 14px;
+  --round-xl: 22px;
+  --round-full: 999px;
+  --elev-1: 0 1px 2px rgb(23 22 15 / 0.06), 0 1px 1px rgb(23 22 15 / 0.04);
+  --elev-2: 0 6px 20px rgb(23 22 15 / 0.08), 0 1px 2px rgb(23 22 15 / 0.06);
+  --elev-3: 0 24px 60px rgb(23 22 15 / 0.14), 0 2px 6px rgb(23 22 15 / 0.06);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration: 240ms;
+
+  /* Editor surfaces (App.css) as aliases of the palette. */
+  --canvas: var(--paper-2);
+  --shell: var(--paper-0);
+  --panel: var(--paper-1);
+  --ink: var(--ink-0);
+  --label: var(--ink-1);
+  --ink-muted: var(--ink-2);
+  --line: var(--rule);
+  --line-strong: var(--rule-strong);
+  --section: var(--paper-2);
+  --field: var(--paper-1);
+  --brand: var(--accent);
   --paper: #ffffff;
-  --paper-edge: #d8d8d8;
-  --danger-bg: #fef2f2;
-  --danger: #991b1b;
-  --swatch-edge: #c8c8c8;
-  --tool: #333333;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --paper-edge: #d3d0c8;
+  --danger-bg: var(--bad-soft);
+  --danger: var(--bad);
+  --swatch-edge: #c9c6be;
+  --tool: var(--ink-1);
+
+  /* shadcn component variables, mapped onto the palette. */
+  --background: var(--paper-1);
+  --foreground: var(--ink-0);
+  --card: var(--paper-1);
+  --card-foreground: var(--ink-0);
+  --popover: var(--paper-1);
+  --popover-foreground: var(--ink-0);
+  --primary: var(--accent);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--paper-2);
+  --secondary-foreground: var(--ink-0);
+  --muted: var(--paper-2);
+  --muted-foreground: var(--ink-2);
+  --accent-foreground: var(--ink-0);
+  --destructive: var(--bad);
+  --border: var(--rule);
+  --input: var(--rule-strong);
+  --ring: var(--accent);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-  --ink-muted: #666666;
-  --brand: #1d4ed8;
-  --primary: #1d4ed8;
-  --primary-foreground: #ffffff;
-  --ring: #1d4ed8;
+  --sidebar: var(--paper-0);
+  --sidebar-foreground: var(--ink-0);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: var(--on-accent);
+  --sidebar-accent: var(--paper-2);
+  --sidebar-accent-foreground: var(--ink-0);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--accent);
 }
 
 :root[data-appearance="dark"] {
   color-scheme: dark;
-  --canvas: #141416;
-  --shell: #0e0e10;
-  --panel: #232328;
-  --ink: #f4f4f5;
-  --muted: #a1a1aa;
-  --label: #d4d4d8;
-  --line: #3a3a40;
-  --line-strong: #52525b;
-  --section: #34343a;
-  --field: #18181b;
-  --accent: #93c5fd;
-  --accent-ink: #bfdbfe;
-  --accent-soft: #1e3a5f;
+  --paper-0: #121211;
+  --paper-1: #1b1b19;
+  --paper-2: #242422;
+  --paper-3: #2f2f2c;
+  --ink-0: #f3f1ec;
+  --ink-1: #c3c0b7;
+  --ink-2: #8e8b82;
+  --rule: rgb(255 255 255 / 0.1);
+  --rule-strong: rgb(255 255 255 / 0.22);
+  --accent: oklch(0.72 0.14 262);
+  --accent-strong: oklch(0.8 0.12 262);
+  --accent-soft: oklch(0.3 0.06 262);
+  --accent-ink: oklch(0.8 0.12 262);
+  --on-accent: #0f1a3a;
+  --good: oklch(0.75 0.15 150);
+  --good-soft: oklch(0.3 0.05 150);
+  --warn: oklch(0.8 0.14 75);
+  --warn-soft: oklch(0.32 0.05 75);
+  --bad: oklch(0.72 0.17 25);
+  --bad-soft: oklch(0.3 0.06 25);
+  --selection: oklch(0.72 0.14 262 / 0.3);
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --elev-2: 0 6px 20px rgb(0 0 0 / 0.4), 0 1px 2px rgb(0 0 0 / 0.3);
+  --elev-3: 0 24px 60px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
   --paper: #ffffff;
-  --paper-edge: #6b6b73;
-  --danger-bg: #3f1d1d;
-  --danger: #fecaca;
-  --swatch-edge: #71717a;
-  --tool: #e4e4e7;
-  --ink-muted: #a1a1aa;
-  --brand: #60a5fa;
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: #3b82f6;
-  --primary-foreground: #ffffff;
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: #60a5fa;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --paper-edge: #55544f;
+  --swatch-edge: #6b6a64;
+  --input: rgb(255 255 255 / 0.16);
 }
 
 * {
@@ -130,10 +187,19 @@ body,
   margin: 0;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
-  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  color: var(--ink);
-  background: var(--shell);
+  font-family: var(--ff-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+  color: var(--ink-0);
+  background: var(--paper-0);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -147,9 +213,91 @@ button {
   cursor: pointer;
 }
 
+::selection {
+  background: var(--selection);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Shared between the site and the editor ------------------------- */
+
+/* Every route mounts with a short fade; the editor and documents screens fade without moving so
+   their absolutely positioned overlays never animate against the canvas. */
+.page-transition {
+  animation: page-in 420ms var(--ease-out) both;
+}
+
+.page-transition.app-route {
+  height: 100%;
+  animation: page-fade 320ms var(--ease-out) both;
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes page-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.logo-word {
+  font-family: var(--ff-display);
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--ink-0);
+}
+
+/* ---- Loading screen for lazy routes -------------------------------------- */
+
+.app-loading {
+  min-height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--sp-3);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
 @theme inline {
-  --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: var(--ff-sans);
+  --font-heading: var(--ff-display);
+  --font-display: var(--ff-display);
+  --font-mono: var(--ff-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -168,7 +316,7 @@ button {
   --color-border: var(--border);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
+  --color-accent: var(--secondary);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);

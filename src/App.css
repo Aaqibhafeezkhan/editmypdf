@@ -1,3 +1,10 @@
+/* ---------------------------------------------------------------------------
+   Editor shell. Surfaces come from the tokens in index.css. The page frame
+   and the overlay rules below the "Page" heading decide where edited text
+   sits against the rendered page: change their colours freely, but not
+   their geometry.
+   --------------------------------------------------------------------------- */
+
 .app {
   height: 100%;
   display: flex;
@@ -11,8 +18,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 0 10px 0 12px;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-3) 0 var(--sp-4);
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
@@ -20,7 +27,7 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-3);
   min-width: 0;
   flex: 1;
 }
@@ -28,15 +35,26 @@
 .home-link {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-2);
   flex: none;
+  padding: var(--sp-1);
+  margin-left: calc(-1 * var(--sp-1));
+  border-radius: var(--round-md);
   color: inherit;
   text-decoration: none;
+  transition: background-color var(--duration) var(--ease-out);
+}
+
+.home-link:hover {
+  background: var(--paper-2);
 }
 
 .home-link strong {
-  font-size: 14px;
-  letter-spacing: -0.02em;
+  font-family: var(--ff-display);
+  font-weight: 400;
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: -0.01em;
 }
 
 .doc-switch {
@@ -44,24 +62,15 @@
   align-items: center;
   gap: 2px;
   min-width: 0;
-}
-
-.logo-mark {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  border-radius: 8px;
-  background: var(--primary);
-  color: var(--primary-foreground);
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--line);
 }
 
 .file-name,
 .page-number,
 .blank-hint {
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 .file-name {
@@ -74,15 +83,20 @@
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-1);
   flex: none;
+}
+
+.top-actions > [data-slot="button"][data-variant="outline"],
+.top-actions > [data-slot="button"][data-variant="default"] {
+  margin-left: var(--sp-1);
 }
 
 .missing {
   min-height: 100%;
   display: grid;
   place-content: center;
-  gap: 12px;
+  gap: var(--sp-3);
   text-align: center;
 }
 
@@ -92,10 +106,10 @@
 
 .error {
   margin: 0;
-  padding: 8px 14px;
+  padding: var(--sp-2) var(--sp-4);
   background: var(--danger-bg);
   color: var(--danger);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 .body {
@@ -111,7 +125,7 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 8px 0;
+  padding: var(--sp-2) 0;
   background: var(--panel);
   border-right: 1px solid var(--line);
 }
@@ -122,7 +136,7 @@
   min-width: 0;
   align-self: stretch;
   overflow: hidden;
-  transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 280ms var(--ease-out);
 }
 
 .tool-dock-slot.open {
@@ -256,10 +270,10 @@
   bottom: 16px;
   z-index: 6;
   padding: 7px 12px;
-  border-radius: 999px;
+  border-radius: var(--round-full);
   background: var(--panel);
   border: 1px solid var(--line);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--elev-2);
   color: var(--ink);
   font-size: 12px;
   font-weight: 600;
@@ -274,8 +288,8 @@
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 999px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  border-radius: var(--round-full);
+  box-shadow: var(--elev-2);
 }
 
 .zoom-dock {
@@ -311,6 +325,10 @@
   margin: 0 0 12px;
 }
 
+/* ---- Page -----------------------------------------------------------------
+   Geometry below is shared with the overlays in PageStage.tsx. Keep it.
+   --------------------------------------------------------------------------- */
+
 .page-wrap {
   display: flex;
   flex-direction: column;
@@ -328,7 +346,11 @@
   /* A ring outside the box, not a border: a border would shrink the canvas inside by two pixels
      while the overlays above it keep the page's full size, so edited text would sit a little off
      the page's own rendering. */
-  box-shadow: 0 0 0 1px var(--paper-edge);
+  box-shadow: 0 0 0 1px var(--paper-edge), 0 12px 32px rgb(0 0 0 / 0.08);
+}
+
+:root[data-appearance="dark"] .page-frame {
+  box-shadow: 0 0 0 1px var(--paper-edge), 0 12px 32px rgb(0 0 0 / 0.4);
 }
 
 .pages.view-ready .page-turn {
@@ -419,6 +441,8 @@
 .tool-eraser {
   cursor: cell;
 }
+
+/* On-paper overlays keep fixed colours: the paper is white in both themes. */
 
 .content-cover,
 .content-editor,
@@ -636,6 +660,8 @@
   outline-color: currentColor;
 }
 
+/* ---- Inspector ------------------------------------------------------------ */
+
 .inspector {
   width: 288px;
   flex: none;
@@ -647,7 +673,7 @@
   justify-content: flex-end;
   background: var(--panel);
   border-left: 1px solid var(--line);
-  transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 280ms var(--ease-out);
 }
 
 .inspector.collapsed {

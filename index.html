@@ -4,18 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PDF Editor — Annotate, draw, and type on a PDF in your browser</title>
+    <meta name="theme-color" content="#f8f7f3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)" />
+    <title>Stet — Edit the text in a PDF without disturbing the page</title>
     <meta
       name="description"
-      content="Free browser PDF editor. Add text, draw with a pencil, mark shapes, and download the annotated PDF. Each file stays in this browser and opens at its own link."
+      content="Free browser PDF editor. Click any heading, line or paragraph and retype it in the page's own font, size, colour and spacing. Nothing is uploaded and no account is needed."
     />
     <meta name="robots" content="index, follow" />
-    <meta property="og:title" content="PDF Editor — Annotate, draw, and type on a PDF in your browser" />
+    <meta property="og:site_name" content="Stet" />
+    <meta property="og:title" content="Stet — Edit the text in a PDF without disturbing the page" />
     <meta
       property="og:description"
-      content="Add text, drawings, and shapes to a PDF in the browser. Files stay on your device, and each document has its own link."
+      content="Free browser PDF editor that edits the page's own text in its own font. Nothing is uploaded and no account is needed."
     />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content="/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="/og.png" />
+    <link rel="alternate" type="application/rss+xml" title="Stet blog" href="/feed.xml" />
     <script>
       try {
         var stored = localStorage.getItem("pdf-editor:theme");
@@ -31,10 +38,10 @@
   </head>
   <body>
     <noscript>
-      <h1>PDF Editor</h1>
+      <h1>Stet</h1>
       <p>
-        Annotate, draw, and type on a PDF in your browser. Add text and drawings, then download a
-        new PDF. Files stay on your device, and each document opens at its own link.
+        Stet is a PDF editor that runs in your browser. It needs JavaScript to open, edit and save a
+        PDF on your own device.
       </p>
     </noscript>
     <div id="root"></div>

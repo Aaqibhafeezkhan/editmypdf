@@ -1,32 +1,57 @@
-# React + TypeScript + Vite
+# Stet
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A PDF editor that runs entirely in the browser. It edits the text a page already has, in the page's
+own embedded font, and writes the result back as real text. It also annotates: pencil, shapes,
+text boxes, emoji and signatures. Nothing is uploaded; pdf.js reads the file in a web worker and
+pdf-lib writes the new one in the same tab.
 
-Currently, two official plugins are available:
+"Stet" is a working name. The package and repository are still called `pdf-editor`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Run it
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+`npm run build` type-checks and builds to `dist/`; `npm run lint` runs oxlint.
+
+The dev server serves `index.html` for every route. A production host must do the same (a
+single-page-app rewrite of every path to `/index.html`), or deep links such as `/blog/<slug>` will
+404. Set `VITE_SITE_URL` to the site's origin at build time so `sitemap.xml` and canonical links are
+absolute.
+
+## Routes
+
+| Path                | What it is                                                  |
+| ------------------- | ----------------------------------------------------------- |
+| `/`                 | Landing page                                                |
+| `/app`              | Documents: open a PDF, start blank, continue a saved one    |
+| `/edit/:id`         | The editor for one document (lives only in this browser)    |
+| `/blog`, `/blog/:slug` | Engineering posts                                        |
+| `/compare`, `/compare/:slug` | Comparison roundup and one page per competitor     |
+| `/how-it-works`, `/privacy`, `/faq` | Supporting pages                            |
+
+## Where things live
+
+- `src/index.css`: design tokens (palette, type scale, spacing, radii, shadows) and the editor's
+  surface aliases. Both the site and the editor are built from these.
+- `src/site/`: the marketing site (layout, pages, `site.css`, Markdown renderer, page meta).
+- `src/data/posts.ts`: blog posts as Markdown, with dates and tags.
+- `src/data/competitors.ts`: every comparison fact, with sources and the date it was checked.
+- `src/data/faq.ts`, `src/data/product.ts`: FAQ entries; product name, description and routes.
+- `src/App.tsx`, `src/App.css`, `src/AppHome.tsx`: the editor shell and the documents screen.
+- `src/content.ts`, `src/textLayout.ts`, `src/SpanEditor.tsx`, `src/contentEdit.ts`,
+  `src/PageStage.tsx`, `src/exportPdf.ts`, `src/fontFix.ts`: reading, editing and exporting the
+  page's own content. The blog posts describe what these do.
+
+## Updating the comparisons
+
+Edit `src/data/competitors.ts`. Each entry carries `checkedAt` and a `sources` list; update both when
+a price or a limit changes. The roundup table, the per-tool pages, the landing teaser and the
+sitemap all read from that file.
+
+## Contributing and licence
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run, test and change the editor and the site.
+Stet is released under the MIT licence; see [LICENSE](LICENSE).
