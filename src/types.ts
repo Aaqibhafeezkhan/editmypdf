@@ -239,6 +239,10 @@ export type PatchAnnotation = Base & {
   // as long as that line is untouched: a list or a table of contents indents its lines unevenly.
   lineIndents: number[];
   wrap: boolean;
+  // The width a wrapped block's text flows in once the user has changed it (by dragging the
+  // box's edge, or by breaking a single line into a cell's width), in page units; absent while the
+  // block keeps the width the page gave it (`originW`).
+  wrapW?: number;
   // Styled runs when the text mixes faces (a bold or italic word inside a paragraph); empty for a
   // single-face patch, whose face is the fields above.
   spans: TextSpan[];

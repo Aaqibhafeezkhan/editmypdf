@@ -1,5 +1,5 @@
 import type { ContentElement } from "./content.ts";
-import { lineShift, spansText, wrapText } from "./textLayout.ts";
+import { flowWidth, lineShift, spansText, wrapText } from "./textLayout.ts";
 import type { EditCapture } from "./pageInk.ts";
 import { uid, type PatchAnnotation, type PatchTail, type TextSpan } from "./types.ts";
 
@@ -10,7 +10,7 @@ export function editCover(patch: PatchAnnotation): Box {
   const pad = patch.role === "text" ? patch.fontSize * 0.15 : 0;
   const boxes = [
     { ...originBox(patch), h: patch.originH + pad },
-    { x: patch.x, y: patch.y, w: Math.max(patch.w, patch.wrap ? patch.originW : 0), h: patch.h + pad },
+    { x: patch.x, y: patch.y, w: Math.max(patch.w, patch.wrap ? flowWidth(patch) : 0), h: patch.h + pad },
   ];
   const delta = patch.w - patch.originW;
   if (patch.role === "text" && !patch.wrap && Math.abs(delta) >= 0.4) {
@@ -71,8 +71,41 @@ export function layoutTextPatch(
     patch.originH,
     (count - 1) * patch.lineHeight + lineShift(patch.lineOffsets, count - 1) + patch.fontSize,
   );
-  const w = patch.wrap ? patch.originW : Math.max(0, ...lines.map((line) => line.width));
+  const w = patch.wrap ? flowWidth(patch) : Math.max(0, ...lines.map((line) => line.width));
   return { text, w, h };
+}
+
+// Lets every line of a block flow again: the page's soft line breaks all become spaces and the
+// per-line gaps, offsets and indents the page gave its lines are dropped, so the text wraps
+// afresh in whatever width the block has. Used when the block's width changes.
+export function flowAll(
+  patch: Pick<PatchAnnotation, "text" | "spans" | "softBreaks">,
+): Pick<PatchAnnotation, "text" | "spans" | "softBreaks" | "lineGaps" | "lineOffsets" | "lineIndents"> {
+  const soft = new Set(patch.softBreaks ?? []);
+  const cleared = { softBreaks: [], lineGaps: [], lineOffsets: [], lineIndents: [] };
+  if (soft.size === 0) return { text: patch.text, spans: patch.spans, ...cleared };
+  let text = "";
+  for (let index = 0; index < patch.text.length; index += 1) text += soft.has(index) ? " " : patch.text[index];
+  let cursor = 0;
+  const spans = patch.spans.map((span) => {
+    let piece = "";
+    for (let index = 0; index < span.text.length; index += 1) piece += soft.has(cursor + index) ? " " : span.text[index];
+    cursor += span.text.length;
+    return { ...span, text: piece };
+  });
+  return { text, spans, ...cleared };
+}
+
+// The patch re-laid to flow in `width` page units: a single line becomes a block that wraps
+// (and stays on one line while the width allows), a block flows all its lines again. The width
+// never drops below a few characters.
+export function resizeTextPatch(patch: PatchAnnotation, width: number): PatchAnnotation {
+  const minimum = Math.max(12, patch.fontSize * 3);
+  const wrapW = Math.round(Math.max(minimum, width) * 100) / 100;
+  const lineHeight = patch.wrap || patch.lineHeight >= patch.fontSize * 1.1 ? patch.lineHeight : patch.fontSize * 1.3;
+  const flowed = flowAll(patch);
+  const block: PatchAnnotation = { ...patch, ...flowed, wrap: true, wrapW, lineHeight, tails: [] };
+  return { ...block, ...layoutTextPatch(block, flowed.text, 0) };
 }
 
 // Joins neighbouring spans in the same face whose colours are as good as equal, so a paragraph

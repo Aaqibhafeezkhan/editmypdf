@@ -27,6 +27,7 @@ function countOf(text: string, char: string): number {
 
 type Layout = Face &
   Pick<PatchAnnotation, "originW" | "wrap" | "indent" | "align" | "lineHeight" | "ascent" | "x" | "y" | "w" | "text"> & {
+    wrapW?: number;
     spans?: TextSpan[];
     softBreaks?: number[];
     lineGaps?: number[];
@@ -135,8 +136,13 @@ function rangeWidth(text: string, from: number, to: number, face: Face, spans: T
   return width;
 }
 
-export function blockWidth(patch: Pick<PatchAnnotation, "wrap" | "originW" | "w" | "align" | "fontSize">): number {
-  return patch.wrap ? patch.originW + wrapSlack(patch) : Math.max(patch.w, 1);
+// The width a wrapped block's lines flow in: the one the user chose, else the page's own.
+export function flowWidth(patch: Pick<PatchAnnotation, "originW" | "wrapW">): number {
+  return patch.wrapW ?? patch.originW;
+}
+
+export function blockWidth(patch: Pick<PatchAnnotation, "wrap" | "originW" | "wrapW" | "w" | "align" | "fontSize">): number {
+  return patch.wrap ? flowWidth(patch) + wrapSlack(patch) : Math.max(patch.w, 1);
 }
 
 // How far the `index`th line starts in from the block's edge: where the page put it while the
@@ -158,7 +164,7 @@ export function lineShift(offsets: number[] | undefined, index: number): number 
 // The width centred and right-aligned lines are set against: the page's own, since the wrap
 // slack would move them; lines flowing left use the slack.
 function alignWidth(patch: Layout): number {
-  if (patch.align === "center" || patch.align === "right") return patch.wrap ? patch.originW : Math.max(patch.w, 1);
+  if (patch.align === "center" || patch.align === "right") return patch.wrap ? flowWidth(patch) : Math.max(patch.w, 1);
   return blockWidth(patch);
 }
 
@@ -178,7 +184,7 @@ function laid(whole: string, text: string, start: number, face: Face, spans: Tex
 export function wrapText(text: string, patch: Layout): LaidLine[] {
   const spans = spansFor(text, patch);
   const soft = new Set(patch.softBreaks ?? []);
-  const limit = patch.wrap ? patch.originW + wrapSlack(patch) : Infinity;
+  const limit = patch.wrap ? flowWidth(patch) + wrapSlack(patch) : Infinity;
   const lines: LaidLine[] = [];
   let cursor = 0;
   text.split("\n").forEach((paragraph, index) => {
