@@ -34,6 +34,7 @@ import {
   type StrokeStyle,
   type TextAnnotation,
   type PatchAnnotation,
+  type PatchTail,
   type TextSpan,
   type TextStyle,
   type Tool,
@@ -703,7 +704,12 @@ export function PageStage({
       } catch {
         source = canvas;
       }
-      const captured = captureEdit(source, element, contentRef.current, baseWidth, baseHeight);
+      const edited = new Set(
+        current
+          .filter((item): item is PatchAnnotation => item.kind === "patch" && item.role === "text" && item.page === pageIndex)
+          .map((item) => item.sourceId),
+      );
+      const captured = captureEdit(source, element, contentRef.current, baseWidth, baseHeight, edited);
       try {
         const faces = [faceCss({ ...element, fontSize: element.fontSize || element.h }), ...element.spans.map((span) => faceCss(span))];
         await Promise.all([...new Set(faces)].map((css) => document.fonts.load(css)));
@@ -725,7 +731,16 @@ export function PageStage({
       }));
       const patch = textPatch({ ...element, spans }, sampled, captured);
       draftText.current = { id: patch.id, origin: latest };
-      onReplace([...latest, patch]);
+      // A line opened for editing shows its own text from now on: another patch whose tails
+      // pictured it (and whatever followed it on the row) drops those pictures.
+      const meets = (tail: PatchTail) =>
+        tail.x < element.x + element.w && tail.x + tail.w > element.x && tail.y < element.y + element.h && tail.y + tail.h > element.y;
+      const freed = latest.map((item) => {
+        if (item.kind !== "patch" || item.role !== "text" || item.page !== pageIndex) return item;
+        const index = item.tails.findIndex(meets);
+        return index < 0 ? item : { ...item, tails: item.tails.slice(0, index) };
+      });
+      onReplace([...freed, patch]);
       focusContentText(patch, point, element);
       return;
     }

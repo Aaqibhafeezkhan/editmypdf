@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DragEvent as ReactDragEvent, ReactNode } from "react";
-import { type ContentElement } from "./content.ts";
+import { scanType3Fonts, type ContentElement } from "./content.ts";
 import { exportAnnotatedPdf } from "./exportPdf.ts";
 import { clamp } from "./geometry.ts";
 import { useHistory } from "./history.ts";
@@ -466,6 +466,11 @@ export function Editor({ sessionId }: { sessionId: string }) {
         setContentSelection(null);
         loadedRef.current = next;
         hydrated.current = true;
+        // Pages printed from a browser draw their text with Type3 fonts, one per run; pooling
+        // the whole document's glyphs lets the faces rebuilt for the open pages cover the
+        // letters the other pages drew. The scan starts before the first page is read, which
+        // waits a moment for it.
+        void scanType3Fonts(next.pages);
         setLoaded(next);
       } catch (cause) {
         if (!cancelled && loadId.current === id) {

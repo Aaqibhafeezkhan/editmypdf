@@ -32,6 +32,7 @@ import { editCover, refreshPatchFace } from "./contentEdit.ts";
 import { stripPageText, type StripResult } from "./contentStream.ts";
 import { fontUnicodeMap } from "./fontFix.ts";
 import { blockWidth, measureWidth, paintRun, placeRuns, type PlacedRun } from "./textLayout.ts";
+import { type3FaceBytes } from "./type3Font.ts";
 import { emojiSrc } from "./emojis.ts";
 import { rotatePoint } from "./geometry.ts";
 import { arrowBarbs, isBoxShape, isOpenShape, outlinePoints, pointsToPath } from "./shapes.ts";
@@ -292,14 +293,19 @@ function faceEmbedder(document: PDFDocument, pages: PDFPageProxy[]): FaceEmbedde
     const pending = (async () => {
       const page = pages[pageIndex];
       const info = page ? pageFonts(page)?.get(pdfFont) : undefined;
-      const bytes = info?.fixed ?? info?.data;
-      if (!info || info.type3 || !bytes || bytes.length < 12) return null;
+      // A Type3 font has bytes only when a face was rebuilt from its outlines; the face may have
+      // been built again with more letters since the page was read.
+      const bytes = (info?.family ? type3FaceBytes(info.family) : null) ?? info?.fixed ?? info?.data;
+      if (!info || !bytes || bytes.length < 12) return null;
       const cmap = fontUnicodeMap(bytes);
       if (cmap.size === 0) return null;
       // The converted font carries the original's whole glyph table, so only the glyphs the edits
-      // use are written; the whole font is the fallback when pdf-lib cannot subset this one.
+      // use are written; the whole font is the fallback when pdf-lib cannot subset this one. A
+      // face rebuilt from a Type3 font holds only the glyphs the page drew, and is written whole:
+      // its CFF outlines trip fontkit's subsetter, which runs when the file is saved, too late
+      // for anything to catch.
       try {
-        return { font: await document.embedFont(bytes, { subset: true }), cmap };
+        return { font: await document.embedFont(bytes, { subset: !info.type3 }), cmap };
       } catch {
         try {
           return { font: await document.embedFont(bytes), cmap };
