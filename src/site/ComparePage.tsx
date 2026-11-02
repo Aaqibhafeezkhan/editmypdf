@@ -92,7 +92,7 @@ function Comparison({ tool }: { tool: Competitor }) {
       </section>
 
       <section className="container">
-        <div className="table-wrap sticky" data-reveal>
+        <div className="table-wrap sticky">
           <table className="cmp-table glance">
             <thead>
               <tr>
@@ -214,7 +214,7 @@ function Comparison({ tool }: { tool: Competitor }) {
       </section>
 
       <section className="section container">
-        <div className="two-col" data-reveal>
+        <div className="two-col">
           <ul className="pro-list them">
             <h3>Where {tool.name} is better</h3>
             {tool.theyWin.map((item) => (
@@ -280,7 +280,7 @@ function Comparison({ tool }: { tool: Competitor }) {
         <h2 className="h2" style={{ marginBottom: "var(--sp-6)" }}>
           Other comparisons
         </h2>
-        <div className="card-grid" data-reveal>
+        <div className="card-grid">
           {others.map((other) => (
             <CompareCard key={other.slug} tool={other} />
           ))}
