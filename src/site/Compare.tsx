@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { COMPETITORS, STET } from "../data/competitors.ts";
+import { COMPETITORS, OURS } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { Mark, Where } from "./Marks.tsx";
 import { useMeta } from "./useMeta.ts";
@@ -40,24 +40,24 @@ export function Compare() {
             </thead>
             <tbody>
               <tr className="us">
-                <th scope="row">{STET.name}</th>
+                <th scope="row">{OURS.name}</th>
                 <td>
-                  <Where where={STET.processing.where} />
+                  <Where where={OURS.processing.where} />
                 </td>
                 <td>
-                  <Mark value={STET.account.required} labels={{ no: "No" }} />
+                  <Mark value={OURS.account.required} labels={{ no: "No" }} />
                 </td>
                 <td>
-                  <Mark value={STET.textEditing.existing} />
+                  <Mark value={OURS.textEditing.existing} />
                 </td>
                 <td>
-                  <Mark value={STET.textEditing.keepsFont} />
+                  <Mark value={OURS.textEditing.keepsFont} />
                 </td>
                 <td>
-                  {STET.free.fileSizeCap}
-                  <span className="cell-note">{STET.free.taskLimit}</span>
+                  {OURS.free.fileSizeCap}
+                  <span className="cell-note">{OURS.free.taskLimit}</span>
                 </td>
-                <td>{STET.priceFrom}</td>
+                <td>{OURS.priceFrom}</td>
               </tr>
               {COMPETITORS.map((tool) => (
                 <tr key={tool.slug}>

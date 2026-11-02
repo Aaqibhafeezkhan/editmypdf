@@ -27,7 +27,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeSelect } from "./ThemeSelect.tsx";
 import { LogoMark } from "./site/Logo.tsx";
-import { PRODUCT, ROUTES } from "./data/product.ts";
+import { PRODUCT, routeHref, ROUTES } from "./data/product.ts";
 import { ToolDock } from "./ToolDock.tsx";
 import { ToolRail } from "./ToolRail.tsx";
 import {
@@ -846,7 +846,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
     return (
       <div className="app missing">
         <p>This document is not saved in this browser.</p>
-        <a href={ROUTES.app} onClick={(event) => { if (plainClick(event)) { event.preventDefault(); navigate(ROUTES.app); } }}>
+        <a href={routeHref(ROUTES.app)} onClick={(event) => { if (plainClick(event)) { event.preventDefault(); navigate(ROUTES.app); } }}>
           Back to documents
         </a>
       </div>

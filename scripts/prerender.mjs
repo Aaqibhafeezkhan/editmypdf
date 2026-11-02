@@ -4,8 +4,8 @@
 // and link previews then see the finished page without running JavaScript, and in the browser
 // src/main.tsx hydrates the markup instead of drawing it again.
 //
-// The documents screen (/app) ships as the empty shell, as does dist/200.html, which a host should
-// serve for every address it has no file for (/edit/<id>, unknown paths).
+// The documents screen (/app) ships as the empty shell, as do dist/200.html and dist/404.html, one of
+// which a host should serve for every address it has no file for (/edit/<id>, unknown paths).
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -41,10 +41,14 @@ for (const route of PUBLIC_ROUTES) {
   count += 1;
 }
 await write(path.join(dist, "200.html"), template);
+// GitHub Pages answers every address it has no file for with 404.html, so the shell goes there too;
+// .nojekyll stops it from skipping files whose names begin with an underscore.
+await write(path.join(dist, "404.html"), template);
+await write(path.join(dist, ".nojekyll"), "");
 await rm(serverDir, { recursive: true, force: true });
-console.log(`prerendered ${count} pages into dist/ (plus the app shell at /app and 200.html)`);
+console.log(`prerendered ${count} pages into dist/ (plus the app shell at /app, 200.html and 404.html)`);
 if (!loadEnv("production", root, "VITE_").VITE_SITE_URL) {
-  console.log("VITE_SITE_URL is not set, so canonical links and og:url are root-relative; set it to the site's origin for absolute ones.");
+  console.log("VITE_SITE_URL is not set, so canonical links, og:url and the sitemap are root-relative; set it to the address the site is served at for absolute ones.");
 }
 
 async function readTemplate() {

@@ -31,7 +31,7 @@ import {
   Undo2,
   ZoomIn,
 } from "lucide-react";
-import { COMPETITORS, STET } from "../data/competitors.ts";
+import { COMPETITORS, OURS } from "../data/competitors.ts";
 import { FAQ } from "../data/faq.ts";
 import { formatDate, POSTS } from "../data/posts.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
@@ -509,7 +509,7 @@ export function Landing() {
             </thead>
             <tbody>
               <tr className="us">
-                <th scope="row">{STET.name}</th>
+                <th scope="row">{OURS.name}</th>
                 <td>
                   <Where where="browser" />
                 </td>

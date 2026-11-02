@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { createBrowserRouter, RouterProvider, useParams } from "react-router";
+import { BASE_PATH } from "./data/product.ts";
 import { attachRouter } from "./router.ts";
 import { LogoMark } from "./site/Logo.tsx";
 import { siteRoutes } from "./site/routes.tsx";
@@ -42,7 +43,7 @@ const router = createBrowserRouter([
     ),
   },
   { path: "/edit/:id", Component: EditorRoute },
-]);
+], { basename: BASE_PATH });
 
 attachRouter(router);
 

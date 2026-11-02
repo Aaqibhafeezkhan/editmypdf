@@ -15,7 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PRODUCT, ROUTES } from "./data/product.ts";
+import { PRODUCT, publicUrl, routeHref, ROUTES } from "./data/product.ts";
 import { createBlankPdf, loadPdf } from "./pdf.ts";
 import { navigate, plainClick } from "./router.ts";
 import {
@@ -30,7 +30,7 @@ import { LogoMark } from "./site/Logo.tsx";
 import { ThemeSelect } from "./ThemeSelect.tsx";
 import "./AppHome.css";
 
-const SAMPLE_URL = "/sample.pdf";
+const SAMPLE_URL = publicUrl("sample.pdf");
 const SAMPLE_NAME = "Sample letter.pdf";
 
 type Preview = { src: string; pages: number; bytes: number };
@@ -106,11 +106,12 @@ function DocumentCard({
   onRemove: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
-  const href = ROUTES.edit(session.id);
+  const path = ROUTES.edit(session.id);
+  const href = routeHref(path);
   const open = (event: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; button: number; preventDefault: () => void }) => {
     if (!plainClick(event)) return;
     event.preventDefault();
-    navigate(href);
+    navigate(path);
   };
   return (
     <li className="doc-card">
@@ -147,7 +148,7 @@ function DocumentCard({
             </>
           ) : (
             <>
-              <Button type="button" size="sm" variant="outline" onClick={() => navigate(href)}>
+              <Button type="button" size="sm" variant="outline" onClick={() => navigate(path)}>
                 Open
               </Button>
               <Button type="button" size="sm" variant="ghost" aria-label={`Remove ${session.name}`} onClick={() => setConfirming(true)}>
