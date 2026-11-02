@@ -27,6 +27,16 @@ export function applyTheme(theme: ThemeChoice): void {
   root.style.colorScheme = dark ? "dark" : "light";
 }
 
+const listeners = new Set<() => void>();
+
+// Components read the stored choice through useSyncExternalStore; this tells them it changed.
+export function subscribeTheme(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export function storeTheme(theme: ThemeChoice): void {
   try {
     localStorage.setItem(THEME_KEY, theme);
@@ -34,4 +44,5 @@ export function storeTheme(theme: ThemeChoice): void {
     // The choice still applies for this visit.
   }
   applyTheme(theme);
+  for (const listener of listeners) listener();
 }

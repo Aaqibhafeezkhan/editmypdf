@@ -34,11 +34,16 @@ function reducedMotion(): boolean {
 }
 
 export function useTypedEdit(before = BEFORE, after = AFTER): { text: string; editing: boolean } {
-  const [text, setText] = useState(() => (reducedMotion() ? after : before));
+  // The replay always starts from the original text, so prerendered markup matches the first render
+  // in every browser; a viewer who prefers reduced motion is shown the finished edit straight away.
+  const [text, setText] = useState(before);
   const [phase, setPhase] = useState<Phase>("idle");
 
   useEffect(() => {
-    if (reducedMotion()) return;
+    if (reducedMotion()) {
+      setText(after);
+      return;
+    }
     let timer = 0;
     const schedule = (ms: number, next: () => void) => {
       timer = window.setTimeout(next, ms);
