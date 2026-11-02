@@ -1,10 +1,43 @@
 import { Link } from "react-router";
-import { ArrowRight, Check, Download, FolderOpen, Layers, MousePointerClick, Undo2, ZoomIn } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  CalendarDays,
+  Check,
+  CircleHelp,
+  ClipboardPen,
+  Code,
+  Cpu,
+  Download,
+  EyeOff,
+  FileDown,
+  FolderOpen,
+  Globe,
+  HardDrive,
+  Highlighter,
+  Layers,
+  ListChecks,
+  MousePointerClick,
+  PenLine,
+  Receipt,
+  Ruler,
+  Scale,
+  ShieldCheck,
+  Signature,
+  Sparkles,
+  SpellCheck,
+  TrendingUp,
+  Type,
+  Undo2,
+  ZoomIn,
+} from "lucide-react";
 import { COMPETITORS, STET } from "../data/competitors.ts";
 import { FAQ } from "../data/faq.ts";
 import { formatDate, POSTS } from "../data/posts.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
+import { Accordion } from "./Accordion.tsx";
 import { EditorWindow } from "./EditorWindow.tsx";
+import { faqJsonLd } from "./Faq.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { readingTime } from "./markdown.ts";
 import { Mark, Where } from "./Marks.tsx";
@@ -15,7 +48,41 @@ import "./landing.css";
 const TEASER = ["ilovepdf", "smallpdf", "adobe-acrobat-online", "sejda"];
 const COVERS = ["Tj", "¶", "ƒ", "Aa", "{ }", "Tc"];
 
+const USE_CASES = [
+  {
+    icon: SpellCheck,
+    title: "Fix a typo in a PDF",
+    body: "Click the word, retype it, download. The line keeps its font and spacing and nothing else on the page moves.",
+  },
+  {
+    icon: CalendarDays,
+    title: "Change a date or a name on a contract",
+    body: "Edit the line where it sits. The original words are removed from the file, not covered up.",
+  },
+  {
+    icon: Receipt,
+    title: "Update a price in a quote or invoice",
+    body: "Figures in a table cell are reachable as text, so a number changes without redrawing the table.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Correct a figure in a report",
+    body: "Retype one number in a paragraph and the paragraph reflows inside its own column.",
+  },
+  {
+    icon: ClipboardPen,
+    title: "Fill in a form by typing on the page",
+    body: "Place a text box in Helvetica, Times or Courier anywhere, or type straight into a printed line.",
+  },
+  {
+    icon: Signature,
+    title: "Sign and send it back",
+    body: "Draw a signature or type one in a script face, then download a PDF with nothing uploaded.",
+  },
+];
+
 function Showcase({
+  icon: Icon,
   eyebrow,
   title,
   body,
@@ -24,6 +91,7 @@ function Showcase({
   reverse = false,
   link,
 }: {
+  icon: typeof PenLine;
   eyebrow: string;
   title: React.ReactNode;
   body: string;
@@ -33,8 +101,11 @@ function Showcase({
   link?: { to: string; label: string };
 }) {
   return (
-    <div className={reverse ? "showcase reverse" : "showcase"}>
+    <div className={reverse ? "showcase reverse" : "showcase"} data-reveal>
       <div className="showcase-copy">
+        <span className="showcase-icon" aria-hidden="true">
+          <Icon />
+        </span>
         <p className="eyebrow">{eyebrow}</p>
         <h3 className="h2">{title}</h3>
         <p className="lede">{body}</p>
@@ -60,40 +131,55 @@ function Showcase({
 }
 
 export function Landing() {
+  const questions = FAQ.slice(0, 4);
   useMeta({
     title: `${PRODUCT.name} — ${PRODUCT.tagline}`,
     titleSuffix: false,
     description: PRODUCT.description,
-    jsonLd: {
-      "@context": "https://schema.org",
-      "@type": "WebApplication",
-      name: PRODUCT.name,
-      applicationCategory: "BusinessApplication",
-      operatingSystem: "Web",
-      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-      description: PRODUCT.shortDescription,
-      featureList: [
-        "Edit the text already on the page in its embedded font",
-        "Paragraphs reflow inside their own column",
-        "Bold, italic and regular text in one editable block",
-        "Edits exported as real text in a subset of the page's font",
-        "Pencil, shapes, text boxes, emoji and signatures",
-        "No upload, no account, no file size limit",
-      ],
-    },
+    keywords: [
+      "edit PDF text",
+      "free PDF editor",
+      "online PDF editor no upload",
+      "edit PDF in browser",
+      "change text in PDF",
+      "PDF editor keeps original font",
+    ],
+    jsonLd: [
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        name: PRODUCT.name,
+        url: "/",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        browserRequirements: "Requires JavaScript. Current Chrome, Edge, Firefox or Safari.",
+        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        description: PRODUCT.shortDescription,
+        featureList: [
+          "Edit the text already on the page in its embedded font",
+          "Paragraphs reflow inside their own column",
+          "Bold, italic and regular text in one editable block",
+          "Edits exported as real text in a subset of the page's font",
+          "Pencil, shapes, text boxes, emoji and signatures",
+          "No upload, no account, no file size limit",
+        ],
+      },
+      faqJsonLd(questions),
+    ],
   });
   const teaser = TEASER.map((slug) => COMPETITORS.find((tool) => tool.slug === slug)).filter(
     (tool): tool is NonNullable<typeof tool> => Boolean(tool),
   );
   const posts = POSTS.slice(0, 3);
-  const questions = FAQ.slice(0, 4);
 
   return (
     <>
       <section className="hero">
         <div className="hero-bg" aria-hidden="true" />
         <div className="container hero-copy">
-          <p className="eyebrow">Free browser PDF editor</p>
+          <p className="eyebrow">
+            <Sparkles aria-hidden="true" /> Free browser PDF editor
+          </p>
           <h1 className="display display-xl">
             Edit the text in a PDF <em>without disturbing the page.</em>
           </h1>
@@ -138,41 +224,62 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="container steps-strip" aria-label="How it works in three steps">
-        <div className="step-chip">
-          <span className="step-chip-icon">
-            <FolderOpen aria-hidden="true" />
-          </span>
-          <div>
-            <strong>Open</strong>
-            <span>Drop a PDF. It is read in a worker on your machine.</span>
+      <section className="container" aria-label="How it works in three steps">
+        <div className="steps-strip" data-reveal>
+          <div className="step-chip">
+            <span className="step-chip-icon">
+              <FolderOpen aria-hidden="true" />
+            </span>
+            <div>
+              <strong>Open</strong>
+              <span>Drop a PDF. It is read in a worker on your machine.</span>
+            </div>
+          </div>
+          <span className="step-line" aria-hidden="true" />
+          <div className="step-chip">
+            <span className="step-chip-icon">
+              <MousePointerClick aria-hidden="true" />
+            </span>
+            <div>
+              <strong>Click and type</strong>
+              <span>Any heading, line or paragraph opens in its own font.</span>
+            </div>
+          </div>
+          <span className="step-line" aria-hidden="true" />
+          <div className="step-chip">
+            <span className="step-chip-icon">
+              <Download aria-hidden="true" />
+            </span>
+            <div>
+              <strong>Download</strong>
+              <span>A new PDF with your words as real text.</span>
+            </div>
           </div>
         </div>
-        <span className="step-line" aria-hidden="true" />
-        <div className="step-chip">
-          <span className="step-chip-icon">
-            <MousePointerClick aria-hidden="true" />
-          </span>
-          <div>
-            <strong>Click and type</strong>
-            <span>Any heading, line or paragraph opens in its own font.</span>
-          </div>
-        </div>
-        <span className="step-line" aria-hidden="true" />
-        <div className="step-chip">
-          <span className="step-chip-icon">
-            <Download aria-hidden="true" />
-          </span>
-          <div>
-            <strong>Download</strong>
-            <span>A new PDF with your words as real text.</span>
-          </div>
-        </div>
+        <ul className="trust-strip">
+          <li>
+            <Cpu aria-hidden="true" /> Reads with pdf.js
+          </li>
+          <li>
+            <HardDrive aria-hidden="true" /> Writes with pdf-lib
+          </li>
+          <li>
+            <Code aria-hidden="true" /> Open source
+          </li>
+          <li>
+            <EyeOff aria-hidden="true" /> No analytics, no tracking
+          </li>
+          <li>
+            <Globe aria-hidden="true" /> Chrome, Edge, Firefox, Safari
+          </li>
+        </ul>
       </section>
 
       <section className="section container" id="features">
         <div className="section-head centered">
-          <p className="eyebrow">What it does</p>
+          <p className="eyebrow">
+            <Sparkles aria-hidden="true" /> What it does
+          </p>
           <h2 className="h2">An editor for the page itself, not a layer on top of it.</h2>
           <p className="lede">
             Most "edit PDF" tools put new text over the old. {PRODUCT.name} reads the page's own glyphs, fonts
@@ -181,6 +288,7 @@ export function Landing() {
         </div>
 
         <Showcase
+          icon={PenLine}
           eyebrow="Edit in place"
           title={
             <>
@@ -199,6 +307,7 @@ export function Landing() {
 
         <Showcase
           reverse
+          icon={Type}
           eyebrow="Mixed faces"
           title={
             <>
@@ -216,6 +325,7 @@ export function Landing() {
         />
 
         <Showcase
+          icon={FileDown}
           eyebrow="Export"
           title={
             <>
@@ -234,6 +344,7 @@ export function Landing() {
 
         <Showcase
           reverse
+          icon={Highlighter}
           eyebrow="Annotate"
           title={
             <>
@@ -249,7 +360,7 @@ export function Landing() {
           visual={<AnnotateVisual />}
         />
 
-        <div className="mini-grid">
+        <div className="mini-grid" data-reveal>
           <div className="mini">
             <Layers aria-hidden="true" />
             <strong>Every document at its own link</strong>
@@ -268,10 +379,59 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="section fidelity-section">
-        <div className="container fidelity">
+      <section className="section container">
+        <div className="section-head centered">
+          <p className="eyebrow">
+            <ListChecks aria-hidden="true" /> Use cases
+          </p>
+          <h2 className="h2">Made for the small fixes that used to mean re-exporting the document.</h2>
+          <p className="lede">
+            When the source file is gone, or was never yours, the PDF is the document. {PRODUCT.name} lets you
+            change it without rebuilding it.
+          </p>
+        </div>
+        <div className="usecases" data-reveal>
+          {USE_CASES.map((item) => (
+            <Link key={item.title} to={ROUTES.app} className="usecase">
+              <span className="usecase-icon" aria-hidden="true">
+                <item.icon />
+              </span>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+              <span className="link-arrow">
+                Open the editor <ArrowRight aria-hidden="true" />
+              </span>
+            </Link>
+          ))}
+        </div>
+        <div className="seo-copy" data-reveal>
           <div>
-            <p className="eyebrow">Fidelity</p>
+            <h3>Edit PDF text online, free, without uploading</h3>
+            <p>
+              {PRODUCT.name} is a free online PDF editor that runs entirely in your browser. You can edit the
+              text already in a PDF, change words, numbers and dates in place, and download a new PDF, with no
+              upload, no account and no watermark. Because nothing is sent to a server, there is no file size
+              limit beyond your browser's memory and no daily task counter.
+            </p>
+          </div>
+          <div>
+            <h3>The PDF's own font, not a look-alike</h3>
+            <p>
+              Most PDF editors replace the text you retype with a standard typeface or the closest match from
+              a font library. {PRODUCT.name} edits in the font the PDF embeds, keeps its letter and word
+              spacing, and writes the result back as real text in a subset of that font, so the edited PDF
+              stays searchable and prints exactly as it looks on screen.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="section fidelity-section">
+        <div className="container fidelity" data-reveal>
+          <div>
+            <p className="eyebrow">
+              <Ruler aria-hidden="true" /> Fidelity
+            </p>
             <h2 className="h2">
               Nothing moves when you click. <em>That took work.</em>
             </h2>
@@ -305,9 +465,11 @@ export function Landing() {
       </section>
 
       <section className="band">
-        <div className="container band-inner">
+        <div className="container band-inner" data-reveal>
           <div>
-            <p className="eyebrow">Privacy</p>
+            <p className="eyebrow">
+              <ShieldCheck aria-hidden="true" /> Privacy
+            </p>
             <h2 className="h2">Your document never leaves your device.</h2>
             <p className="lede">
               There is no server. The PDF is parsed by pdf.js in a web worker in your tab, edited there, and
@@ -325,14 +487,16 @@ export function Landing() {
 
       <section className="section container">
         <div className="section-head centered">
-          <p className="eyebrow">Compare</p>
+          <p className="eyebrow">
+            <Scale aria-hidden="true" /> Compare
+          </p>
           <h2 className="h2">How it stands against the tools you have used.</h2>
           <p className="lede">
-            Honest comparisons with sources, checked {PRODUCT.comparisonsCheckedAt}. Where another tool is the
-            better choice, the page says so.
+            Honest comparisons, checked {PRODUCT.comparisonsCheckedAt}. Where another tool is the better choice,
+            the page says so.
           </p>
         </div>
-        <div className="table-wrap">
+        <div className="table-wrap" data-reveal>
           <table className="cmp-table">
             <thead>
               <tr>
@@ -386,10 +550,12 @@ export function Landing() {
 
       <section className="section container">
         <div className="section-head centered">
-          <p className="eyebrow">From the blog</p>
+          <p className="eyebrow">
+            <BookOpen aria-hidden="true" /> From the blog
+          </p>
           <h2 className="h2">Engineering notes, not announcements.</h2>
         </div>
-        <div className="card-grid">
+        <div className="card-grid" data-reveal>
           {posts.map((post, index) => (
             <Link key={post.slug} to={ROUTES.post(post.slug)} className="card post-card-cover">
               <span className="post-cover" aria-hidden="true">
@@ -416,17 +582,20 @@ export function Landing() {
 
       <section className="section container page-narrow">
         <div className="section-head">
-          <p className="eyebrow">Questions</p>
+          <p className="eyebrow">
+            <CircleHelp aria-hidden="true" /> Questions
+          </p>
           <h2 className="h2">The short version.</h2>
         </div>
-        <div className="faq-list" style={{ marginTop: 0 }}>
-          {questions.map((entry) => (
-            <details key={entry.question} className="faq-item" name="landing-faq">
-              <summary>{entry.question}</summary>
-              <Markdown source={entry.answer} className="prose prose-sm" />
-            </details>
-          ))}
-        </div>
+        <Accordion
+          heading="h3"
+          initial={questions[0]?.question ?? null}
+          items={questions.map((entry) => ({
+            id: entry.question,
+            title: entry.question,
+            body: <Markdown source={entry.answer} className="prose prose-sm" />,
+          }))}
+        />
         <p className="actions">
           <Link to={ROUTES.faq} className="link-arrow">
             All questions <ArrowRight aria-hidden="true" />
@@ -435,7 +604,7 @@ export function Landing() {
       </section>
 
       <section className="section container">
-        <div className="cta">
+        <div className="cta" data-reveal>
           <div className="cta-bg" aria-hidden="true" />
           <h2 className="display">Open a PDF and click a line.</h2>
           <p className="lede">Free, in your browser, with nothing to install and nothing to upload.</p>

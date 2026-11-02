@@ -1,11 +1,14 @@
 import { Link } from "react-router";
+import { ArrowRight, Ban, CaseSensitive, FileOutput, FileSearch, Ruler, TextCursorInput, Workflow } from "lucide-react";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { useMeta } from "./useMeta.ts";
 
 const STEPS = [
   {
     n: "01",
+    icon: FileSearch,
     title: "The page is read, not just drawn",
+    summary: "pdf.js renders the page and hands over its text items and the drawing operators that produced them.",
     body: (
       <>
         <p>
@@ -23,22 +26,24 @@ const STEPS = [
   },
   {
     n: "02",
+    icon: CaseSensitive,
     title: "The fonts become typeable",
+    summary: "A corrected copy of each embedded font is registered so every character maps to the glyph the page used.",
     body: (
-      <>
-        <p>
-          pdf.js converts every embedded font to OpenType and registers it in the browser. In those
-          converted fonts each glyph sits at a private-use code and the Unicode entries are only a courtesy,
-          so a ligature can occupy a plain letter's slot. {PRODUCT.name} builds a corrected copy of each
-          face from the glyphs the page actually used, with a Unicode table that maps every character to
-          the glyph the page drew for it, and registers that copy as the face you type in.
-        </p>
-      </>
+      <p>
+        pdf.js converts every embedded font to OpenType and registers it in the browser. In those
+        converted fonts each glyph sits at a private-use code and the Unicode entries are only a courtesy,
+        so a ligature can occupy a plain letter's slot. {PRODUCT.name} builds a corrected copy of each
+        face from the glyphs the page actually used, with a Unicode table that maps every character to
+        the glyph the page drew for it, and registers that copy as the face you type in.
+      </p>
     ),
   },
   {
     n: "03",
+    icon: Ruler,
     title: "Every line is fitted to its printed width",
+    summary: "Letter and word spacing are solved per line so the editor opens exactly as wide as the page drew it.",
     body: (
       <>
         <p>
@@ -59,7 +64,9 @@ const STEPS = [
   },
   {
     n: "04",
+    icon: TextCursorInput,
     title: "You type in the page's own face",
+    summary: "A click samples the page's pixels, snapshots the neighbours and opens a styled-span editor in place.",
     body: (
       <>
         <p>
@@ -78,7 +85,9 @@ const STEPS = [
   },
   {
     n: "05",
+    icon: FileOutput,
     title: "The download is a real PDF with real text",
+    summary: "The original strings leave the content stream and your words are written in a subset of the page's font.",
     body: (
       <>
         <p>
@@ -110,11 +119,26 @@ export function HowItWorks() {
   useMeta({
     title: "How it works",
     description: `How ${PRODUCT.name} reads a PDF, makes its fonts typeable, fits every line to its printed width, and writes edits back as real text, all inside the browser.`,
+    keywords: ["how PDF editing works", "edit PDF in browser", "pdf.js", "embedded fonts", "content stream"],
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "HowTo",
+      name: `How ${PRODUCT.name} edits the text in a PDF`,
+      description: "From a PDF's own glyphs to a cursor you can type with, and back to a PDF.",
+      step: STEPS.map((step, index) => ({
+        "@type": "HowToStep",
+        position: index + 1,
+        name: step.title,
+        text: step.summary,
+      })),
+    },
   });
   return (
     <>
       <section className="section container page-narrow">
-        <p className="eyebrow">How it works</p>
+        <p className="eyebrow">
+          <Workflow aria-hidden="true" /> How it works
+        </p>
         <h1 className="display">From a PDF's own glyphs to a cursor you can type with.</h1>
         <p className="lede">
           A PDF is not a document with paragraphs. It is a list of drawing instructions that happen to
@@ -123,30 +147,40 @@ export function HowItWorks() {
         </p>
       </section>
       <section className="container page-narrow">
-        <ol className="steps">
+        <ol className="timeline">
           {STEPS.map((step) => (
-            <li key={step.n} className="step">
-              <span className="step-n" aria-hidden="true">
-                {step.n}
+            <li key={step.n} className="tl-item" data-reveal>
+              <span className="tl-marker" aria-hidden="true">
+                <step.icon />
               </span>
-              <div className="step-body">
+              <div className="tl-card">
+                <span className="tl-n">Step {step.n}</span>
                 <h2>{step.title}</h2>
-                {step.body}
+                <p className="tl-summary">{step.summary}</p>
+                <div className="tl-body">{step.body}</div>
               </div>
             </li>
           ))}
         </ol>
       </section>
       <section className="section container page-narrow">
-        <h2 className="h2">What it does not do</h2>
-        <ul className="limits">
+        <div className="section-head">
+          <p className="eyebrow">
+            <Ban aria-hidden="true" /> Limits
+          </p>
+          <h2 className="h2">What it does not do</h2>
+        </div>
+        <ul className="limits-grid" data-reveal>
           {LIMITS.map((limit) => (
-            <li key={limit}>{limit}</li>
+            <li key={limit}>
+              <Ban aria-hidden="true" />
+              <span>{limit}</span>
+            </li>
           ))}
         </ul>
         <p className="actions">
           <Link to={ROUTES.app} className="btn btn-primary btn-lg">
-            Open a PDF
+            Open a PDF <ArrowRight aria-hidden="true" />
           </Link>
           <Link to={ROUTES.blog} className="btn btn-secondary btn-lg">
             Read the engineering posts

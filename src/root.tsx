@@ -9,6 +9,7 @@ import { BlogPost } from "./site/BlogPost.tsx";
 import { Compare } from "./site/Compare.tsx";
 import { ComparePage } from "./site/ComparePage.tsx";
 import { HowItWorks } from "./site/HowItWorks.tsx";
+import { Pricing } from "./site/Pricing.tsx";
 import { Privacy } from "./site/Privacy.tsx";
 import { Faq } from "./site/Faq.tsx";
 import { NotFound } from "./site/NotFound.tsx";
@@ -49,6 +50,7 @@ const router = createBrowserRouter([
       { path: "compare", Component: Compare },
       { path: "compare/:slug", Component: ComparePage },
       { path: "how-it-works", Component: HowItWorks },
+      { path: "pricing", Component: Pricing },
       { path: "privacy", Component: Privacy },
       { path: "faq", Component: Faq },
       { path: "*", Component: NotFound },

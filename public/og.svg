@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="0%" r="70%">
+      <stop offset="0%" stop-color="#2b57d0" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#121211" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.3" fill="#ffffff" fill-opacity="0.12"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="#121211"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+  <g transform="translate(80,76)">
+    <rect width="64" height="64" rx="16" fill="#2b57d0"/>
+    <rect x="14" y="19" width="36" height="8" rx="4" fill="#ffffff"/>
+    <circle cx="19" cy="43" r="4.2" fill="#ffffff"/>
+    <circle cx="32" cy="43" r="4.2" fill="#ffffff"/>
+    <circle cx="45" cy="43" r="4.2" fill="#ffffff"/>
+  </g>
+  <text x="164" y="124" font-family="Instrument Serif, Iowan Old Style, Georgia, serif" font-size="48" fill="#f3f1ec">Stet</text>
+  <text x="80" y="268" font-family="Instrument Serif, Iowan Old Style, Georgia, serif" font-size="84" fill="#f3f1ec">Edit the text in a PDF</text>
+  <text x="80" y="362" font-family="Instrument Serif, Iowan Old Style, Georgia, serif" font-size="84" font-style="italic" fill="#8fb0ff">without disturbing the page.</text>
+  <text x="80" y="438" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="28" fill="#c3c0b7">Free browser PDF editor. The page's own font, no upload, no account.</text>
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="22" font-weight="600" fill="#f3f1ec">
+    <rect x="80" y="496" width="168" height="48" rx="24" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18"/>
+    <text x="164" y="527" text-anchor="middle">No upload</text>
+    <rect x="266" y="496" width="178" height="48" rx="24" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18"/>
+    <text x="355" y="527" text-anchor="middle">No account</text>
+    <rect x="462" y="496" width="206" height="48" rx="24" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18"/>
+    <text x="565" y="527" text-anchor="middle">No watermark</text>
+    <rect x="686" y="496" width="236" height="48" rx="24" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18"/>
+    <text x="804" y="527" text-anchor="middle">No file size limit</text>
+  </g>
+</svg>

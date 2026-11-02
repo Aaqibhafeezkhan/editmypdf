@@ -29,6 +29,8 @@ export const ROUTES = {
   compare: "/compare",
   comparison: (slug: string) => `/compare/${slug}`,
   howItWorks: "/how-it-works",
+  pricing: "/pricing",
+  features: "/#features",
   privacy: "/privacy",
   faq: "/faq",
 } as const;

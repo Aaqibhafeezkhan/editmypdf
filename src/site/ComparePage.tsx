@@ -1,10 +1,11 @@
 import { Link, useParams } from "react-router";
-import { Check, Minus } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Minus, Scale } from "lucide-react";
 import { competitorBySlug, COMPETITORS, FEATURE_LABELS, STET, triWord, type Competitor, type Tool } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
+import { Accordion } from "./Accordion.tsx";
 import { Mark, Where } from "./Marks.tsx";
 import { NotFound } from "./NotFound.tsx";
-import { useMeta } from "./useMeta.ts";
+import { breadcrumbs, useMeta } from "./useMeta.ts";
 
 export function ComparePage() {
   const { slug = "" } = useParams();
@@ -31,7 +32,22 @@ function Comparison({ tool }: { tool: Competitor }) {
   const title = `${PRODUCT.name} vs ${tool.name}`;
   useMeta({
     title,
-    description: `${tool.name} compared with ${PRODUCT.name}: where files are processed, free limits, pricing, and whether editing text keeps the original font. Facts checked ${tool.checkedAt}, with sources.`,
+    description: `${tool.name} compared with ${PRODUCT.name}: where files are processed, free limits, pricing, and whether editing text keeps the original font. Facts checked ${tool.checkedAt}.`,
+    keywords: [`${tool.name} alternative`, `${tool.name} vs ${PRODUCT.name}`, `${tool.name} pricing`, "edit PDF text free", "PDF editor comparison"],
+    jsonLd: [
+      breadcrumbs([
+        { name: "Compare", path: ROUTES.compare },
+        { name: title, path: ROUTES.comparison(tool.slug) },
+      ]),
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: title,
+        description: tool.verdict,
+        dateModified: "2026-11-02",
+        author: { "@type": "Organization", name: PRODUCT.name },
+      },
+    ],
   });
   const others = COMPETITORS.filter((item) => item.slug !== tool.slug).slice(0, 3);
   const features = Object.keys(FEATURE_LABELS) as (keyof Tool["features"])[];
@@ -39,12 +55,17 @@ function Comparison({ tool }: { tool: Competitor }) {
   return (
     <>
       <section className="section container">
+        <nav className="crumbs" aria-label="Breadcrumb">
+          <Link to={ROUTES.home}>{PRODUCT.name}</Link>
+          <ChevronRight aria-hidden="true" />
+          <Link to={ROUTES.compare}>Compare</Link>
+          <ChevronRight aria-hidden="true" />
+          <span aria-current="page">{tool.name}</span>
+        </nav>
         <div className="cmp-head">
           <div>
             <p className="eyebrow">
-              <Link to={ROUTES.compare} style={{ color: "inherit", textDecoration: "none" }}>
-                Compare
-              </Link>
+              <Scale aria-hidden="true" /> Comparison
             </p>
             <h1 className="display">
               {PRODUCT.name} <em>vs</em> {tool.name}
@@ -62,7 +83,7 @@ function Comparison({ tool }: { tool: Competitor }) {
       </section>
 
       <section className="container">
-        <div className="table-wrap">
+        <div className="table-wrap" data-reveal>
           <table className="cmp-table glance">
             <thead>
               <tr>
@@ -88,12 +109,7 @@ function Comparison({ tool }: { tool: Competitor }) {
                   </>
                 }
               />
-              <Row
-                names={names}
-                label="File retention"
-                them={tool.processing.retention}
-                us={STET.processing.retention}
-              />
+              <Row names={names} label="File retention" them={tool.processing.retention} us={STET.processing.retention} />
               <Row
                 names={names}
                 label="Account"
@@ -178,7 +194,7 @@ function Comparison({ tool }: { tool: Competitor }) {
       </section>
 
       <section className="section container">
-        <div className="two-col">
+        <div className="two-col" data-reveal>
           <ul className="pro-list them">
             <h3>Where {tool.name} is better</h3>
             {tool.theyWin.map((item) => (
@@ -204,33 +220,47 @@ function Comparison({ tool }: { tool: Competitor }) {
             <span>{tool.changes}</span>
           </p>
         )}
-      </section>
-
-      <section className="container page-narrow" style={{ paddingBottom: "var(--sp-12)" }}>
-        <h2 className="h3" style={{ marginBottom: "var(--sp-3)" }}>
-          Sources
-        </h2>
-        <ol className="sources">
-          {tool.sources.map((source) => (
-            <li key={source.url}>
-              <a href={source.url} rel="noopener noreferrer nofollow" target="_blank">
-                {source.label}
-              </a>{" "}
-              (accessed {source.accessed})
-            </li>
-          ))}
-        </ol>
-        <p className="small muted" style={{ marginTop: "var(--sp-4)" }}>
-          {tool.name} is a product of {tool.vendor}. The name is used only to identify the product being
-          compared. If a fact here is out of date, the source links show where it was read.
-        </p>
+        <div style={{ marginTop: "var(--sp-8)" }}>
+          <Accordion
+            heading="h3"
+            className="sources-acc"
+            items={[
+              {
+                id: "sources",
+                title: "How these facts were checked",
+                body: (
+                  <div className="prose prose-sm">
+                    <p>
+                      Read on {tool.checkedAt} from {tool.vendor.split(",")[0]}'s own pages, with independent
+                      reviews used only to fill gaps. Prices are as the vendor showed them, in the currency
+                      and region seen. Where a vendor publishes nothing, the page says "Not stated".
+                    </p>
+                    <ol className="sources">
+                      {tool.sources.map((source) => (
+                        <li key={source.url}>
+                          <a href={source.url} rel="noopener noreferrer nofollow" target="_blank">
+                            {source.label}
+                          </a>
+                        </li>
+                      ))}
+                    </ol>
+                    <p>
+                      {tool.name} is a product of {tool.vendor}. The name is used only to identify the product
+                      being compared.
+                    </p>
+                  </div>
+                ),
+              },
+            ]}
+          />
+        </div>
       </section>
 
       <section className="container" style={{ paddingBottom: "var(--sp-16)" }}>
         <h2 className="h2" style={{ marginBottom: "var(--sp-6)" }}>
           Other comparisons
         </h2>
-        <div className="card-grid">
+        <div className="card-grid" data-reveal>
           {others.map((other) => (
             <Link key={other.slug} to={ROUTES.comparison(other.slug)} className="card">
               <div className="card-meta">
@@ -240,13 +270,15 @@ function Comparison({ tool }: { tool: Competitor }) {
                 {PRODUCT.name} vs {other.name}
               </h3>
               <p>{other.summary}</p>
-              <span className="link-arrow">Read the comparison →</span>
+              <span className="link-arrow">
+                Read the comparison <ArrowRight aria-hidden="true" />
+              </span>
             </Link>
           ))}
         </div>
         <p className="actions">
           <Link to={ROUTES.app} className="btn btn-primary btn-lg">
-            Try {PRODUCT.name} on a PDF
+            Try {PRODUCT.name} on a PDF <ArrowRight aria-hidden="true" />
           </Link>
           <Link to={ROUTES.compare} className="btn btn-secondary btn-lg">
             All comparisons

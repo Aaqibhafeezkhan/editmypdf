@@ -8,6 +8,9 @@ export type PageMeta = {
   titleSuffix?: boolean;
   description: string;
   type?: "website" | "article";
+  // Absolute or root-relative image for link previews; defaults to the site card.
+  image?: string;
+  keywords?: string[];
   noindex?: boolean;
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
 };
@@ -33,21 +36,32 @@ function setMeta(attribute: "name" | "property", key: string, content: string) {
   );
 }
 
-// Sets the document title, description, Open Graph tags, canonical link and JSON-LD for a page.
+// Sets the document title, description, Open Graph and Twitter tags, canonical link and JSON-LD.
 export function useMeta(meta: PageMeta): void {
   const { pathname } = useLocation();
   const title = meta.titleSuffix === false ? meta.title : `${meta.title} — ${PRODUCT.name}`;
   const { description, type = "website", noindex = false } = meta;
+  const image = meta.image ?? "/og.png";
+  const keywords = meta.keywords?.join(", ") ?? "";
   const jsonLd = meta.jsonLd ? JSON.stringify(meta.jsonLd) : "";
   useEffect(() => {
-    const url = `${siteOrigin()}${pathname === "/" ? "/" : pathname.replace(/\/$/, "")}`;
+    const origin = siteOrigin();
+    const url = `${origin}${pathname === "/" ? "/" : pathname.replace(/\/$/, "")}`;
+    const imageUrl = image.startsWith("http") ? image : `${origin}${image}`;
     document.title = title;
     setMeta("name", "description", description);
     setMeta("name", "robots", noindex ? "noindex, nofollow" : "index, follow");
+    if (keywords) setMeta("name", "keywords", keywords);
+    setMeta("property", "og:site_name", PRODUCT.name);
     setMeta("property", "og:title", title);
     setMeta("property", "og:description", description);
     setMeta("property", "og:type", type);
     setMeta("property", "og:url", url);
+    setMeta("property", "og:image", imageUrl);
+    setMeta("name", "twitter:card", "summary_large_image");
+    setMeta("name", "twitter:title", title);
+    setMeta("name", "twitter:description", description);
+    setMeta("name", "twitter:image", imageUrl);
     setTag(
       'link[rel="canonical"]',
       () => {
@@ -67,5 +81,20 @@ export function useMeta(meta: PageMeta): void {
     } else {
       existing?.remove();
     }
-  }, [pathname, title, description, type, noindex, jsonLd]);
+  }, [pathname, title, description, type, image, keywords, noindex, jsonLd]);
+}
+
+// A BreadcrumbList for a page two or three levels deep.
+export function breadcrumbs(items: { name: string; path: string }[]): Record<string, unknown> {
+  const origin = siteOrigin();
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [{ name: PRODUCT.name, path: "/" }, ...items].map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      item: `${origin}${item.path}`,
+    })),
+  };
 }
