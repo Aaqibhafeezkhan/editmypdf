@@ -107,25 +107,29 @@ const REVEAL = [
 function useReveal(pathname: string) {
   // A layout effect, so the blocks are tagged before the browser paints the new route.
   useLayoutEffect(() => {
-    const nodes = [...document.querySelectorAll<HTMLElement>(REVEAL)].filter((node) => !node.closest("[data-reveal]") || node.hasAttribute("data-reveal"));
+    // The state lives in the data-reveal attribute ("" hidden, "in" shown), never in a class:
+    // React rewrites className whenever a component re-renders with a new one (an accordion
+    // opening, a step becoming active) and would wipe a class set here.
+    const nodes = [...document.querySelectorAll<HTMLElement>(REVEAL)];
     if (nodes.length === 0) return;
     const viewport = window.innerHeight;
     const pending: HTMLElement[] = [];
     const counts = new Map<Element | null, number>();
     for (const node of nodes) {
+      if (node.getAttribute("data-reveal") === "in") continue;
       node.setAttribute("data-reveal", "");
       // Siblings follow one another with a short delay.
       const parent = node.parentElement;
       const index = counts.get(parent) ?? 0;
       counts.set(parent, index + 1);
       node.style.setProperty("--reveal-delay", `${Math.min(index, 8) * 70}ms`);
-      if (node.getBoundingClientRect().top < viewport * 0.92) node.classList.add("in");
+      if (node.getBoundingClientRect().top < viewport * 0.92) node.setAttribute("data-reveal", "in");
       else pending.push(node);
     }
     if (pending.length === 0) return;
     const waiting = new Set(pending);
     const show = (node: HTMLElement) => {
-      node.classList.add("in");
+      node.setAttribute("data-reveal", "in");
       waiting.delete(node);
       observer?.unobserve(node);
     };
