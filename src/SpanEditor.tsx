@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { editSpans } from "./contentEdit.ts";
 import { domText, offsetAt, placeCaret, selectionOffsets } from "./spanDom.ts";
-import { spansText } from "./textLayout.ts";
+import { lineIndent, lineShift, spansText } from "./textLayout.ts";
 import type { PatchAnnotation, TextSpan } from "./types.ts";
 
 // Editor for a text patch: a contentEditable block with one <div> per line and one <span> per
@@ -21,6 +21,8 @@ type View = {
   indent: number;
   softBreaks: number[];
   lineGaps: number[];
+  lineOffsets: number[];
+  lineIndents: number[];
   scale: number;
   showLive: boolean;
 };
@@ -47,7 +49,10 @@ type LineView = { pieces: { text: string; span: TextSpan }[]; soft: boolean };
 function viewKey(model: Model, view: View): string {
   const face = view.face;
   const spans = model.spans
-    .map((span) => `${span.text}\u0000${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${span.fontSize}|${span.color}`)
+    .map(
+      (span) =>
+        `${span.text}\u0000${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${span.fontSize}|${span.color}|${span.letterSpacing ?? ""}`,
+    )
     .join("\u0001");
   return [
     model.text,
@@ -57,6 +62,8 @@ function viewKey(model: Model, view: View): string {
     view.indent,
     view.softBreaks.join(","),
     view.lineGaps.join(","),
+    view.lineOffsets.join(","),
+    view.lineIndents.join(","),
     view.scale,
     view.showLive,
   ].join("\u0002");
@@ -87,9 +94,15 @@ function render(root: HTMLElement, model: Model, view: View): void {
   root.replaceChildren();
   splitLines(model, view.face, view.softBreaks).forEach((line, index) => {
     const block = document.createElement("div");
-    if (index === 0 && view.indent) block.style.textIndent = `${view.indent * view.scale}px`;
-    if (view.align === "justify" && line.soft) block.style.textAlignLast = "justify";
+    const indent = lineIndent(view, index);
+    if (indent) block.style[index === 0 ? "textIndent" : "paddingLeft"] = `${indent * view.scale}px`;
+    // Each of the page's own lines sits where the page put it, not at an even pitch.
+    const shift = index === 0 ? 0 : lineShift(view.lineOffsets, index) - lineShift(view.lineOffsets, index - 1);
+    if (shift) block.style.marginTop = `${shift * view.scale}px`;
+    // A line the page gave a word gap is already exactly as wide as printed; only a line that
+    // flows again after an edit is stretched to the column.
     const gap = view.lineGaps[index];
+    if (view.align === "justify" && line.soft && gap == null) block.style.textAlignLast = "justify";
     if (gap != null) block.style.wordSpacing = `${gap * view.scale}px`;
     for (const piece of line.pieces) {
       const node = document.createElement("span");
@@ -97,6 +110,7 @@ function render(root: HTMLElement, model: Model, view: View): void {
       node.style.fontWeight = String(piece.span.fontWeight);
       node.style.fontStyle = piece.span.fontStyle;
       node.style.fontSize = `${piece.span.fontSize * view.scale}px`;
+      if (piece.span.letterSpacing != null) node.style.letterSpacing = `${piece.span.letterSpacing * view.scale}px`;
       node.style.color = view.showLive ? piece.span.color : "transparent";
       node.textContent = piece.text;
       block.append(node);
@@ -122,10 +136,10 @@ function charAfter(text: string, index: number): number {
   return high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff ? 2 : 1;
 }
 
-function measureRows(root: HTMLElement, lineHeight: number): number {
+function measureRows(root: HTMLElement, lineHeight: number, shifted: number): number {
   const height = root.style.height;
   root.style.height = "0px";
-  const rows = Math.round(root.scrollHeight / Math.max(lineHeight, 1));
+  const rows = Math.round((root.scrollHeight - shifted) / Math.max(lineHeight, 1));
   root.style.height = height;
   return rows;
 }
@@ -166,6 +180,8 @@ export function SpanEditor({
     // Patches made before these fields existed may still be in memory without them.
     softBreaks: patch.softBreaks ?? [],
     lineGaps: patch.lineGaps ?? [],
+    lineOffsets: patch.lineOffsets ?? [],
+    lineIndents: patch.lineIndents ?? [],
     scale,
     showLive,
   };
@@ -186,7 +202,9 @@ export function SpanEditor({
     if (!root) return;
     model.current = next;
     draw(next, caret);
-    latest.current.onEdit(next.text, next.spans, measureRows(root, latest.current.lineHeight));
+    const offsets = latest.current.view.lineOffsets;
+    const shifted = lineShift(offsets, offsets.length - 1) * latest.current.view.scale;
+    latest.current.onEdit(next.text, next.spans, measureRows(root, latest.current.lineHeight, shifted));
   };
 
   const apply = (start: number, end: number, insert: string, caretBefore: number) => {

@@ -1,5 +1,5 @@
 import type { ContentElement } from "./content.ts";
-import { spansText, wrapText } from "./textLayout.ts";
+import { lineShift, spansText, wrapText } from "./textLayout.ts";
 import type { EditCapture } from "./pageInk.ts";
 import { uid, type PatchAnnotation, type PatchTail, type TextSpan } from "./types.ts";
 
@@ -67,7 +67,10 @@ export function layoutTextPatch(
 ): Pick<PatchAnnotation, "text" | "w" | "h"> {
   const lines = wrapText(text, patch);
   const count = Math.max(1, lines.length, measuredLines);
-  const h = Math.max(patch.originH, (count - 1) * patch.lineHeight + patch.fontSize);
+  const h = Math.max(
+    patch.originH,
+    (count - 1) * patch.lineHeight + lineShift(patch.lineOffsets, count - 1) + patch.fontSize,
+  );
   const w = patch.wrap ? patch.originW : Math.max(0, ...lines.map((line) => line.width));
   return { text, w, h };
 }
@@ -84,6 +87,7 @@ export function mergeSpans(spans: TextSpan[]): TextSpan[] {
       last.fontWeight === span.fontWeight &&
       last.fontStyle === span.fontStyle &&
       Math.abs(last.fontSize - span.fontSize) < 0.05 &&
+      Math.abs((last.letterSpacing ?? 0) - (span.letterSpacing ?? 0)) < 0.0015 &&
       closeColors(last.color, span.color)
     ) {
       last.text += span.text;
@@ -110,22 +114,37 @@ function closeColors(a: string, b: string): boolean {
 // An edit lets a block's text flow again: the page's soft line breaks from the edit onward become
 // spaces (lines above it are untouched, so their breaks and gaps still hold), and the span texts
 // follow. Offsets are kept, so the caret does not move.
+type Flowed = {
+  text: string;
+  spans: TextSpan[];
+  softBreaks: number[];
+  lineGaps: number[];
+  lineOffsets: number[];
+  lineIndents: number[];
+};
+
 export function softenBreaks(
-  patch: Pick<PatchAnnotation, "text" | "softBreaks" | "lineGaps">,
+  patch: Pick<PatchAnnotation, "text" | "softBreaks" | "lineGaps" | "lineOffsets" | "lineIndents">,
   text: string,
   spans: TextSpan[],
-): { text: string; spans: TextSpan[]; softBreaks: number[]; lineGaps: number[] } {
+): Flowed {
   const before = patch.text;
   const softBreaks = patch.softBreaks ?? [];
   const lineGaps = patch.lineGaps ?? [];
-  if (text === before) return { text, spans, softBreaks, lineGaps };
+  const lineOffsets = patch.lineOffsets ?? [];
+  const lineIndents = patch.lineIndents ?? [];
+  if (text === before) return { text, spans, softBreaks, lineGaps, lineOffsets, lineIndents };
   let prefix = 0;
   while (prefix < text.length && prefix < before.length && text[prefix] === before[prefix]) prefix += 1;
-  // Lines wholly above the edit keep the gaps the page gave them.
+  // Lines wholly above the edit keep the gaps and positions the page gave them.
   let intact = 0;
   for (let index = 0; index < prefix; index += 1) if (before[index] === "\n") intact += 1;
-  const keptGaps = lineGaps.slice(0, intact);
-  if (softBreaks.length === 0) return { text, spans, softBreaks: [], lineGaps: keptGaps };
+  const kept = {
+    lineGaps: lineGaps.slice(0, intact),
+    lineOffsets: lineOffsets.slice(0, intact),
+    lineIndents: lineIndents.slice(0, intact),
+  };
+  if (softBreaks.length === 0) return { text, spans, softBreaks: [], ...kept };
   let suffix = 0;
   while (
     suffix < text.length - prefix &&
@@ -146,7 +165,7 @@ export function softenBreaks(
     const moved = offset + delta;
     if (text[moved] === "\n") soften.add(moved);
   }
-  if (soften.size === 0) return { text, spans, softBreaks: keep, lineGaps: keptGaps };
+  if (soften.size === 0) return { text, spans, softBreaks: keep, ...kept };
   let next = "";
   for (let index = 0; index < text.length; index += 1) next += soften.has(index) ? " " : text[index];
   let cursor = 0;
@@ -158,7 +177,7 @@ export function softenBreaks(
     cursor += span.text.length;
     return { ...span, text: piece };
   });
-  return { text: next, spans: nextSpans, softBreaks: keep, lineGaps: keptGaps };
+  return { text: next, spans: nextSpans, softBreaks: keep, ...kept };
 }
 
 // Replaces text[from, to) with `insert` inside a list of spans. The inserted text takes the face of
@@ -230,6 +249,7 @@ export function textPatch(element: ContentElement, color: string, capture: EditC
       fontSize: span.fontSize,
       color: span.color || color || element.color,
       pdfFont: span.pdfFont,
+      ...(span.letterSpacing != null ? { letterSpacing: span.letterSpacing } : {}),
     })),
   );
   return {
@@ -262,6 +282,8 @@ export function textPatch(element: ContentElement, color: string, capture: EditC
     wordSpacing: element.wordSpacing || 0,
     softBreaks: wrap ? [...element.softBreaks] : [],
     lineGaps: wrap ? [...element.lineGaps] : [],
+    lineOffsets: wrap ? [...element.lineOffsets] : [],
+    lineIndents: wrap ? [...element.lineIndents] : [],
     wrap,
     spans,
     image: "",
@@ -302,6 +324,8 @@ export function graphicPatch(element: ContentElement, image: string): PatchAnnot
     wordSpacing: 0,
     softBreaks: [],
     lineGaps: [],
+    lineOffsets: [],
+    lineIndents: [],
     wrap: false,
     spans: [],
     image,

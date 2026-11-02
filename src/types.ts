@@ -177,6 +177,9 @@ export type TextSpan = {
   color: string;
   // pdf.js name of the font the run was set in; identifies the face when the page is read again.
   pdfFont: string;
+  // The run's own extra advance after every character, in page units, when it differs from the
+  // patch's (a tracked word inside a line); absent means the patch's applies.
+  letterSpacing?: number;
 };
 
 export type PatchTail = {
@@ -224,6 +227,13 @@ export type PatchAnnotation = Base & {
   // Extra advance after every space on each of the page's own lines, in page units, for as long
   // as that line is untouched: a generator may stretch a line only part of the way to the column.
   lineGaps: number[];
+  // How far each of the page's own lines sits below where an even line pitch would put it, in
+  // page units, for as long as that line is untouched: pages rarely space their lines evenly to
+  // the point.
+  lineOffsets: number[];
+  // How far in from the block's left edge each of the page's own lines starts, in page units, for
+  // as long as that line is untouched: a list or a table of contents indents its lines unevenly.
+  lineIndents: number[];
   wrap: boolean;
   // Styled runs when the text mixes faces (a bold or italic word inside a paragraph); empty for a
   // single-face patch, whose face is the fields above.

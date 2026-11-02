@@ -10,7 +10,7 @@ import {
 } from "pdf-lib";
 import { readPageContent, type ContentElement } from "./content.ts";
 import { editCover, refreshPatchFace } from "./contentEdit.ts";
-import { paintRun } from "./textLayout.ts";
+import { blockWidth, paintRun } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { rotatePoint } from "./geometry.ts";
 import { arrowBarbs, isBoxShape, isOpenShape, outlinePoints, pointsToPath } from "./shapes.ts";
@@ -258,7 +258,9 @@ async function drawPatch(
   const embedded = src ? embedPngDataUrl(document, src) : null;
   if (embedded) {
     const image = await embedded;
-    drawMappedRect(page, map, annotation.page, annotation, image);
+    // The painted run is as wide as the editor's box, slack included, so it lands at the same scale.
+    const box = annotation.role === "text" ? { ...annotation, w: blockWidth(annotation) } : annotation;
+    drawMappedRect(page, map, annotation.page, box, image);
   }
   const delta = annotation.w - annotation.originW;
   if (annotation.role !== "text" || annotation.wrap || Math.abs(delta) < 0.4) return;

@@ -30,6 +30,8 @@ type Layout = Face &
     spans?: TextSpan[];
     softBreaks?: number[];
     lineGaps?: number[];
+    lineOffsets?: number[];
+    lineIndents?: number[];
   };
 
 // A piece of one span that falls inside a laid-out line.
@@ -100,9 +102,10 @@ function pieces(text: string, from: number, to: number, face: Face, spans: TextS
   return result;
 }
 
-// A span's face with the patch's letter and word spacing, which every run of a patch shares.
+// A span's face with its spacing: its own letter spacing when the page tracked it apart from the
+// rest, else the patch's, and the patch's word spacing, which every run of a patch shares.
 function spaced(span: TextSpan, patch: Face): Face {
-  return { ...span, letterSpacing: patch.letterSpacing ?? 0, wordSpacing: patch.wordSpacing ?? 0 };
+  return { ...span, letterSpacing: span.letterSpacing ?? patch.letterSpacing ?? 0, wordSpacing: patch.wordSpacing ?? 0 };
 }
 
 // The face for the text's `paragraph`th line between newlines: one of the page's own lines, while
@@ -129,6 +132,29 @@ export function blockWidth(patch: Pick<PatchAnnotation, "wrap" | "originW" | "w"
   return patch.wrap ? patch.originW + WRAP_SLACK : Math.max(patch.w, 1);
 }
 
+// How far the `index`th line starts in from the block's edge: where the page put it while the
+// line is its own, else the first-line indent, or for a hanging indent (a negative `indent`) the
+// amount every later line is set in by.
+export function lineIndent(patch: Pick<Layout, "indent" | "lineIndents">, index: number): number {
+  const own = patch.lineIndents?.[index];
+  if (own != null) return own;
+  return index === 0 ? Math.max(0, patch.indent) : Math.max(0, -patch.indent);
+}
+
+// How far below an even line pitch the `index`th line sits. Lines the page positioned carry
+// their own offset; a line flowing after them keeps the last one's, so it follows at an even pitch.
+export function lineShift(offsets: number[] | undefined, index: number): number {
+  if (!offsets || offsets.length === 0 || index < 0) return 0;
+  return offsets[Math.min(index, offsets.length - 1)] ?? 0;
+}
+
+// The width centred and right-aligned lines are set against: the page's own, since the wrap
+// slack would move them; lines flowing left use the slack.
+function alignWidth(patch: Layout): number {
+  if (patch.align === "center" || patch.align === "right") return patch.wrap ? patch.originW : Math.max(patch.w, 1);
+  return blockWidth(patch);
+}
+
 function tokens(text: string): string[] {
   return text.match(/\S+?-(?=[^\s\d-])|\S+\s*|\s+/g) ?? [];
 }
@@ -153,7 +179,7 @@ export function wrapText(text: string, patch: Layout): LaidLine[] {
     let lineStart = cursor;
     let lineText = "";
     for (const token of tokens(paragraph)) {
-      const available = limit - (lines.length === 0 ? patch.indent : 0);
+      const available = limit - lineIndent(patch, lines.length);
       const candidate = (lineText + token).trimEnd().length;
       if (lineText && rangeWidth(text, lineStart, lineStart + candidate, face, spans) > available) {
         lines.push(laid(text, lineText, lineStart, face, spans, false));
@@ -176,19 +202,63 @@ function countSpaces(text: string): number {
 
 // Where a laid-out line starts inside the block, and how much extra width each space gets when justified.
 export function lineX(patch: Layout, line: LaidLine, index: number, total: number): { x: number; extra: number } {
-  const indent = index === 0 ? patch.indent : 0;
-  const slack = blockWidth(patch) - indent - line.width;
+  const indent = lineIndent(patch, index);
+  const slack = alignWidth(patch) - indent - line.width;
   if (patch.align === "center") return { x: indent + slack / 2, extra: 0 };
   if (patch.align === "right") return { x: indent + slack, extra: 0 };
-  if (patch.align === "justify" && !line.hard && index < total - 1) {
+  // A line the page gave a word gap is set exactly as printed and is not stretched.
+  const gapped = patch.lineGaps?.[paragraphOf(patch.text, line.start)] != null;
+  if (patch.align === "justify" && !line.hard && index < total - 1 && !gapped) {
     const spaces = countSpaces(line.text.trimEnd());
     return { x: indent, extra: spaces > 0 && slack > 0 ? slack / spaces : 0 };
   }
   return { x: indent, extra: 0 };
 }
 
-// Distance from the top of a CSS line box to the alphabetic baseline for this face and line height.
+const baselineCache = new Map<string, number>();
+let baselineProbe: { root: HTMLDivElement; marker: HTMLSpanElement } | null = null;
+
+// Distance from the top of a CSS line box to the alphabetic baseline for this face and line
+// height, in page units. The browser rounds a font's ascent and descent to whole pixels when it
+// builds a line box, so the offset is measured on a hidden line set exactly like the editor's
+// rather than computed from the font's metrics.
 export function lineBaselineOffset(patch: Layout, scale: number): number {
+  const size = patch.fontSize * scale;
+  const lineHeight = patch.lineHeight * scale;
+  const css = fontCss(patch, size);
+  if (typeof document === "undefined" || !document.body) return metricBaselineOffset(patch, scale);
+  const key = `${css}|${lineHeight}`;
+  const cached = baselineCache.get(key);
+  if (cached != null) return cached / scale;
+  if (!baselineProbe) {
+    const root = document.createElement("div");
+    root.setAttribute("aria-hidden", "true");
+    root.style.cssText =
+      "position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;white-space:pre;font-kerning:none;font-variant-ligatures:none;padding:0;border:0;margin:0";
+    const marker = document.createElement("span");
+    marker.style.cssText = "display:inline-block;width:0;height:0;vertical-align:baseline";
+    root.append(document.createTextNode("Hg"), marker);
+    baselineProbe = { root, marker };
+  }
+  const { root, marker } = baselineProbe;
+  root.style.font = css;
+  root.style.lineHeight = `${lineHeight}px`;
+  document.body.append(root);
+  const offset = marker.getBoundingClientRect().top - root.getBoundingClientRect().top;
+  root.remove();
+  if (!Number.isFinite(offset) || offset <= 0) return metricBaselineOffset(patch, scale);
+  // A face still loading measures with its fallback; only a settled face is worth remembering.
+  let settled = true;
+  try {
+    settled = document.fonts.check(css);
+  } catch {
+    settled = true;
+  }
+  if (settled) baselineCache.set(key, offset);
+  return offset / scale;
+}
+
+function metricBaselineOffset(patch: Layout, scale: number): number {
   const size = patch.fontSize * scale;
   let ascent = patch.ascent * size;
   let descent = Math.max(0, size - ascent);
@@ -213,7 +283,15 @@ export function editorTop(patch: Layout, scale: number): number {
 export function caretIndexAt(patch: PatchAnnotation, point: Point, scale: number): number {
   const lines = wrapText(patch.text, patch);
   const top = editorTop(patch, scale);
-  const row = Math.max(0, Math.min(lines.length - 1, Math.floor((point.y - top) / Math.max(patch.lineHeight, 1))));
+  // The row whose box holds the point, the rows sitting where the page put them.
+  let row = lines.length - 1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const rowTop = top + index * patch.lineHeight + lineShift(patch.lineOffsets, index);
+    if (point.y < rowTop + patch.lineHeight) {
+      row = index;
+      break;
+    }
+  }
   const line = lines[row];
   if (!line) return patch.text.length;
   const { x, extra } = lineX(patch, line, row, lines.length);
@@ -259,7 +337,7 @@ export async function paintRun(patch: PatchAnnotation): Promise<string> {
   context.fontKerning = "none";
   context.textBaseline = "alphabetic";
   lines.forEach((line, index) => {
-    const y = (patch.ascent * patch.fontSize + index * patch.lineHeight) * zoom;
+    const y = (patch.ascent * patch.fontSize + index * patch.lineHeight + lineShift(patch.lineOffsets, index)) * zoom;
     const { x, extra } = lineX(patch, line, index, lines.length);
     const end = line.start + line.text.trimEnd().length;
     const lineFace = paragraphFace(patch, paragraphOf(patch.text, line.start));

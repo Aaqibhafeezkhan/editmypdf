@@ -15,7 +15,7 @@ import {
 import { captureEdit } from "./pageInk.ts";
 import { SpanEditor } from "./SpanEditor.tsx";
 import { domText, placeCaret } from "./spanDom.ts";
-import { blockWidth, caretIndexAt, editorTop, fontCss as faceCss } from "./textLayout.ts";
+import { blockWidth, caretIndexAt, editorTop, fontCss as faceCss, lineShift, WRAP_SLACK } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { boundsOf, dist, hitTest, resizeAnnotation, rotateBy, rotatePoint, shapeFromDrag, translate } from "./geometry.ts";
 import { detailCanvas, startRender } from "./pdf.ts";
@@ -1218,10 +1218,15 @@ export function PageStage({
             showLive && underlineAt >= 0
               ? { ...baseCover, h: Math.max(baseCover.h, patch.y + underlineAt + 1.4 - baseCover.y) }
               : baseCover;
-          const rows = Math.max(1, Math.round((patch.h - patch.fontSize) / Math.max(patch.lineHeight, 1)) + 1);
+          const offsets = patch.lineOffsets ?? [];
+          const shifted = lineShift(offsets, offsets.length - 1);
+          const rows = Math.max(1, Math.round((patch.h - patch.fontSize - shifted) / Math.max(patch.lineHeight, 1)) + 1);
           const editorWidth = patch.wrap
             ? blockWidth(patch)
             : Math.max(patch.w, patch.fontSize * 0.4) + patch.fontSize * 0.6;
+          // The wrap slack widens the box to the right; centred and right-aligned lines are set
+          // against the page's own width, so the box moves left to keep them in place.
+          const slackShift = !patch.wrap ? 0 : patch.align === "center" ? WRAP_SLACK / 2 : patch.align === "right" ? WRAP_SLACK : 0;
           const overflowing = patch.role === "text" && patch.h > patch.originH + 1;
           const coverClass = [
             "content-cover",
@@ -1233,17 +1238,17 @@ export function PageStage({
             .join(" ");
           const editorLabel = `Edit ${live ? contentLabel(live.kind).toLowerCase() : "text"}`;
           const editorStyle: CSSProperties = {
-            left: patch.x * scale,
+            left: (patch.x - slackShift) * scale,
             top: editorTop(patch, scale) * scale,
             width: editorWidth * scale,
-            height: (rows * patch.lineHeight + patch.fontSize * 0.3) * scale,
+            height: (rows * patch.lineHeight + shifted + patch.fontSize * 0.3) * scale,
             fontFamily: patch.fontFamily,
             fontWeight: patch.fontWeight,
             fontStyle: patch.fontStyle,
             fontSize: patch.fontSize * scale,
             lineHeight: `${patch.lineHeight * scale}px`,
             textAlign: patch.align,
-            textIndent: patch.indent * scale,
+            textIndent: Math.max(0, patch.indent) * scale,
             fontKerning: "none",
             fontVariantLigatures: "none",
             letterSpacing: `${patch.letterSpacing * scale}px`,
@@ -1314,7 +1319,14 @@ export function PageStage({
               if (item.id !== patch.id || item.kind !== "patch") return item;
               const flowed = softenBreaks(item, value, spans);
               shown = flowed.text;
-              const styled = { ...item, spans: flowed.spans, softBreaks: flowed.softBreaks, lineGaps: flowed.lineGaps };
+              const styled = {
+                ...item,
+                spans: flowed.spans,
+                softBreaks: flowed.softBreaks,
+                lineGaps: flowed.lineGaps,
+                lineOffsets: flowed.lineOffsets,
+                lineIndents: flowed.lineIndents,
+              };
               const rows = flowed.text === value ? measured : 0;
               return { ...styled, ...layoutTextPatch(styled, flowed.text, rows) };
             });

@@ -140,6 +140,9 @@ function spanList(value: unknown, text: string): TextSpan[] {
       fontSize: number(span.fontSize, 12),
       color: typeof span.color === "string" ? span.color : "#111111",
       pdfFont: typeof span.pdfFont === "string" ? span.pdfFont : "",
+      ...(typeof span.letterSpacing === "number" && Number.isFinite(span.letterSpacing)
+        ? { letterSpacing: span.letterSpacing }
+        : {}),
     });
   }
   return spans.map((span) => span.text).join("") === text ? spans : [];
@@ -252,6 +255,12 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
           : [],
         lineGaps: Array.isArray(patch.lineGaps)
           ? patch.lineGaps.map((gap) => number(gap, 0))
+          : [],
+        lineOffsets: Array.isArray(patch.lineOffsets)
+          ? patch.lineOffsets.map((offset) => number(offset, 0))
+          : [],
+        lineIndents: Array.isArray(patch.lineIndents)
+          ? patch.lineIndents.map((indent) => number(indent, 0))
           : [],
         wrap: patch.wrap === true,
         spans: role === "text" ? spanList(patch.spans, text) : [],
