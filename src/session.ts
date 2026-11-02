@@ -241,6 +241,7 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
         fontStyle: patch.fontStyle === "italic" ? "italic" : "normal",
         fontSize: number(patch.fontSize, 12),
         color: typeof patch.color === "string" ? patch.color : "#111111",
+        pdfFont: typeof patch.pdfFont === "string" ? patch.pdfFont : "",
         ascent: number(patch.ascent, 0.8),
         lineHeight: number(patch.lineHeight, number(patch.h, 12)),
         align:

@@ -211,6 +211,10 @@ export type PatchAnnotation = Base & {
   fontStyle: "normal" | "italic";
   fontSize: number;
   color: string;
+  // pdf.js name of the font a single-face patch is set in (a mixed-face patch names them per
+  // span); it finds the face's bytes when the edit is written back as text. Empty for graphics
+  // and for patches saved before it existed.
+  pdfFont: string;
   ascent: number;
   lineHeight: number;
   align: TextAlign;
