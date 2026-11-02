@@ -1,6 +1,9 @@
 // Blog posts, written from the editor's own source. Each body is Markdown; raw HTML inside it is
 // allowed for figures. Keep every technical claim checkable against src/.
 
+// One of the site's palette hues (index.css); the card cover and the post page take it.
+export type Hue = "accent" | "coral" | "teal" | "violet";
+
 export type Post = {
   slug: string;
   title: string;
@@ -8,6 +11,9 @@ export type Post = {
   // ISO date, used for ordering and display.
   date: string;
   tags: string[];
+  // The card cover: a short glyph set in the display face (an operator, a symbol, a pair of
+  // letters) on a tinted page in one of the palette hues. Drawn by PostCard.tsx, no image files.
+  cover: { glyph: string; hue: Hue };
   body: string;
 };
 
@@ -329,6 +335,7 @@ export const POSTS: Post[] = [
       "How PDF Edit removes the original strings from a page's content stream, embeds a subset of the font pdf.js decoded, and writes your edit as positioned text rather than a picture.",
     date: "2026-10-28",
     tags: ["export", "fonts", "pdf-lib"],
+    cover: { glyph: "Tj", hue: "accent" },
     body: EXPORT,
   },
   {
@@ -338,6 +345,7 @@ export const POSTS: Post[] = [
       "Covered text, tables, Type 3 fonts, form XObjects, phantom spaces and the lines you did not touch: the deliberate limits of editing a PDF in place.",
     date: "2026-10-21",
     tags: ["limits", "design"],
+    cover: { glyph: "Ø", hue: "coral" },
     body: LEAVES_ALONE,
   },
   {
@@ -347,6 +355,7 @@ export const POSTS: Post[] = [
       "A textarea holds one font. A paragraph with a bold lead-in needs a contentEditable editor that owns its DOM, maps every edit into styled spans and keeps the page's line layout.",
     date: "2026-10-14",
     tags: ["editor", "fonts"],
+    cover: { glyph: "Aa", hue: "violet" },
     body: MIXED,
   },
   {
@@ -356,6 +365,7 @@ export const POSTS: Post[] = [
       "Fitting every run and line to its printed width, keeping a block's own baselines and breaks, measuring the baseline in the browser, and reading colour from the pixels.",
     date: "2026-10-07",
     tags: ["fidelity", "layout"],
+    cover: { glyph: "Tw", hue: "teal" },
     body: EXACT,
   },
   {
@@ -365,6 +375,7 @@ export const POSTS: Post[] = [
       "pdf.js in a web worker, pdf-lib for writing, IndexedDB for storage and no server at all. What that architecture buys, what it costs, and how to verify it.",
     date: "2026-09-30",
     tags: ["privacy", "architecture"],
+    cover: { glyph: "{ }", hue: "teal" },
     body: PRIVACY_POST,
   },
   {
@@ -374,12 +385,24 @@ export const POSTS: Post[] = [
       "No paragraphs, subset fonts with no space glyph, spacing operators that leak, phantom spaces, mixed faces and browsers that round: the real reasons a click can shift a line.",
     date: "2026-09-16",
     tags: ["fonts", "pdf"],
+    cover: { glyph: "¶", hue: "violet" },
     body: WHY_HARD,
   },
 ];
 
 export function postBySlug(slug: string): Post | undefined {
   return POSTS.find((post) => post.slug === slug);
+}
+
+// Up to `count` other posts, the ones sharing the most tags first; when fewer than `count` share a
+// tag, the most recent remaining posts fill the list so the section is never empty.
+export function relatedPosts(post: Post, count = 3): Post[] {
+  const shared = (other: Post) => other.tags.filter((tag) => post.tags.includes(tag)).length;
+  return POSTS.filter((other) => other.slug !== post.slug)
+    .map((other, index) => ({ other, score: shared(other), index }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, count)
+    .map((entry) => entry.other);
 }
 
 export function formatDate(iso: string): string {

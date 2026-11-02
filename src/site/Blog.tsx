@@ -1,8 +1,7 @@
-import { Link } from "react-router";
 import { BookOpen } from "lucide-react";
-import { formatDate, POSTS } from "../data/posts.ts";
+import { POSTS } from "../data/posts.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
-import { readingTime } from "./markdown.ts";
+import { PostCard } from "./PostCard.tsx";
 import { useMeta } from "./useMeta.ts";
 
 export function Blog() {
@@ -33,18 +32,9 @@ export function Blog() {
           announcements, just the engineering.
         </p>
       </div>
-      <div className="post-list">
+      <div className="post-grid">
         {POSTS.map((post) => (
-          <Link key={post.slug} to={ROUTES.post(post.slug)} className="post-card">
-            <div>
-              <time dateTime={post.date}>{formatDate(post.date)}</time>
-              <div className="post-meta">{readingTime(post.body)} min read</div>
-            </div>
-            <div>
-              <h2>{post.title}</h2>
-              <p>{post.description}</p>
-            </div>
-          </Link>
+          <PostCard key={post.slug} post={post} heading="h2" />
         ))}
       </div>
     </section>
