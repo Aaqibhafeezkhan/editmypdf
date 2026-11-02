@@ -135,8 +135,6 @@ Variables; the Pages workflow passes them on):
   it. The privacy page, FAQ, terms and landing page describe that state automatically. Without it
   the site stays script-free and says so.
 
-`docs/seo-plan.md` has the plan, the keywords and what only the owner can do.
-
 ## Routes
 
 | Path                | What it is                                                  |
