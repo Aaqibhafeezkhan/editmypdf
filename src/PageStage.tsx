@@ -232,6 +232,16 @@ export function PageStage({
   const caretRef = useRef<{ id: string; index: number } | null>(null);
   const [seen, setSeen] = useState(pageIndex === 0);
   const [content, setContent] = useState<ContentElement[]>([]);
+  // Editors are placed by measuring their face; a face pdf.js registers after an editor opened
+  // (the first click right after a document opens) moves the baseline by a point, so the page
+  // lays its editors out again whenever a font finishes loading.
+  const [, setFontTick] = useState(0);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onDone = () => setFontTick((tick) => tick + 1);
+    document.fonts.addEventListener("loadingdone", onDone);
+    return () => document.fonts.removeEventListener("loadingdone", onDone);
+  }, []);
   const [hoverContent, setHoverContent] = useState<string | null>(null);
   const contentRef = useRef<ContentElement[]>([]);
 
