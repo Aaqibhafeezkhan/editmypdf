@@ -6,6 +6,7 @@ import {
   Check,
   CircleHelp,
   ClipboardPen,
+  CloudOff,
   Code,
   Cpu,
   Download,
@@ -26,9 +27,11 @@ import {
   Signature,
   Sparkles,
   SpellCheck,
+  Terminal,
   TrendingUp,
   Type,
   Undo2,
+  UserX,
   ZoomIn,
 } from "lucide-react";
 import { COMPETITORS, OURS } from "../data/competitors.ts";
@@ -464,24 +467,57 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="band">
-        <div className="container band-inner" data-reveal>
-          <div>
-            <p className="eyebrow">
-              <ShieldCheck aria-hidden="true" /> Privacy
-            </p>
-            <h2 className="h2">Your document never leaves your device.</h2>
+      <section className="privacy-band" id="privacy">
+        <div className="privacy-bg" aria-hidden="true" />
+        <div className="container">
+          <div className="privacy-head" data-reveal>
+            <span className="privacy-shield" aria-hidden="true">
+              <ShieldCheck />
+            </span>
+            <p className="eyebrow">Privacy</p>
+            <h2 className="h2">
+              Your document <em>never leaves your device.</em>
+            </h2>
             <p className="lede">
               There is no server. The PDF is parsed by pdf.js in a web worker in your tab, edited there, and
               rewritten by pdf-lib in the same tab. The only network requests are for the app's own files.
             </p>
-            <p className="actions">
-              <Link to={ROUTES.privacy} className="link-arrow">
-                What is stored, and where <ArrowRight aria-hidden="true" />
-              </Link>
-            </p>
           </div>
-          <PrivacyDiagram />
+          <div className="privacy-grid" data-reveal>
+            <PrivacyDiagram />
+            <ul className="privacy-proofs">
+              <li>
+                <CloudOff aria-hidden="true" />
+                <strong>No upload</strong>
+                <span>The code has no endpoint to send a file to. Your document exists in this browser and nowhere else.</span>
+              </li>
+              <li>
+                <UserX aria-hidden="true" />
+                <strong>No account</strong>
+                <span>Nothing to sign up for, nothing to log, nothing that could leak.</span>
+              </li>
+              <li>
+                <EyeOff aria-hidden="true" />
+                <strong>No tracking</strong>
+                <span>No analytics script, no error reporter, no third-party embed on any page.</span>
+              </li>
+            </ul>
+          </div>
+          <div className="privacy-verify" data-reveal>
+            <Terminal aria-hidden="true" />
+            <p>
+              <strong>Verify it yourself.</strong> Open your browser's developer tools, choose Network, then open
+              and edit a PDF. You will see requests for the app's own files and nothing else.
+            </p>
+            <div className="privacy-links">
+              <Link to={ROUTES.privacy} className="btn btn-secondary">
+                What is stored, and where
+              </Link>
+              <Link to={ROUTES.post("nothing-leaves-your-browser")} className="link-arrow">
+                The architecture post <ArrowRight aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 
