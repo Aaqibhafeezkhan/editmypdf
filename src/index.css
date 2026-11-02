@@ -198,6 +198,13 @@ body {
   line-height: var(--lh-normal);
   color: var(--ink-0);
   background: var(--paper-0);
+}
+
+/* Smoothing is set on the marketing pages only. The editor draws the page's own text in the DOM
+   over a canvas rendering of the same page, and on macOS "antialiased" text is visibly thinner
+   than canvas text, so an edited line would look lighter the moment it opened. The editor keeps
+   the browser's default, which matches the canvas. */
+.site {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

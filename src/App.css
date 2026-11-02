@@ -182,6 +182,9 @@
 .pages {
   height: 100%;
   overflow: auto;
+  /* The page area keeps the browser's default typography so nothing the site sets on body
+     (line height, smoothing) reaches the overlays drawn over the canvas. */
+  line-height: normal;
   display: flex;
   flex-direction: column;
   align-items: center;
