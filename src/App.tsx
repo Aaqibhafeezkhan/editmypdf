@@ -470,7 +470,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
         // the whole document's glyphs lets the faces rebuilt for the open pages cover the
         // letters the other pages drew. The scan starts before the first page is read, which
         // waits a moment for it.
-        void scanType3Fonts(next.pages);
+        void scanType3Fonts(next.bytes, next.doc.loadingTask.docId);
         setLoaded(next);
       } catch (cause) {
         if (!cancelled && loadId.current === id) {

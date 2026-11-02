@@ -55,6 +55,27 @@ function registry(name: string): Registry {
   return entry;
 }
 
+// Makes two pdf.js documents share one pool: the document the page shows and a second copy of
+// the same file that is never painted. pdf.js caches a glyph procedure's path as a Path2D, in
+// place, the first time it paints the glyph, and the numbers are gone from then on; the copy's
+// procedures stay numbers, so faces are built from them whatever the page has painted.
+export function linkType3Documents(docId: string, shadowId: string): void {
+  const shadow = registry(`g_${shadowId}_`);
+  registries.set(`g_${docId}`, shadow);
+}
+
+// Whether a glyph procedure still holds its path as numbers (see linkType3Documents).
+function numericPaths(proc: Proc): boolean {
+  for (let index = 0; index < proc.fnArray.length; index += 1) {
+    if (proc.fnArray[index] !== OPS.constructPath) continue;
+    const args = proc.argsArray[index];
+    const data = Array.isArray(args) && Array.isArray(args[1]) ? args[1][0] : undefined;
+    if (data == null) continue;
+    if (!(data instanceof Float32Array) && !(data instanceof Float64Array) && !Array.isArray(data)) return false;
+  }
+  return true;
+}
+
 // The glyphs each Type3 font draws on a page, by pdf.js font name and character, read from the
 // page's own text operators (the main thread's font object cannot map characters itself).
 export function collectType3Glyphs(fnArray: number[], argsArray: unknown[]): Map<string, Map<string, Type3Glyph>> {
@@ -192,14 +213,21 @@ async function rebuild(pool: Registry): Promise<void> {
 type Pooled = { glyph: Type3Glyph; lookup: (id: string) => Proc | undefined };
 
 // Every glyph of a group, each with the procedures of the font that drew it; the first font to
-// draw a character keeps it.
+// draw a character keeps it. A procedure the page has already painted (its path a Path2D now)
+// is passed over for another font's, and left out when no font still has the numbers: the
+// letter then comes from the fallback face rather than drawing as nothing.
 function unionGlyphs(group: Type3Member[]): Map<string, Pooled> {
   const glyphs = new Map<string, Pooled>();
   for (const member of group) {
     const procs = member.font.charProcOperatorList;
     if (!procs) continue;
     const lookup = (id: string): Proc | undefined => (procs instanceof Map ? procs.get(id) : (procs as Record<string, Proc>)[id]);
-    for (const [unicode, glyph] of member.glyphs) if (!glyphs.has(unicode)) glyphs.set(unicode, { glyph, lookup });
+    for (const [unicode, glyph] of member.glyphs) {
+      if (glyphs.has(unicode)) continue;
+      const proc = lookup(glyph.operatorListId);
+      if (!proc || !numericPaths(proc)) continue;
+      glyphs.set(unicode, { glyph, lookup });
+    }
   }
   return glyphs;
 }
@@ -256,6 +284,8 @@ async function build(
     if (!proc) continue;
     const path = outline(opentype, proc, toUnits);
     if (!path) return null;
+    // A procedure without numbers (see linkType3Documents) must not become a blank glyph.
+    if (path.commands.length === 0 && glyph.unicode.trim()) continue;
     seen.add(code);
     const advance = Math.round(glyph.width * fontMatrix[0] * unitsPerEm);
     list.push(
