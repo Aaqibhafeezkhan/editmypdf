@@ -659,9 +659,16 @@ export function PageStage({
       return;
     }
     if (isTextContent(element.kind)) {
+      // Colours and the backdrop are read from a 4x rendering of the page when one is ready.
+      // Rendering it waits on pdf.js's worker, which is still reading the neighbouring pages for
+      // several seconds after a document opens, so the first click on a heavy page would open
+      // nothing for that long. The page's own canvas stands in until the detail is ready.
       let source = canvas;
       try {
-        source = await detailCanvas(page);
+        source = await Promise.race([
+          detailCanvas(page),
+          new Promise<HTMLCanvasElement>((resolve) => window.setTimeout(() => resolve(canvas), 250)),
+        ]);
       } catch {
         source = canvas;
       }
