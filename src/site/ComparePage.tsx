@@ -3,7 +3,8 @@ import { ArrowRight, Check, ChevronRight, Minus, Scale } from "lucide-react";
 import { competitorBySlug, COMPETITORS, FEATURE_LABELS, OURS, triWord, type Competitor, type Tool } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
-import { CompareCard, Duel } from "./CompareCard.tsx";
+import { CompareCard, Duel, ToolMark } from "./CompareCard.tsx";
+import { LogoMark } from "./Logo.tsx";
 import { Mark, Where } from "./Marks.tsx";
 import { Price } from "./Price.tsx";
 import { NotFound } from "./NotFound.tsx";
@@ -66,6 +67,11 @@ function Comparison({ tool }: { tool: Competitor }) {
         </nav>
         <div className="cmp-head">
           <div>
+            <p className="cmp-versus" aria-hidden="true">
+              <LogoMark size={44} />
+              <span>vs</span>
+              <ToolMark brand={tool.brand} size={44} />
+            </p>
             <p className="eyebrow">
               <Scale aria-hidden="true" /> Comparison
             </p>
@@ -91,9 +97,17 @@ function Comparison({ tool }: { tool: Competitor }) {
             <thead>
               <tr>
                 <th scope="col">At a glance</th>
-                <th scope="col">{tool.name}</th>
+                <th scope="col">
+                  <span className="tool-cell">
+                    <ToolMark brand={tool.brand} size={18} />
+                    <span>{tool.name}</span>
+                  </span>
+                </th>
                 <th scope="col" className="us">
-                  {PRODUCT.name}
+                  <span className="tool-cell">
+                    <LogoMark size={18} />
+                    <span>{PRODUCT.name}</span>
+                  </span>
                 </th>
               </tr>
             </thead>

@@ -2,7 +2,8 @@ import { Link } from "react-router";
 import { CalendarCheck, CloudUpload, Scale, TextCursorInput, Type, UserX } from "lucide-react";
 import { COMPETITORS, OURS } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
-import { CompareCard } from "./CompareCard.tsx";
+import { CompareCard, ToolMark } from "./CompareCard.tsx";
+import { LogoMark } from "./Logo.tsx";
 import { Mark, Where } from "./Marks.tsx";
 import { Price } from "./Price.tsx";
 import { useMeta } from "./useMeta.ts";
@@ -103,7 +104,12 @@ export function Compare() {
             </thead>
             <tbody>
               <tr className="us">
-                <th scope="row">{OURS.name}</th>
+                <th scope="row">
+                  <span className="tool-cell">
+                    <LogoMark size={22} />
+                    <span>{OURS.name}</span>
+                  </span>
+                </th>
                 <td>
                   <Where where={OURS.processing.where} />
                 </td>
@@ -127,7 +133,10 @@ export function Compare() {
               {COMPETITORS.map((tool) => (
                 <tr key={tool.slug}>
                   <th scope="row">
-                    <Link to={ROUTES.comparison(tool.slug)}>{tool.name}</Link>
+                    <Link to={ROUTES.comparison(tool.slug)} className="tool-cell">
+                      <ToolMark brand={tool.brand} size={22} />
+                      <span>{tool.name}</span>
+                    </Link>
                   </th>
                   <td>
                     <Where where={tool.processing.where} />

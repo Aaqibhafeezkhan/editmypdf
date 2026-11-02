@@ -11,9 +11,11 @@ export type Tri = "yes" | "no" | "partial" | "unknown";
 
 export type Source = { label: string; url: string; accessed: string };
 
-// One or two letters and a hue for a monogram badge, used where a mark for the tool is wanted
-// without reproducing its logo. The hue stands for the brand's usual colour and is approximate.
-export type Brand = { monogram: string; color: string };
+// The tool's mark: its own icon as a file under public/ (fetched from the vendor's site, see the
+// hand-over note for the script), with one or two letters and an approximate brand hue for a
+// monogram badge used wherever the file is missing. Logos belong to their owners and are shown
+// only to identify the product compared; the footer and the terms page say so.
+export type Brand = { monogram: string; color: string; logo?: string };
 
 // The lowest paid price as a figure for tables and charts, with the caveats the prose carries.
 // The flags must stay visible wherever the figure is shown.
@@ -167,7 +169,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "≈ $44.99/year (App Store; web price varies by region)",
     startingPrice: { figure: "$44.99", per: "year", approximate: true, regional: true, note: "Premium on the US App Store; the web price varies by region" },
-    brand: { monogram: "iL", color: "#e5322d" },
+    brand: { monogram: "iL", color: "#e5322d", logo: "logos/ilovepdf.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "unknown",
@@ -246,7 +248,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "Pro, regional pricing (≈ $9/month billed yearly per third-party listings)",
     startingPrice: { figure: "$9", per: "month", approximate: true, regional: true, thirdParty: true, note: "Pro billed yearly, per third-party listings" },
-    brand: { monogram: "Sp", color: "#e63c3c" },
+    brand: { monogram: "Sp", color: "#e63c3c", logo: "logos/smallpdf.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "no",
@@ -319,7 +321,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "$5 for a week; $7.50/month",
     startingPrice: { figure: "$5", per: "week", note: "a seven-day web pass; $7.50 a month after" },
-    brand: { monogram: "Se", color: "#1d7a73" },
+    brand: { monogram: "Se", color: "#1d7a73", logo: "logos/sejda.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
@@ -395,7 +397,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "Standard ≈ $14.99/month on an annual plan (regional pricing)",
     startingPrice: { figure: "$14.99", per: "month", approximate: true, regional: true, note: "Acrobat Standard on an annual plan; the UK store shows £14.99" },
-    brand: { monogram: "Ac", color: "#e1251b" },
+    brand: { monogram: "Ac", color: "#e1251b", logo: "logos/adobe-acrobat-online.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
@@ -470,7 +472,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "$10.99/month",
     startingPrice: { figure: "$10.99", per: "month", note: "PDF Editor, per user on annual billing" },
-    brand: { monogram: "Fx", color: "#ff6a13" },
+    brand: { monogram: "Fx", color: "#ff6a13", logo: "logos/foxit.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
@@ -538,7 +540,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "$39.99/year (Web)",
     startingPrice: { figure: "$39.99", per: "year", note: "Xodo Web" },
-    brand: { monogram: "Xo", color: "#2b6fe6" },
+    brand: { monogram: "Xo", color: "#2b6fe6", logo: "logos/xodo.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "unknown",
@@ -604,7 +606,7 @@ export const COMPETITORS: Competitor[] = [
     paid: [],
     priceFrom: "Free",
     startingPrice: { figure: "Free", per: "", note: "no paid plan" },
-    brand: { monogram: "24", color: "#2e7dd1" },
+    brand: { monogram: "24", color: "#2e7dd1", logo: "logos/pdf24.png" },
     textEditing: {
       existing: "no",
       keepsFont: "no",
@@ -674,7 +676,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "$8/month (annual)",
     startingPrice: { figure: "$8", per: "month", note: "Basic, per user billed annually" },
-    brand: { monogram: "pF", color: "#ef6c1a" },
+    brand: { monogram: "pF", color: "#ef6c1a", logo: "logos/pdffiller.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
@@ -745,7 +747,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "Pro ≈ $12/month billed yearly (regional pricing)",
     startingPrice: { figure: "$12", per: "month", approximate: true, regional: true, thirdParty: true, note: "Pro billed yearly, per third-party listings" },
-    brand: { monogram: "Ca", color: "#00c4cc" },
+    brand: { monogram: "Ca", color: "#00c4cc", logo: "logos/canva-pdf-editor.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "no",
@@ -813,7 +815,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "$2.99/month",
     startingPrice: { figure: "$2.99", per: "month", note: "Premium billed yearly" },
-    brand: { monogram: "Pe", color: "#b4232a" },
+    brand: { monogram: "Pe", color: "#b4232a", logo: "logos/pdfescape.png" },
     textEditing: {
       existing: "partial",
       keepsFont: "unknown",
@@ -880,7 +882,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "$8/month (annual)",
     startingPrice: { figure: "$8", per: "month", note: "Basic billed yearly" },
-    brand: { monogram: "Dh", color: "#1f8ef1" },
+    brand: { monogram: "Dh", color: "#1f8ef1", logo: "logos/dochub.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "no",
@@ -949,7 +951,7 @@ export const COMPETITORS: Competitor[] = [
     ],
     priceFrom: "Pro (price shown at checkout; ≈ $7–15/month per third-party listings)",
     startingPrice: { figure: "$7–15", per: "month", approximate: true, thirdParty: true, checkoutOnly: true, note: "Pro; the vendor shows the price only at checkout" },
-    brand: { monogram: "So", color: "#d8232a" },
+    brand: { monogram: "So", color: "#d8232a", logo: "logos/soda-pdf.png" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
