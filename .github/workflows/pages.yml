@@ -41,9 +41,11 @@ jobs:
           VITE_BASE: ${{ steps.pages.outputs.base_path }}/
           VITE_SITE_URL: ${{ steps.pages.outputs.base_url }}
           # Optional repository variables (Settings → Secrets and variables → Actions → Variables):
-          # the Search Console HTML-tag value, and a GA4 measurement id to count visits (shown as
-          # an opt-in notice on the site's pages). Leave them unset and the site stays script-free.
+          # the Search Console HTML-tag value; a Cloudflare Web Analytics token for a cookieless
+          # visit counter; a GA4 measurement id (shown as an opt-in notice on the site's pages).
+          # Leave them unset and the site stays script-free.
           VITE_GOOGLE_SITE_VERIFICATION: ${{ vars.VITE_GOOGLE_SITE_VERIFICATION }}
+          VITE_CF_BEACON_TOKEN: ${{ vars.VITE_CF_BEACON_TOKEN }}
           VITE_GA_MEASUREMENT_ID: ${{ vars.VITE_GA_MEASUREMENT_ID }}
       - uses: actions/upload-pages-artifact@v5
         with:

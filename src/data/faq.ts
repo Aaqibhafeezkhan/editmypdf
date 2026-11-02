@@ -4,7 +4,9 @@ import { ANALYTICS } from "./product.ts";
 
 const TRACKING = ANALYTICS.enabled
   ? "There is no account. Google Analytics counts visits to the site's pages only if you agree in the notice, and it never runs on the editor pages, so no script runs beside your document and no server ever sees it."
-  : "There is no account, no analytics script and no server that ever sees your document.";
+  : ANALYTICS.counter
+    ? "There is no account. A cookieless counter from Cloudflare records which pages were opened and roughly where from, with no cookies and no identifier; it is not loaded on the editing page, and no server ever sees your document."
+    : "There is no account, no analytics script and no server that ever sees your document.";
 
 export type FaqEntry = { question: string; answer: string };
 

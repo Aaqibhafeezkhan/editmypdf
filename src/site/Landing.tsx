@@ -66,10 +66,12 @@ const PRIVACY_POINTS = [
   { icon: UserX, title: "No account", body: "Nothing to sign up for and nothing logged." },
   {
     icon: EyeOff,
-    title: ANALYTICS.enabled ? "Nothing beside your document" : "No tracking",
+    title: ANALYTICS.enabled ? "Nothing beside your document" : ANALYTICS.counter ? "Counted, not tracked" : "No tracking",
     body: ANALYTICS.enabled
       ? "The editor loads no analytics and no third-party script; the site's pages count visits only if you agree."
-      : "No analytics, no error reporter, no third-party script.",
+      : ANALYTICS.counter
+        ? "Page views are counted without cookies or identifiers, and nothing runs beside your document."
+        : "No analytics, no error reporter, no third-party script.",
   },
   { icon: Database, title: "Stored on this device", body: "IndexedDB keeps your documents between visits. Clear site data to remove them." },
 ];
@@ -297,7 +299,7 @@ export function Landing() {
             <Code aria-hidden="true" /> Open source
           </li>
           <li>
-            <EyeOff aria-hidden="true" /> {ANALYTICS.enabled ? "No tracking in the editor" : "No analytics, no tracking"}
+            <EyeOff aria-hidden="true" /> {ANALYTICS.any ? "No cookies, no tracking" : "No analytics, no tracking"}
           </li>
           <li>
             <Globe aria-hidden="true" /> Chrome, Edge, Firefox, Safari

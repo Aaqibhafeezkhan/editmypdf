@@ -34,8 +34,8 @@ export function Privacy() {
         <p>
           The app makes network requests only for its own static files: its JavaScript, stylesheets, fonts
           and the emoji images under the emoji tool.{" "}
-          {ANALYTICS.enabled
-            ? "The editor pages load no analytics script, no error reporter and no third-party embed; the only third-party script anywhere on the site is the visit counter described below, on the site's pages, after you agree to it."
+          {ANALYTICS.any
+            ? "The editing page loads no analytics script, no error reporter and no third-party embed; the only third-party script anywhere on the site is the visit counter described below."
             : "There is no analytics script, no error reporter, no account system and no third-party embed."}
         </p>
 
@@ -62,6 +62,19 @@ export function Privacy() {
             : "No cookies are set."}
         </p>
 
+        {ANALYTICS.counter && (
+          <>
+            <h2>Visit counting</h2>
+            <p>
+              The site's pages and the documents screen count visits with Cloudflare Web Analytics, a small
+              script that reports the page address, the site that sent the visit, the browser family and how
+              long the page took to load. It sets no cookies, stores nothing in your browser and keeps no
+              identifier, so it cannot follow you from one visit to the next or from one site to another, and
+              it needs no consent notice. It is not loaded on the editing page, and it never sees your
+              document or the address of a document you have open.
+            </p>
+          </>
+        )}
         {ANALYTICS.enabled && (
           <>
             <h2>Visit counting</h2>
