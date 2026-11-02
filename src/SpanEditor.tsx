@@ -110,6 +110,11 @@ function render(root: HTMLElement, model: Model, view: View): void {
       node.style.fontWeight = String(piece.span.fontWeight);
       node.style.fontStyle = piece.span.fontStyle;
       node.style.fontSize = `${piece.span.fontSize * view.scale}px`;
+      // A run in another face or size has its own ascent and descent, rounded to pixels by the
+      // browser, so its inline box would sit a little above or below the line's own and stretch
+      // the line past the page's pitch. With no line height of its own the run adds nothing to the
+      // line box: every line is exactly as tall as the block's line height, whatever runs it holds.
+      node.style.lineHeight = "0";
       if (piece.span.letterSpacing != null) node.style.letterSpacing = `${piece.span.letterSpacing * view.scale}px`;
       node.style.color = view.showLive ? piece.span.color : "transparent";
       node.textContent = piece.text;
@@ -188,6 +193,8 @@ export function SpanEditor({
 
   const latest = useRef({ onEdit, lineHeight, wrap, view });
   latest.current = { onEdit, lineHeight, wrap, view };
+  // Moves an edit the browser applied on its own into the model; set once the handlers exist.
+  const reconcileRef = useRef<() => void>(() => undefined);
 
   const draw = (next: Model, caret: number | null) => {
     const root = ref.current;
@@ -316,6 +323,7 @@ export function SpanEditor({
       }
       apply(prefix, before.length - suffix, text.slice(prefix, text.length - suffix), prefix);
     };
+    reconcileRef.current = reconcile;
     const onInput = (event: Event) => {
       if ((event as InputEvent).isComposing) return;
       reconcile();
@@ -349,7 +357,12 @@ export function SpanEditor({
       spellCheck={false}
       style={{ ...style, textIndent: 0 }}
       onFocus={onFocus}
-      onBlur={onBlur}
+      onBlur={() => {
+        // Whatever the editor shows when it is left is what stays: an edit the browser applied
+        // itself and has not reported yet (a composition cut short) goes into the model first.
+        reconcileRef.current();
+        onBlur();
+      }}
       onKeyDown={(event) => {
         const meta = event.metaKey || event.ctrlKey;
         if (meta && event.key.toLowerCase() === "z") {

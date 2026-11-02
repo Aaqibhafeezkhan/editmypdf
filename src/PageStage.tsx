@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
-import { RotateCw } from "lucide-react";
+import { GripVertical, RotateCw } from "lucide-react";
 import { contentAt, contentLabel, isTextContent, readPageContent, type ContentElement } from "./content.ts";
 import {
   cropGraphic,
   editCover,
+  editSpans,
   graphicPatch,
   layoutTextPatch,
   refreshPatchFace,
@@ -14,8 +15,8 @@ import {
 } from "./contentEdit.ts";
 import { captureEdit } from "./pageInk.ts";
 import { SpanEditor } from "./SpanEditor.tsx";
-import { domText, placeCaret } from "./spanDom.ts";
-import { blockWidth, caretIndexAt, editorTop, fontCss as faceCss, lineShift, WRAP_SLACK } from "./textLayout.ts";
+import { domText, placeCaret, selectionOffsets } from "./spanDom.ts";
+import { blockWidth, caretIndexAt, editorTop, fontCss as faceCss, lineShift, wrapSlack } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { boundsOf, dist, hitTest, resizeAnnotation, rotateBy, rotatePoint, shapeFromDrag, translate } from "./geometry.ts";
 import { detailCanvas, startRender } from "./pdf.ts";
@@ -143,6 +144,30 @@ function textFieldFromDrag(
 function fitTextarea(element: HTMLTextAreaElement) {
   element.style.height = "0px";
   element.style.height = `${element.scrollHeight}px`;
+}
+
+// The width a single line can wrap in once it is broken into lines: out to the table rule or the
+// next piece of text on its right, less the padding the line keeps from the rule on its left,
+// and never less than the line itself. A line with nothing beside it wraps in its own width.
+function wrapWidth(patch: PatchAnnotation, content: ContentElement[]): number {
+  const size = patch.fontSize || patch.originH;
+  const top = patch.originY;
+  const bottom = patch.originY + patch.originH;
+  const right = patch.originX + patch.originW;
+  const overlaps = (element: ContentElement) =>
+    Math.min(bottom, element.y + element.h) - Math.max(top, element.y) > Math.min(patch.originH, element.h) * 0.5;
+  const rules = content.filter((element) => element.kind === "line" && element.w <= 2.5 && element.h >= size * 0.8 && overlaps(element));
+  const leftRule = rules.filter((rule) => rule.x + rule.w <= patch.originX + 1).sort((a, b) => b.x - a.x)[0];
+  const rightRule = rules.filter((rule) => rule.x >= right - 1).sort((a, b) => a.x - b.x)[0];
+  const padding = leftRule ? Math.max(0, patch.originX - (leftRule.x + leftRule.w)) : size * 0.6;
+  const bounds: number[] = [];
+  if (rightRule) bounds.push(rightRule.x - padding);
+  const neighbour = content
+    .filter((element) => isTextContent(element.kind) && element.x >= right - 1 && overlaps(element))
+    .sort((a, b) => a.x - b.x)[0];
+  if (neighbour) bounds.push(neighbour.x - size * 0.5);
+  if (bounds.length === 0) return patch.originW;
+  return Math.max(patch.originW, Math.min(...bounds) - patch.originX);
 }
 
 export function PageStage({
@@ -1234,7 +1259,12 @@ export function PageStage({
           const patch = annotation;
           const selected = patch.id === selectedId && tool === "select";
           const live = content.find((element) => element.id === patch.sourceId);
-          const pristine = patch.role === "text" && patch.text === (patch.originText ?? "");
+          // Untouched: the page's own words, still where the page put them.
+          const pristine =
+            patch.role === "text" &&
+            patch.text === (patch.originText ?? "") &&
+            Math.abs(patch.x - patch.originX) < 0.01 &&
+            Math.abs(patch.y - patch.originY) < 0.01;
           // While a run is being edited its live text replaces the page's rendering, so what the
           // caret sits in is exactly what will be exported.
           const showLive = patch.role === "text" && (selected || !pristine);
@@ -1256,7 +1286,8 @@ export function PageStage({
             : Math.max(patch.w, patch.fontSize * 0.4) + patch.fontSize * 0.6;
           // The wrap slack widens the box to the right; centred and right-aligned lines are set
           // against the page's own width, so the box moves left to keep them in place.
-          const slackShift = !patch.wrap ? 0 : patch.align === "center" ? WRAP_SLACK / 2 : patch.align === "right" ? WRAP_SLACK : 0;
+          const slack = wrapSlack(patch);
+          const slackShift = !patch.wrap ? 0 : patch.align === "center" ? slack / 2 : patch.align === "right" ? slack : 0;
           const overflowing = patch.role === "text" && patch.h > patch.originH + 1;
           const coverClass = [
             "content-cover",
@@ -1329,7 +1360,8 @@ export function PageStage({
               draftText.current = null;
               textBaseline.current = null;
               if (unchanged) {
-                onReplace(draft.origin);
+                // Only this patch goes; anything else that changed since it was opened stays.
+                onReplace(getAnnotations().filter((item) => item.id !== patch.id));
                 onSelect(null);
                 return;
               }
@@ -1363,13 +1395,66 @@ export function PageStage({
             onReplace(next);
             if (live) onSelectContent({ ...live, text: shown });
           };
+          // Return in a single line starts a new line inside it: the line becomes a block that
+          // wraps in its cell, or in its own width when nothing bounds it, and the caret moves to
+          // the start of the new line once the block's editor has taken over.
+          const breakLine = (node: HTMLElement) => {
+            const current = getAnnotations();
+            const item = current.find((entry): entry is PatchAnnotation => entry.id === patch.id && entry.kind === "patch");
+            if (!item) return;
+            const caret =
+              node instanceof HTMLTextAreaElement
+                ? (node.selectionEnd ?? item.text.length)
+                : (selectionOffsets(node)?.end ?? item.text.length);
+            const at = Math.max(0, Math.min(caret, item.text.length));
+            const text = `${item.text.slice(0, at)}\n${item.text.slice(at)}`;
+            const spans = item.spans.length > 0 ? editSpans(item.spans, at, at, "\n") : [];
+            // A single line's pitch is its own height; the lines it breaks into need leading.
+            const lineHeight = item.lineHeight < item.fontSize * 1.1 ? item.fontSize * 1.3 : item.lineHeight;
+            const block: PatchAnnotation = {
+              ...item,
+              wrap: true,
+              lineHeight,
+              originW: wrapWidth(item, contentRef.current),
+              spans,
+              softBreaks: [],
+              lineGaps: [],
+              lineOffsets: [],
+              lineIndents: [],
+            };
+            onReplace(current.map((entry) => (entry.id === item.id ? { ...block, ...layoutTextPatch(block, text, 0) } : entry)));
+            if (live) onSelectContent({ ...live, text });
+            caretRef.current = { id: item.id, index: at + 1 };
+            armFocus.current = item.id;
+            onRequestFocus(item.id);
+          };
           const handleEditorKey = (event: ReactKeyboardEvent<HTMLElement>) => {
-            if ((event.key === "Enter" && !patch.wrap) || event.key === "Escape") {
+            if (event.key === "Enter" && !patch.wrap && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+              event.preventDefault();
+              event.stopPropagation();
+              breakLine(event.currentTarget);
+              return;
+            }
+            if (event.key === "Escape") {
               event.preventDefault();
               event.currentTarget.blur();
               return;
             }
             event.stopPropagation();
+          };
+          // Dragging the grip beside the box moves the text, so an edit that has grown past its
+          // cell can be nudged back into it. The editor keeps the focus while the text moves.
+          const startMove = (event: ReactPointerEvent<HTMLElement>) => {
+            if (event.button !== 0) return;
+            event.stopPropagation();
+            event.preventDefault();
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              // A very fast click can release the pointer before capture.
+            }
+            frameRef.current?.classList.add("interacting");
+            dragRef.current = { type: "move", origin: getAnnotations(), id: patch.id, start: toPoint(event), moved: false };
           };
           return (
             <div key={patch.id}>
@@ -1453,6 +1538,24 @@ export function PageStage({
                   }}
                   onKeyDown={handleEditorKey}
                 />
+              )}
+              {selected && patch.role === "text" && (
+                <div
+                  className="content-grip"
+                  role="button"
+                  aria-label="Move text"
+                  title="Drag to move the text"
+                  style={{
+                    left: (patch.x - slackShift) * scale - 18,
+                    top: (patch.y + patch.fontSize * 0.5) * scale - 8,
+                  }}
+                  onPointerDown={startMove}
+                  onPointerMove={moveDrag}
+                  onPointerUp={finishDrag}
+                  onPointerCancel={finishDrag}
+                >
+                  <GripVertical size={11} strokeWidth={2.25} aria-hidden="true" />
+                </div>
               )}
             </div>
           );

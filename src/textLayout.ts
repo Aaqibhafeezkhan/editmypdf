@@ -37,8 +37,15 @@ type Layout = Face &
 // A piece of one span that falls inside a laid-out line.
 type Piece = { text: string; face: TextSpan };
 
-// Extra width, in page units, allowed when wrapping so a line that just fits in the PDF is not broken one word early.
-export const WRAP_SLACK = 1;
+// Extra width, in page units, allowed when wrapping so a line that just fits in the PDF is not
+// broken one word early. A ragged block gets a quarter em: a face standing in for the page's
+// (one the page only has as outlines) measures its lines a hair differently from the page, and
+// without the slack a word at the end of a line drops to the next one the moment the block is
+// edited. A justified block keeps the slack at a point, since its lines are stretched to the
+// block's width and must stay flush with the column.
+export function wrapSlack(patch: Pick<PatchAnnotation, "align" | "fontSize">): number {
+  return patch.align === "justify" ? 1 : Math.max(1, patch.fontSize * 0.25);
+}
 
 let context: CanvasRenderingContext2D | null = null;
 
@@ -128,8 +135,8 @@ function rangeWidth(text: string, from: number, to: number, face: Face, spans: T
   return width;
 }
 
-export function blockWidth(patch: Pick<PatchAnnotation, "wrap" | "originW" | "w">): number {
-  return patch.wrap ? patch.originW + WRAP_SLACK : Math.max(patch.w, 1);
+export function blockWidth(patch: Pick<PatchAnnotation, "wrap" | "originW" | "w" | "align" | "fontSize">): number {
+  return patch.wrap ? patch.originW + wrapSlack(patch) : Math.max(patch.w, 1);
 }
 
 // How far the `index`th line starts in from the block's edge: where the page put it while the
@@ -171,7 +178,7 @@ function laid(whole: string, text: string, start: number, face: Face, spans: Tex
 export function wrapText(text: string, patch: Layout): LaidLine[] {
   const spans = spansFor(text, patch);
   const soft = new Set(patch.softBreaks ?? []);
-  const limit = patch.wrap ? patch.originW + WRAP_SLACK : Infinity;
+  const limit = patch.wrap ? patch.originW + wrapSlack(patch) : Infinity;
   const lines: LaidLine[] = [];
   let cursor = 0;
   text.split("\n").forEach((paragraph, index) => {

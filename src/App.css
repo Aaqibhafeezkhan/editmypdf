@@ -475,6 +475,29 @@
   outline-offset: 0;
 }
 
+/* The grip beside an open text box: dragging it moves the edited text on the page. */
+.content-grip {
+  position: absolute;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 16px;
+  margin: 0;
+  border-radius: 4px;
+  background: #1d4ed8;
+  color: #fff;
+  box-shadow: 0 0 0 1px #fff, 0 1px 2px rgba(15, 23, 42, 0.22);
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.content-grip:hover {
+  background: #1e40af;
+}
+
 /* The edited text needs more lines than the original block had, so it now covers what sat below. */
 .content-cover.overflowing {
   outline: 1.5px dashed #d97706;

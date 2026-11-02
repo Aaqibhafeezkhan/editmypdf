@@ -147,6 +147,11 @@ type GlyphState = {
   // set. pdf.js adds the word spacing to those when it reads text positions but not when it draws
   // them, so the positions it reports drift right by that many word spacings.
   phantom: number;
+  // The fill colour the glyph was drawn in, as a hex string.
+  color: string;
+  // Whether the glyph was filled and stroked (text render mode 2): how a generator emboldens a face
+  // it has no bold for, so the text reads as bold although its font is the regular one.
+  bold: boolean;
 };
 
 // Something opaque the page painted (an image, a filled shape) and when.
@@ -392,6 +397,8 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
   let fontSize = 1;
   let font = "";
   let phantom = 0;
+  let fill = "#111111";
+  let renderMode = 0;
   const show = (glyphs: unknown, op: number) => {
     if (!Array.isArray(glyphs)) return;
     for (const glyph of glyphs) {
@@ -403,7 +410,20 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
         originalCharCode?: unknown;
       };
       const text = isSpace ? " " : typeof unicode === "string" ? unicode : "";
-      if (text) out.push({ text, charSpacing, wordSpacing, fontSize, font, width: number(width, 0), op, phantom });
+      if (text) {
+        out.push({
+          text,
+          charSpacing,
+          wordSpacing,
+          fontSize,
+          font,
+          width: number(width, 0),
+          op,
+          phantom,
+          color: fill,
+          bold: renderMode === 2 || renderMode === 6,
+        });
+      }
       // A space drawn as a two-byte code: the renderer gives it no word spacing, the text reader does.
       if (!isSpace && originalCharCode === 0x20) phantom += 1;
     }
@@ -412,17 +432,26 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
   // The text state is part of the graphics state: q saves it and Q brings it back, so a Tc set
   // inside one text object does not leak into the next.
-  const saved: { charSpacing: number; wordSpacing: number; fontSize: number; font: string }[] = [];
+  const saved: { charSpacing: number; wordSpacing: number; fontSize: number; font: string; fill: string; renderMode: number }[] = [];
+  const fillOps = new Set([OPS.setFillRGBColor, OPS.setFillGray, OPS.setFillCMYKColor, OPS.setFillColor, OPS.setFillColorN]);
   for (let index = 0; index < fnArray.length; index += 1) {
     const fn = fnArray[index];
     const args = argsArray[index];
     if (fn === OPS.save) {
-      saved.push({ charSpacing, wordSpacing, fontSize, font });
+      saved.push({ charSpacing, wordSpacing, fontSize, font, fill, renderMode });
       continue;
     }
     if (fn === OPS.restore) {
       const state = saved.pop();
-      if (state) ({ charSpacing, wordSpacing, fontSize, font } = state);
+      if (state) ({ charSpacing, wordSpacing, fontSize, font, fill, renderMode } = state);
+      continue;
+    }
+    if (fn != null && fillOps.has(fn)) {
+      fill = paintColor(args) ?? fill;
+      continue;
+    }
+    if (fn === OPS.setTextRenderingMode) {
+      renderMode = Array.isArray(args) ? number(args[0], renderMode) : renderMode;
       continue;
     }
     // Setting the text position anew discards the drift accumulated along the line.
@@ -738,7 +767,11 @@ function textRuns(
   let colorIndex = 0;
   items.forEach((item, index) => {
     if (!isTextRun(item) || !item.str.trim()) return;
-    const color = colors[colorIndex] ?? "#111111";
+    // The colour of the item's first glyph, read alongside it in the content stream. The colours
+    // listed per show-text operator are the fallback: an item can span several operators and an
+    // operator several items, so they drift out of step.
+    const matched = spacing.get(index);
+    const color = matched?.state.color ?? colors[colorIndex] ?? "#111111";
     colorIndex += 1;
     const tx = Util.transform(viewport.transform, item.transform);
     const fontSize = Math.hypot(tx[2], tx[3]) || item.height || 12;
@@ -747,7 +780,6 @@ function textRuns(
     const ascent = ascentRatio(style);
     const angle = Math.atan2(tx[1], tx[0]) + (style?.vertical ? Math.PI / 2 : 0);
     const top = tx[5] - fontSize * ascent;
-    const matched = spacing.get(index);
     // Word spacing pdf.js added to two-byte space codes when it read the positions, which the
     // page never drew: the item sits that much further left, and is that much narrower.
     const phantomSpacing = matched ? matched.state.wordSpacing * (fontSize / matched.state.fontSize) : 0;
@@ -776,7 +808,9 @@ function textRuns(
       angle,
       pdfFont: item.fontName,
       fontFamily: face.family,
-      fontWeight: face.weight,
+      // Text filled and stroked reads as bold whatever its font is; the browser emboldens the
+      // face the same way.
+      fontWeight: matched?.state.bold ? Math.max(face.weight, 700) : face.weight,
       fontStyle: face.style,
       ascent,
       color,
@@ -837,16 +871,49 @@ function runSpacing(
   letterSpacing = Math.round(letterSpacing * 1000) / 1000;
   // CSS letter spacing also follows the last glyph; the page's width stops at its ink.
   const natural = measureWidth(text, { ...measure, letterSpacing, wordSpacing: 0 }) - letterSpacing;
-  return { text, letterSpacing, wordSpacing: natural > 0 ? spaceFit(width - natural, spaceCount, measure) : 0 };
+  if (!(natural > 0)) return { text, letterSpacing, wordSpacing: 0 };
+  const fit = spaceFit(width - natural, spaceCount, [...text].length - 1, measure);
+  return { text, letterSpacing: Math.round((letterSpacing + fit.spread) * 1000) / 1000, wordSpacing: fit.gap };
 }
 
-// The word spacing that spreads `extra` width over `spaces` spaces, kept within what a space can
-// reasonably absorb.
-function spaceFit(extra: number, spaces: number, face: Parameters<typeof measureWidth>[1]): number {
-  if (spaces <= 0) return 0;
+// How `extra` width is spread over a run's `spaces` spaces and the `gaps` between its characters:
+// the spaces take it, within what a space can reasonably absorb. A face much wider than the page's
+// (a substitute for a font the page only has as outlines) would swallow the spaces whole and glue
+// the words together, so a space gives up half its width at most and the letters tighten for the
+// rest.
+function spaceFit(
+  extra: number,
+  spaces: number,
+  gaps: number,
+  face: Parameters<typeof measureWidth>[1],
+): { gap: number; spread: number } {
+  if (spaces <= 0) return { gap: 0, spread: 0 };
   const space = measureWidth(" ", face);
-  const clamped = Math.max(-space * 0.9, Math.min(face.fontSize * 3, extra / spaces));
-  return Math.abs(clamped) < 0.005 ? 0 : Math.round(clamped * 1000) / 1000;
+  let gap = extra / spaces;
+  let spread = 0;
+  const floor = -space * 0.5;
+  if (gap < floor && gaps > 0) {
+    spread = Math.max(-face.fontSize * 0.12, (extra - floor * spaces) / gaps);
+    gap = (extra - spread * gaps) / spaces;
+  }
+  gap = Math.max(-space * 0.9, Math.min(face.fontSize * 3, gap));
+  return {
+    gap: Math.abs(gap) < 0.005 ? 0 : Math.round(gap * 1000) / 1000,
+    spread: Math.abs(spread) < 0.0005 ? 0 : Math.round(spread * 1000) / 1000,
+  };
+}
+
+// Whether two ink colours read as the same colour: the same to the eye, if not to the byte.
+function sameInk(a: string, b: string): boolean {
+  if (a === b) return true;
+  const parse = (value: string) => {
+    const match = /^#([0-9a-f]{6})$/i.exec(value);
+    return match?.[1] ? [0, 2, 4].map((offset) => Number.parseInt(match[1]!.slice(offset, offset + 2), 16)) : null;
+  };
+  const first = parse(a);
+  const second = parse(b);
+  if (!first || !second) return true;
+  return first.reduce((sum, channel, index) => sum + Math.abs(channel - (second[index] ?? 0)), 0) <= 96;
 }
 
 // Whether a run drawn by operator `op` lies wholly under opaque paint that came after it.
@@ -1042,13 +1109,14 @@ function mergeSpans(spans: ContentSpan[]): ContentSpan[] {
   return merged;
 }
 
-// How many faces the spans use, colour aside: the colours pdf.js reports per run are unreliable.
-// A run tracked differently from its neighbours counts as a face of its own.
+// How many faces the spans use. A run tracked or coloured differently from its neighbours counts
+// as a face of its own, so a grey line next to a black one keeps its colour when they are edited
+// together.
 function faceCount(spans: ContentSpan[]): number {
   const faces = new Set(
     spans.map(
       (span) =>
-        `${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${Math.round(span.fontSize * 4)}|${Math.round((span.letterSpacing ?? 0) * 100)}`,
+        `${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${Math.round(span.fontSize * 4)}|${Math.round((span.letterSpacing ?? 0) * 100)}|${span.color}`,
     ),
   );
   return faces.size;
@@ -1099,6 +1167,14 @@ function markerBeside(marker: Line, line: Line): boolean {
 function sameBlock(previous: Line, next: Line, rules: Box[]): boolean {
   if (previous.heading !== next.heading) return false;
   if (!facesFlow(previous, next)) return false;
+  // A change of weight, slant, size or colour from one line to the next is a new block: a date, a
+  // bold title and a grey summary stacked in a card are three things, not one paragraph, even
+  // when one font sets them all.
+  if (previous.fontWeight !== next.fontWeight || previous.fontStyle !== next.fontStyle) return false;
+  if (!sameInk(previous.color, next.color)) return false;
+  const previousSize = dominantSpan(previous.spans)?.fontSize ?? previous.size;
+  const nextSize = dominantSpan(next.spans)?.fontSize ?? next.size;
+  if (Math.abs(previousSize - nextSize) / Math.max(previousSize, nextSize, 1) > 0.06) return false;
   const size = Math.max(previous.size, next.size, 1);
   if (Math.abs(previous.size - next.size) / size > 0.18) return false;
   const gap = next.y - (previous.y + previous.h);
@@ -1122,9 +1198,11 @@ function sameBlock(previous: Line, next: Line, rules: Box[]): boolean {
 // The reverse pairing, a single-face line above a mixed line that merely contains its face, is
 // left apart: that is what a heading followed by a paragraph with a bold lead-in looks like, and
 // pdf.js cannot tell a heading face from a bold one when the weight is baked into the font.
+// A face is the font together with its weight, so a line the page emboldened by stroking does
+// not flow into one it did not.
 function facesFlow(previous: Line, next: Line): boolean {
-  if (previous.pdfFont === next.pdfFont) return true;
-  return previous.spans.some((span) => span.pdfFont === next.pdfFont);
+  if (previous.pdfFont === next.pdfFont && previous.fontWeight === next.fontWeight) return true;
+  return previous.spans.some((span) => span.pdfFont === next.pdfFont && span.fontWeight === next.fontWeight);
 }
 
 function readGraphics(
@@ -1438,8 +1516,15 @@ function faceOf(line: Line): TextFace {
 // difference as word spacing; a line without spaces spreads it over the gaps between its letters,
 // which is where runs that abut without a space (a dot leader and its page number) leave it.
 function fitLine(line: Line, letterSpacing: number): { gap: number | null; spread: number; spans: ContentSpan[] } {
-  const gap = lineGap(line, letterSpacing);
-  if (gap != null) return { gap, spread: 0, spans: line.spans };
+  const fit = lineGap(line, letterSpacing);
+  if (fit != null) {
+    if (fit.spread === 0) return { gap: fit.gap, spread: 0, spans: line.spans };
+    return {
+      gap: fit.gap,
+      spread: fit.spread,
+      spans: line.spans.map((span) => ({ ...span, letterSpacing: (span.letterSpacing ?? letterSpacing) + fit.spread })),
+    };
+  }
   const chars = [...line.text].length;
   if (chars < 2 || typeof document === "undefined") return { gap: null, spread: 0, spans: line.spans };
   const natural = lineNatural(line, letterSpacing);
@@ -1474,15 +1559,15 @@ function lineNatural(line: Line, letterSpacing: number): number {
 
 // The word spacing that sets a line exactly as wide as the page drew it, once its runs are set in
 // their faces with the given letter spacing: the page's own space advances, the gaps between
-// words it positioned one by one, and a justified line's stretch all land on its spaces. Null for a
-// line without spaces.
-function lineGap(line: Line, letterSpacing: number): number | null {
+// words it positioned one by one, and a justified line's stretch all land on its spaces, except
+// what a space cannot absorb, which tightens the letters (`spread`). Null for a line without spaces.
+function lineGap(line: Line, letterSpacing: number): { gap: number; spread: number } | null {
   const spaces = [...line.text].filter((char) => char === " ").length;
   if (spaces === 0 || typeof document === "undefined") return null;
   const natural = lineNatural(line, letterSpacing);
   if (!(natural > 0)) return null;
   const lead = line.spans[0];
-  return spaceFit(line.w - natural, spaces, {
+  return spaceFit(line.w - natural, spaces, [...line.text].length - 1, {
     fontFamily: lead?.fontFamily ?? line.fontFamily,
     fontWeight: lead?.fontWeight ?? line.fontWeight,
     fontStyle: lead?.fontStyle ?? line.fontStyle,
@@ -1501,20 +1586,23 @@ function blockFace(lines: Line[]): TextFace {
     .slice(1)
     .map((line, index) => line.baseline - (sorted[index]?.baseline ?? line.baseline))
     .filter((pitch) => pitch > 0);
-  const layout = blockLayout(sorted, lead.size);
   const face = dominantSpan(sorted.flatMap((line) => line.spans));
   const letterSpacing = median(sorted.map((line) => line.letterSpacing));
-  // The word spacing text typed into the block flows with: the page's own, read off its lines. A
-  // justified block stretches its lines by different amounts, so its least stretched line (the
-  // last one aside, which is never stretched) comes closest to the natural gap.
-  const gaps = sorted.map((line) => lineGap(line, letterSpacing));
+  const gaps = sorted.map((line) => lineGap(line, letterSpacing)?.gap ?? null);
+  const layout = blockLayout(sorted, lead.size);
+  // The word spacing text typed into the block flows with: the page's own, read off its lines.
+  // The typical line says what the page's gap looks like; one line that fits badly (a face the
+  // page only has as outlines) must not set the gap for the whole block. A justified block
+  // stretches every line but the last by a different amount, so the last line, which is never
+  // stretched, has the natural gap.
   const known = gaps.filter((gap): gap is number => gap != null);
   const body = gaps.slice(0, -1).filter((gap): gap is number => gap != null);
+  const last = gaps[gaps.length - 1];
   const wordSpacing =
     known.length === 0
       ? median(sorted.map((line) => line.wordSpacing))
-      : layout.align === "justify" && body.length > 0
-        ? Math.min(...body)
+      : layout.align === "justify"
+        ? (last ?? (body.length > 0 ? Math.min(...body) : median(known)))
         : median(known);
   return {
     ...faceOf(lead),
@@ -1603,10 +1691,14 @@ function blockLayout(lines: Line[], size: number): { align: TextAlign; indent: n
   const butLast = lines.slice(0, -1);
   const leftish = body.every(left);
   const indent = first && leftish && !left(first) ? Math.max(0, first.x - box.x) : 0;
-  // Justified columns are not always flush: some generators leave a line a few points short.
-  const flush = (line: Line) => Math.abs(line.x + line.w - (box.x + box.w)) < size * 0.6;
+  // A justified column ends nearly every line but the last at its right edge; some generators
+  // leave one a hair short. Ragged text also happens to end a few lines near the edge, since the
+  // next word is often short, so a block only counts as justified when three lines in four are
+  // flush to within a third of an em: calling a ragged paragraph justified would stretch its
+  // lines to the column the moment it is edited.
+  const flush = (line: Line) => Math.abs(line.x + line.w - (box.x + box.w)) < size * 0.3;
   const flushCount = butLast.filter(flush).length;
-  if (lines.length >= 3 && leftish && flushCount >= Math.max(2, Math.ceil(butLast.length * 0.6))) {
+  if (lines.length >= 3 && leftish && flushCount >= Math.max(2, Math.ceil(butLast.length * 0.75))) {
     return { align: "justify", indent };
   }
   if (leftish) return { align: "left", indent };
