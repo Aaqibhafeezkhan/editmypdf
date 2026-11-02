@@ -1,9 +1,44 @@
 import { Link } from "react-router";
-import { Scale } from "lucide-react";
+import { CalendarCheck, CloudUpload, Scale, TextCursorInput, Type, UserX } from "lucide-react";
 import { COMPETITORS, OURS } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
+import { CompareCard } from "./CompareCard.tsx";
 import { Mark, Where } from "./Marks.tsx";
+import { Price } from "./Price.tsx";
 import { useMeta } from "./useMeta.ts";
+import "./compare.css";
+
+// The headline numbers beside the title, counted from the data so they never drift from the table.
+function stats() {
+  const total = COMPETITORS.length;
+  const count = (test: (tool: (typeof COMPETITORS)[number]) => boolean) => COMPETITORS.filter(test).length;
+  return [
+    {
+      icon: CloudUpload,
+      figure: count((tool) => tool.processing.where === "server"),
+      of: total,
+      label: "upload your file to their servers",
+    },
+    {
+      icon: Type,
+      figure: count((tool) => tool.textEditing.keepsFont === "yes"),
+      of: total,
+      label: `keep the page's own font (${count((tool) => tool.textEditing.keepsFont === "partial")} partly)`,
+    },
+    {
+      icon: TextCursorInput,
+      figure: count((tool) => tool.free.editsExistingText === "yes"),
+      of: total,
+      label: "edit existing text on their free tier",
+    },
+    {
+      icon: UserX,
+      figure: count((tool) => tool.account.required === "no"),
+      of: total,
+      label: "need no account at all",
+    },
+  ];
+}
 
 export function Compare() {
   useMeta({
@@ -13,23 +48,46 @@ export function Compare() {
   return (
     <>
       <section className="section container">
-        <div className="section-head">
-          <p className="eyebrow">
-            <Scale aria-hidden="true" /> Compare
-          </p>
-          <h1 className="display">The same questions, asked of every PDF editor.</h1>
-          <p className="lede">
-            Where does your file go, what does the free tier really allow, and when you retype a line, does
-            it keep the page's font? Facts checked against each vendor's own pages, with sources. Where a
-            competitor is better, the page says so.
-          </p>
-          <p className="as-of" style={{ marginTop: "var(--sp-5)" }}>
-            Checked {PRODUCT.comparisonsCheckedAt}
-          </p>
+        <div className="cmp-index-head">
+          <div className="section-head">
+            <p className="eyebrow">
+              <Scale aria-hidden="true" /> Compare
+            </p>
+            <h1 className="display">The same questions, asked of every PDF editor.</h1>
+            <p className="lede">
+              Where does your file go, what does the free tier really allow, and when you retype a line, does
+              it keep the page's font? Facts checked against each vendor's own pages, with sources. Where a
+              competitor is better, the page says so.
+            </p>
+          </div>
+          <aside className="cmp-stats" aria-label="The comparison in numbers">
+            {stats().map((stat) => (
+              <div key={stat.label} className="cmp-stat">
+                <span className="icon-tile" aria-hidden="true">
+                  <stat.icon />
+                </span>
+                <strong>
+                  {stat.figure}
+                  <small>of {stat.of}</small>
+                </strong>
+                <span>{stat.label}</span>
+              </div>
+            ))}
+            <p className="cmp-stats-foot">
+              <span>
+                <CalendarCheck aria-hidden="true" /> Checked {PRODUCT.comparisonsCheckedAt}
+              </span>
+              <span>Sources on every page</span>
+            </p>
+          </aside>
         </div>
 
-        <div className="table-wrap">
-          <table className="cmp-table">
+        <div className="table-wrap sticky">
+          <table className="cmp-table cmp-main">
+            <caption className="sr-only">
+              Twelve PDF editors and {PRODUCT.name}: where files are processed, whether an account is needed,
+              whether existing text can be edited and keeps its font, free limits and the starting price
+            </caption>
             <thead>
               <tr>
                 <th scope="col">Tool</th>
@@ -38,7 +96,9 @@ export function Compare() {
                 <th scope="col">Edits existing text</th>
                 <th scope="col">Keeps original font</th>
                 <th scope="col">Free file cap and limit</th>
-                <th scope="col">Paid from</th>
+                <th scope="col" className="num">
+                  Paid from
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -60,7 +120,9 @@ export function Compare() {
                   {OURS.free.fileSizeCap}
                   <span className="cell-note">{OURS.free.taskLimit}</span>
                 </td>
-                <td>{OURS.priceFrom}</td>
+                <td className="num">
+                  <Price price={OURS.startingPrice} />
+                </td>
               </tr>
               {COMPETITORS.map((tool) => (
                 <tr key={tool.slug}>
@@ -88,36 +150,33 @@ export function Compare() {
                     {tool.free.fileSizeCap}
                     <span className="cell-note">{tool.free.taskLimit}</span>
                   </td>
-                  <td>{tool.priceFrom}</td>
+                  <td className="num">
+                    <Price price={tool.startingPrice} />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="small muted" style={{ marginTop: "var(--sp-4)" }}>
+        <p className="small muted cmp-footnote">
           "Keeps original font" means the vendor's editor sets retyped text in the PDF's embedded font rather
-          than a substitute. Prices are list prices in the currency the vendor showed and change often; each
-          page links to the source it was read from.
+          than a substitute. Prices are the lowest paid plan in the currency the vendor showed and change
+          often; a regional, approximate or third-party figure is marked as such, and each page links to the
+          source it was read from.
         </p>
       </section>
 
-      <section className="container" style={{ paddingBottom: "var(--sp-16)" }}>
-        <h2 className="h2" style={{ marginBottom: "var(--sp-6)" }}>
-          One page per tool
-        </h2>
+      <section className="container cmp-cards-section">
+        <div className="section-head">
+          <h2 className="h2">One page per tool</h2>
+          <p className="lede">
+            Each page scores {PRODUCT.name} and the tool on the same facts, says where each is the better
+            choice, and lists its sources.
+          </p>
+        </div>
         <div className="card-grid">
           {COMPETITORS.map((tool) => (
-            <Link key={tool.slug} to={ROUTES.comparison(tool.slug)} className="card">
-              <div className="card-meta">
-                <span className="tag">{tool.vendor}</span>
-                <span>{tool.priceFrom === "Free" ? "Free" : `From ${tool.priceFrom}`}</span>
-              </div>
-              <h3>
-                {PRODUCT.name} vs {tool.name}
-              </h3>
-              <p>{tool.summary}</p>
-              <span className="link-arrow">Read the comparison →</span>
-            </Link>
+            <CompareCard key={tool.slug} tool={tool} />
           ))}
         </div>
       </section>
