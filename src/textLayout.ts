@@ -255,14 +255,29 @@ export function lineBaselineOffset(patch: Layout, scale: number): number {
   root.remove();
   if (!Number.isFinite(offset) || offset <= 0) return metricBaselineOffset(patch, scale);
   // A face still loading measures with its fallback; only a settled face is worth remembering.
+  // pdf.js registers a page's fonts as it draws them, so right after a document opens the face
+  // may not exist yet: `check` then says "settled" because there is nothing to wait for, while
+  // the probe measured the fallback. Such a face is measured again on the next render instead.
   let settled = true;
   try {
-    settled = document.fonts.check(css);
+    settled = document.fonts.check(css) && faceRegistered(patch.fontFamily);
   } catch {
     settled = true;
   }
   if (settled) baselineCache.set(key, offset);
   return offset / scale;
+}
+
+// Whether the first family of a font list is available: a face pdf.js (or the editor) registered
+// must be in the document's font set; a system family is taken as present.
+function faceRegistered(fontFamily: string): boolean {
+  const first = (fontFamily.split(",")[0] ?? "").trim().replace(/^["']|["']$/g, "");
+  if (!/^g_d\d+_f\d+/.test(first) && !/-edit\d*$/.test(first)) return true;
+  let found = false;
+  document.fonts.forEach((face) => {
+    if (face.family.replace(/^["']|["']$/g, "") === first) found = true;
+  });
+  return found;
 }
 
 function metricBaselineOffset(patch: Layout, scale: number): number {

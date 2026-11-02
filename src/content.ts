@@ -168,6 +168,10 @@ type ItemSpacing = {
   text: string;
   // Two-byte space codes inside the item, whose word spacing pdf.js wrongly added to its width.
   phantomInside: number;
+  // Space glyphs the stream drew between the item's letters, and their summed advance in text
+  // space at the selected size.
+  spaces: number;
+  spaceAdvance: number;
 };
 
 type TextFace = Pick<
@@ -398,6 +402,7 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
   let font = "";
   let phantom = 0;
   let fill = "#111111";
+  let fillAlpha = 1;
   let renderMode = 0;
   const show = (glyphs: unknown, op: number) => {
     if (!Array.isArray(glyphs)) return;
@@ -420,7 +425,9 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
           width: number(width, 0),
           op,
           phantom,
-          color: fill,
+          // Text painted with a constant alpha reads as a lighter colour: a web page's grey
+          // byline is often black at half opacity.
+          color: inkOver(fill, fillAlpha),
           bold: renderMode === 2 || renderMode === 6,
         });
       }
@@ -432,22 +439,36 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
   // The text state is part of the graphics state: q saves it and Q brings it back, so a Tc set
   // inside one text object does not leak into the next.
-  const saved: { charSpacing: number; wordSpacing: number; fontSize: number; font: string; fill: string; renderMode: number }[] = [];
+  const saved: {
+    charSpacing: number;
+    wordSpacing: number;
+    fontSize: number;
+    font: string;
+    fill: string;
+    fillAlpha: number;
+    renderMode: number;
+  }[] = [];
   const fillOps = new Set([OPS.setFillRGBColor, OPS.setFillGray, OPS.setFillCMYKColor, OPS.setFillColor, OPS.setFillColorN]);
   for (let index = 0; index < fnArray.length; index += 1) {
     const fn = fnArray[index];
     const args = argsArray[index];
     if (fn === OPS.save) {
-      saved.push({ charSpacing, wordSpacing, fontSize, font, fill, renderMode });
+      saved.push({ charSpacing, wordSpacing, fontSize, font, fill, fillAlpha, renderMode });
       continue;
     }
     if (fn === OPS.restore) {
       const state = saved.pop();
-      if (state) ({ charSpacing, wordSpacing, fontSize, font, fill, renderMode } = state);
+      if (state) ({ charSpacing, wordSpacing, fontSize, font, fill, fillAlpha, renderMode } = state);
       continue;
     }
     if (fn != null && fillOps.has(fn)) {
       fill = paintColor(args) ?? fill;
+      continue;
+    }
+    if (fn === OPS.setGState && Array.isArray(args) && Array.isArray(args[0])) {
+      for (const entry of args[0] as unknown[]) {
+        if (Array.isArray(entry) && entry[0] === "ca" && typeof entry[1] === "number") fillAlpha = entry[1];
+      }
       continue;
     }
     if (fn === OPS.setTextRenderingMode) {
@@ -499,6 +520,8 @@ function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, 
     let last: GlyphState | null = null;
     let letters = 0;
     let advance = 0;
+    let spaces = 0;
+    let spaceAdvance = 0;
     let spelled = "";
     while (position < text.length && cursor < stream.length) {
       const char = text[position] ?? "";
@@ -508,6 +531,11 @@ function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, 
       }
       let skipped = false;
       while (cursor < stream.length && !(stream[cursor]?.text ?? "").trim()) {
+        const space = stream[cursor];
+        if (first && space) {
+          spaces += 1;
+          spaceAdvance += space.width * (faces.get(space.font)?.unitScale ?? 0.001) * space.fontSize;
+        }
         cursor += 1;
         skipped = true;
       }
@@ -540,7 +568,7 @@ function itemSpacing(items: unknown[], stream: GlyphState[], faces: Map<string, 
     }
     if (first) {
       const phantomInside = last && last.op === first.op ? Math.max(0, last.phantom - first.phantom) : 0;
-      states.set(index, { state: first, letters, advance, text: spelled, phantomInside });
+      states.set(index, { state: first, letters, advance, text: spelled, phantomInside, spaces, spaceAdvance });
     }
   });
   return states;
@@ -861,9 +889,21 @@ function runSpacing(
     }
     return { text, letterSpacing: Math.round(letterSpacing * 1000) / 1000, wordSpacing: 0 };
   }
+  const chars = [...text].length;
   if (matched && letterCount > 1 && matched.letters === letterCount && textScale > 0) {
     const natural = measureWidth(letters, measure);
-    if (natural > 0) {
+    // What the stream's glyph advances say the item should measure. When that disagrees with
+    // the width the page drew (a font whose declared widths are not its own advances: an
+    // instance of a variable face, say, that the page set 5% tighter than the face's metrics),
+    // the glyph advances say nothing about the letters, and the page's text is simply narrower
+    // all over. The face is then tightened in proportion, letters and spaces alike, instead of
+    // the whole difference landing on the spaces and gluing the words together.
+    const declared = (matched.advance + matched.spaceAdvance) * textScale + letterSpacing * (chars - 1);
+    const proportional = matched.spaces === spaceCount && Math.abs(declared - width) > width * 0.02;
+    if (natural > 0 && proportional) {
+      const whole = measureWidth(text, { ...measure, letterSpacing, wordSpacing: 0 }) - letterSpacing;
+      if (whole > 0 && chars > 1) letterSpacing += ((width - whole) * (natural / whole)) / (chars - 1);
+    } else if (natural > 0) {
       const mismatch = (matched.advance * textScale - natural) / letterCount;
       letterSpacing += Math.max(-fontSize * 0.04, Math.min(fontSize * 0.05, mismatch));
     }
@@ -901,6 +941,22 @@ function spaceFit(
     gap: Math.abs(gap) < 0.005 ? 0 : Math.round(gap * 1000) / 1000,
     spread: Math.abs(spread) < 0.0005 ? 0 : Math.round(spread * 1000) / 1000,
   };
+}
+
+// The colour `hex` ink shows when painted over white paper at `alpha`.
+function inkOver(hex: string, alpha: number): string {
+  if (!(alpha < 0.995)) return hex;
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!match?.[1]) return hex;
+  const mix = Math.max(0, Math.min(1, alpha));
+  return `#${[0, 2, 4]
+    .map((offset) => {
+      const channel = Number.parseInt(match[1]!.slice(offset, offset + 2), 16);
+      return Math.round(channel * mix + 255 * (1 - mix))
+        .toString(16)
+        .padStart(2, "0");
+    })
+    .join("")}`;
 }
 
 // Whether two ink colours read as the same colour: the same to the eye, if not to the byte.
@@ -1210,25 +1266,37 @@ function readGraphics(
   argsArray: unknown[],
   viewport: PageViewport,
 ): { rules: Box[]; shapes: Box[]; images: Box[]; covers: Cover[] } {
-  const stack: { ctm: number[]; fillAlpha: number }[] = [];
+  // The clip in force, in page units; paint only lands inside it. A page printed from a browser
+  // paints its fixed header as a white box over the top of every page and clips it to a band,
+  // so without the clip the box would seem to hide the text under the band.
+  const stack: { ctm: number[]; fillAlpha: number; clip: Box | null }[] = [];
   let ctm = IDENTITY.slice();
   let fillAlpha = 1;
+  let clip: Box | null = null;
+  let clipping = false;
   const rules: Box[] = [];
   const shapes: Box[] = [];
   const images: Box[] = [];
   // Opaque paint in paint order, so text drawn earlier and lying under it can be told hidden.
   const covers: Cover[] = [];
+  const visible = (box: Box): Box | null => (clip ? intersectBoxes(box, clip) : box);
   for (let index = 0; index < fnArray.length; index += 1) {
     const fn = fnArray[index];
     const args = argsArray[index];
     if (fn === OPS.save) {
-      stack.push({ ctm: ctm.slice(), fillAlpha });
+      stack.push({ ctm: ctm.slice(), fillAlpha, clip });
       continue;
     }
     if (fn === OPS.restore || fn === OPS.paintFormXObjectEnd) {
       const state = stack.pop();
       ctm = state?.ctm ?? IDENTITY.slice();
       fillAlpha = state?.fillAlpha ?? 1;
+      clip = state?.clip ?? null;
+      continue;
+    }
+    // W / W* mark the path that follows as a clip.
+    if (fn === OPS.clip || fn === OPS.eoClip) {
+      clipping = true;
       continue;
     }
     if (fn === OPS.setGState && Array.isArray(args) && Array.isArray(args[0])) {
@@ -1243,17 +1311,24 @@ function readGraphics(
       continue;
     }
     if (fn === OPS.paintFormXObjectBegin) {
-      stack.push({ ctm: ctm.slice(), fillAlpha });
+      stack.push({ ctm: ctm.slice(), fillAlpha, clip });
       const matrix = Array.isArray(args) ? asMatrix(args[0]) : null;
       if (matrix) ctm = Util.transform(ctm, matrix);
       continue;
     }
     if (fn === OPS.constructPath && Array.isArray(args)) {
       const paint = args[0];
-      if (paint === OPS.clip || paint === OPS.eoClip || paint === OPS.endPath) continue;
       const minMax = args[2] as ArrayLike<number> | null;
+      const pathBounds = pathBox(minMax, ctm, viewport);
+      if (clipping || paint === OPS.clip || paint === OPS.eoClip) {
+        clipping = false;
+        // The clip narrows to the path's box (a curved clip hides at most what its box does).
+        if (pathBounds) clip = clip ? (intersectBoxes(clip, pathBounds) ?? { x: 0, y: 0, w: 0, h: 0 }) : pathBounds;
+        if (paint === OPS.clip || paint === OPS.eoClip || paint === OPS.endPath) continue;
+      }
+      if (paint === OPS.endPath) continue;
       const path = Array.isArray(args[1]) ? (args[1][0] as ArrayLike<number> | null) : null;
-      const box = pathBox(minMax, ctm, viewport);
+      const box = pathBounds ? visible(pathBounds) : null;
       if (!box) continue;
       // Only a filled polygon counts as a cover: a curved shape's box says little about what it hides.
       const filled = paint !== OPS.stroke && paint !== OPS.closeStroke;
@@ -1269,7 +1344,8 @@ function readGraphics(
       fn === OPS.paintImageXObjectRepeat ||
       fn === OPS.paintInlineImageXObjectGroup
     ) {
-      const box = pathBox([0, 0, 1, 1], ctm, viewport);
+      const placed = pathBox([0, 0, 1, 1], ctm, viewport);
+      const box = placed ? visible(placed) : null;
       if (!box) continue;
       if (fillAlpha >= 0.99) covers.push({ ...box, order: index });
       if (box.w >= 8 && box.h >= 8 && !coversPage(box, viewport)) images.push(box);
@@ -1448,6 +1524,16 @@ function contains(box: Box, point: Point, pad: number): boolean {
 
 function containsCenter(outer: Box, inner: Box): boolean {
   return contains(outer, { x: inner.x + inner.w / 2, y: inner.y + inner.h / 2 }, 0);
+}
+
+// The part of `a` inside `b`, or null when they do not meet.
+function intersectBoxes(a: Box, b: Box): Box | null {
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  const right = Math.min(a.x + a.w, b.x + b.w);
+  const bottom = Math.min(a.y + a.h, b.y + b.h);
+  if (right - x <= 0 || bottom - y <= 0) return null;
+  return { x, y, w: right - x, h: bottom - y };
 }
 
 function union(boxes: Box[]): Box {

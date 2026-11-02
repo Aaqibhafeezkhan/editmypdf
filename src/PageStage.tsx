@@ -232,6 +232,16 @@ export function PageStage({
   const caretRef = useRef<{ id: string; index: number } | null>(null);
   const [seen, setSeen] = useState(pageIndex === 0);
   const [content, setContent] = useState<ContentElement[]>([]);
+  // Editors are placed by measuring their face; a face pdf.js registers after an editor opened
+  // (the first click right after a document opens) moves the baseline by a point, so the page
+  // lays its editors out again whenever a font finishes loading.
+  const [, setFontTick] = useState(0);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onDone = () => setFontTick((tick) => tick + 1);
+    document.fonts.addEventListener("loadingdone", onDone);
+    return () => document.fonts.removeEventListener("loadingdone", onDone);
+  }, []);
   const [hoverContent, setHoverContent] = useState<string | null>(null);
   const contentRef = useRef<ContentElement[]>([]);
 
@@ -659,9 +669,16 @@ export function PageStage({
       return;
     }
     if (isTextContent(element.kind)) {
+      // Colours and the backdrop are read from a 4x rendering of the page when one is ready.
+      // Rendering it waits on pdf.js's worker, which is still reading the neighbouring pages for
+      // several seconds after a document opens, so the first click on a heavy page would open
+      // nothing for that long. The page's own canvas stands in until the detail is ready.
       let source = canvas;
       try {
-        source = await detailCanvas(page);
+        source = await Promise.race([
+          detailCanvas(page),
+          new Promise<HTMLCanvasElement>((resolve) => window.setTimeout(() => resolve(canvas), 250)),
+        ]);
       } catch {
         source = canvas;
       }
