@@ -917,25 +917,43 @@
 }
 
 .mark svg {
-  width: 16px;
-  height: 16px;
   flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 3px;
+  border-radius: 50%;
 }
 
 .mark.yes {
   color: var(--good);
 }
 
+.mark.yes svg {
+  background: var(--good-soft);
+}
+
 .mark.no {
   color: var(--bad);
+}
+
+.mark.no svg {
+  background: var(--bad-soft);
 }
 
 .mark.partial {
   color: var(--warn);
 }
 
+.mark.partial svg {
+  background: var(--warn-soft);
+}
+
 .mark.unknown {
   color: var(--ink-2);
+}
+
+.mark.unknown svg {
+  background: var(--paper-2);
 }
 
 .sr-only {

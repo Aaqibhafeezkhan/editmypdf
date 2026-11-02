@@ -11,6 +11,28 @@ export type Tri = "yes" | "no" | "partial" | "unknown";
 
 export type Source = { label: string; url: string; accessed: string };
 
+// One or two letters and a hue for a monogram badge, used where a mark for the tool is wanted
+// without reproducing its logo. The hue stands for the brand's usual colour and is approximate.
+export type Brand = { monogram: string; color: string };
+
+// The lowest paid price as a figure for tables and charts, with the caveats the prose carries.
+// The flags must stay visible wherever the figure is shown.
+export type StartingPrice = {
+  // "$44.99", "$7–15" or "Free".
+  figure: string;
+  per: "month" | "year" | "week" | "";
+  // The figure is rounded, converted, or taken from a listing rather than read exactly.
+  approximate?: boolean;
+  // The vendor prices by region; the figure is one region's.
+  regional?: boolean;
+  // The figure comes from third-party listings, not the vendor's own page.
+  thirdParty?: boolean;
+  // The vendor shows the price only at checkout.
+  checkoutOnly?: boolean;
+  // The plan and billing the figure refers to.
+  note?: string;
+};
+
 export const TRI_LABEL: Record<Tri, string> = { yes: "Yes", no: "No", partial: "Partly", unknown: "Not stated" };
 
 export function triWord(value: Tri, words: Partial<Record<Tri, string>> = {}): string {
@@ -40,6 +62,8 @@ export type Tool = {
   };
   paid: { name: string; price: string; note?: string }[];
   priceFrom: string;
+  startingPrice: StartingPrice;
+  brand: Brand;
   textEditing: { existing: Tri; keepsFont: Tri; note: string };
   features: {
     annotate: Tri;
@@ -88,6 +112,8 @@ export const OURS: Tool = {
   },
   paid: [],
   priceFrom: "Free",
+  startingPrice: { figure: "Free", per: "", note: "everything, for everyone" },
+  brand: { monogram: "PE", color: "#1e59cd" },
   textEditing: {
     existing: "yes",
     keepsFont: "yes",
@@ -140,6 +166,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Business", price: "Custom, 25+ users" },
     ],
     priceFrom: "≈ $44.99/year (App Store; web price varies by region)",
+    startingPrice: { figure: "$44.99", per: "year", approximate: true, regional: true, note: "Premium on the US App Store; the web price varies by region" },
+    brand: { monogram: "iL", color: "#e5322d" },
     textEditing: {
       existing: "yes",
       keepsFont: "unknown",
@@ -217,6 +245,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Business", price: "Custom, 20+ seats" },
     ],
     priceFrom: "Pro, regional pricing (≈ $9/month billed yearly per third-party listings)",
+    startingPrice: { figure: "$9", per: "month", approximate: true, regional: true, thirdParty: true, note: "Pro billed yearly, per third-party listings" },
+    brand: { monogram: "Sp", color: "#e63c3c" },
     textEditing: {
       existing: "yes",
       keepsFont: "no",
@@ -288,6 +318,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Desktop Week Pass", price: "$7.95 one-time for seven days" },
     ],
     priceFrom: "$5 for a week; $7.50/month",
+    startingPrice: { figure: "$5", per: "week", note: "a seven-day web pass; $7.50 a month after" },
+    brand: { monogram: "Se", color: "#1d7a73" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
@@ -362,6 +394,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Acrobat Studio", price: "UK £24.98 a month on an annual plan ($24.99 at launch in August 2025)", note: "Adds AI Assistant, PDF Spaces and Adobe Express." },
     ],
     priceFrom: "Standard ≈ $14.99/month on an annual plan (regional pricing)",
+    startingPrice: { figure: "$14.99", per: "month", approximate: true, regional: true, note: "Acrobat Standard on an annual plan; the UK store shows £14.99" },
+    brand: { monogram: "Ac", color: "#e1251b" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
@@ -435,6 +469,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "PDF Editor 14 perpetual", price: "$209.99 one-time per user", note: "Windows or macOS only, without the cloud and AI features." },
     ],
     priceFrom: "$10.99/month",
+    startingPrice: { figure: "$10.99", per: "month", note: "PDF Editor, per user on annual billing" },
+    brand: { monogram: "Fx", color: "#ff6a13" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
@@ -501,6 +537,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Xodo Desktop (PDF Studio)", price: "$119.88 a year ($9.99 a month); a perpetual licence is also sold" },
     ],
     priceFrom: "$39.99/year (Web)",
+    startingPrice: { figure: "$39.99", per: "year", note: "Xodo Web" },
+    brand: { monogram: "Xo", color: "#2b6fe6" },
     textEditing: {
       existing: "yes",
       keepsFont: "unknown",
@@ -565,6 +603,8 @@ export const COMPETITORS: Competitor[] = [
     },
     paid: [],
     priceFrom: "Free",
+    startingPrice: { figure: "Free", per: "", note: "no paid plan" },
+    brand: { monogram: "24", color: "#2e7dd1" },
     textEditing: {
       existing: "no",
       keepsFont: "no",
@@ -633,6 +673,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Premium", price: "$15 per user per month billed annually, or $40 month to month", note: "Adds signNow, a legal forms library and workflows." },
     ],
     priceFrom: "$8/month (annual)",
+    startingPrice: { figure: "$8", per: "month", note: "Basic, per user billed annually" },
+    brand: { monogram: "pF", color: "#ef6c1a" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
@@ -702,6 +744,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Business", price: "About $20.83 per person per month billed yearly (third-party)", note: "Teams plan is closed to new sign-ups." },
     ],
     priceFrom: "Pro ≈ $12/month billed yearly (regional pricing)",
+    startingPrice: { figure: "$12", per: "month", approximate: true, regional: true, thirdParty: true, note: "Pro billed yearly, per third-party listings" },
+    brand: { monogram: "Ca", color: "#00c4cc" },
     textEditing: {
       existing: "yes",
       keepsFont: "no",
@@ -768,6 +812,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Ultimate", price: "$5.99 a month billed yearly, or $8.99 monthly", note: "Adds encryption, advanced forms, signatures and redaction on desktop." },
     ],
     priceFrom: "$2.99/month",
+    startingPrice: { figure: "$2.99", per: "month", note: "Premium billed yearly" },
+    brand: { monogram: "Pe", color: "#b4232a" },
     textEditing: {
       existing: "partial",
       keepsFont: "unknown",
@@ -833,6 +879,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Site License", price: "Custom" },
     ],
     priceFrom: "$8/month (annual)",
+    startingPrice: { figure: "$8", per: "month", note: "Basic billed yearly" },
+    brand: { monogram: "Dh", color: "#1f8ef1" },
     textEditing: {
       existing: "yes",
       keepsFont: "no",
@@ -900,6 +948,8 @@ export const COMPETITORS: Competitor[] = [
       { name: "Business", price: "Shown only at checkout", note: "Adds OCR Edit, 10 GB storage and deployment tools." },
     ],
     priceFrom: "Pro (price shown at checkout; ≈ $7–15/month per third-party listings)",
+    startingPrice: { figure: "$7–15", per: "month", approximate: true, thirdParty: true, checkoutOnly: true, note: "Pro; the vendor shows the price only at checkout" },
+    brand: { monogram: "So", color: "#d8232a" },
     textEditing: {
       existing: "yes",
       keepsFont: "partial",
@@ -940,6 +990,16 @@ export const COMPETITORS: Competitor[] = [
     ],
   },
 ];
+
+// The caveats a starting price carries, as the short words the site shows beside the figure.
+export function priceFlags(price: StartingPrice): string[] {
+  return [
+    price.approximate ? "approx." : "",
+    price.regional ? "regional" : "",
+    price.thirdParty ? "third-party" : "",
+    price.checkoutOnly ? "at checkout" : "",
+  ].filter(Boolean);
+}
 
 export function competitorBySlug(slug: string): Competitor | undefined {
   return COMPETITORS.find((item) => item.slug === slug);

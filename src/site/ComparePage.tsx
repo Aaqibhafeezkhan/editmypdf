@@ -3,7 +3,9 @@ import { ArrowRight, Check, ChevronRight, Minus, Scale } from "lucide-react";
 import { competitorBySlug, COMPETITORS, FEATURE_LABELS, OURS, triWord, type Competitor, type Tool } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
+import { CompareCard, Duel } from "./CompareCard.tsx";
 import { Mark, Where } from "./Marks.tsx";
+import { Price } from "./Price.tsx";
 import { NotFound } from "./NotFound.tsx";
 import { breadcrumbs, useMeta } from "./useMeta.ts";
 
@@ -76,6 +78,7 @@ function Comparison({ tool }: { tool: Competitor }) {
             </p>
           </div>
           <aside className="cmp-verdict">
+            <Duel tool={tool} />
             <h2>In short</h2>
             <p>{tool.verdict}</p>
           </aside>
@@ -83,13 +86,15 @@ function Comparison({ tool }: { tool: Competitor }) {
       </section>
 
       <section className="container">
-        <div className="table-wrap" data-reveal>
+        <div className="table-wrap sticky" data-reveal>
           <table className="cmp-table glance">
             <thead>
               <tr>
                 <th scope="col">At a glance</th>
                 <th scope="col">{tool.name}</th>
-                <th scope="col">{PRODUCT.name}</th>
+                <th scope="col" className="us">
+                  {PRODUCT.name}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -143,6 +148,7 @@ function Comparison({ tool }: { tool: Competitor }) {
                     "None"
                   ) : (
                     <>
+                      <Price price={tool.startingPrice} note={false} />
                       {tool.paid.map((plan) => (
                         <span key={plan.name} style={{ display: "block" }}>
                           <strong>{plan.name}</strong>: {plan.price}
@@ -262,23 +268,12 @@ function Comparison({ tool }: { tool: Competitor }) {
         </h2>
         <div className="card-grid" data-reveal>
           {others.map((other) => (
-            <Link key={other.slug} to={ROUTES.comparison(other.slug)} className="card">
-              <div className="card-meta">
-                <span className="tag">{other.vendor}</span>
-              </div>
-              <h3>
-                {PRODUCT.name} vs {other.name}
-              </h3>
-              <p>{other.summary}</p>
-              <span className="link-arrow">
-                Read the comparison <ArrowRight aria-hidden="true" />
-              </span>
-            </Link>
+            <CompareCard key={other.slug} tool={other} />
           ))}
         </div>
         <p className="actions">
           <Link to={ROUTES.app} className="btn btn-primary btn-lg">
-            Try {PRODUCT.name} on a PDF <ArrowRight aria-hidden="true" />
+            Try {PRODUCT.name} on a PDF <ArrowRight className="btn-arrow" aria-hidden="true" />
           </Link>
           <Link to={ROUTES.compare} className="btn btn-secondary btn-lg">
             All comparisons
