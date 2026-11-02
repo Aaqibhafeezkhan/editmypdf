@@ -16,7 +16,9 @@
 :root {
   color-scheme: light;
 
-  /* Palette: warm paper neutrals and an ink blue accent. */
+  /* Palette: warm paper neutrals, an accent pair (ink blue and coral) and two supporting hues
+     (teal, violet). Each hue has a base for fills and icons, an -ink for text (AA on every paper
+     tone in both themes) and a -soft tint for backgrounds. site.css maps them to roles. */
   --paper-0: #f8f7f3;
   --paper-1: #ffffff;
   --paper-2: #efede7;
@@ -31,6 +33,18 @@
   --accent-soft: oklch(0.95 0.03 262);
   --accent-ink: oklch(0.42 0.18 262);
   --on-accent: #ffffff;
+  --coral: oklch(0.62 0.17 40);
+  --coral-ink: oklch(0.5 0.16 40);
+  --coral-soft: oklch(0.95 0.035 45);
+  --teal: oklch(0.6 0.12 175);
+  --teal-ink: oklch(0.46 0.1 175);
+  --teal-soft: oklch(0.95 0.04 175);
+  --violet: oklch(0.55 0.17 300);
+  --violet-ink: oklch(0.46 0.16 300);
+  --violet-soft: oklch(0.95 0.035 300);
+  /* The mark: the tile keeps the brand blue in both themes, the page on it is always white. */
+  --logo-tile: oklch(0.5 0.19 262);
+  --logo-fold: oklch(0.74 0.12 262);
   --good: oklch(0.55 0.15 150);
   --good-soft: oklch(0.95 0.04 150);
   --warn: oklch(0.6 0.15 60);
@@ -160,6 +174,17 @@
   --accent-soft: oklch(0.3 0.06 262);
   --accent-ink: oklch(0.8 0.12 262);
   --on-accent: #0f1a3a;
+  --coral: oklch(0.76 0.14 45);
+  --coral-ink: oklch(0.82 0.12 45);
+  --coral-soft: oklch(0.3 0.06 45);
+  --teal: oklch(0.76 0.11 175);
+  --teal-ink: oklch(0.82 0.1 175);
+  --teal-soft: oklch(0.3 0.05 175);
+  --violet: oklch(0.74 0.13 300);
+  --violet-ink: oklch(0.8 0.12 300);
+  --violet-soft: oklch(0.3 0.06 300);
+  --logo-tile: oklch(0.56 0.18 262);
+  --logo-fold: oklch(0.78 0.1 262);
   --good: oklch(0.75 0.15 150);
   --good-soft: oklch(0.3 0.05 150);
   --warn: oklch(0.8 0.14 75);
@@ -274,18 +299,22 @@ button {
 }
 
 
+/* The brand: the tile mark and the wordmark share one family. The wordmark is set in the same
+   sans as the interface, semibold and tight, at a size whose cap height sits on the tile's page. */
 .logo {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 10px;
 }
 
 .logo-word {
-  font-family: var(--ff-display);
-  font-size: 1.5rem;
+  font-family: var(--ff-sans);
+  font-size: 1.125rem;
+  font-weight: 600;
   line-height: 1;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
   color: var(--ink-0);
+  font-variation-settings: "wght" 600;
 }
 
 /* ---- Loading screen for lazy routes -------------------------------------- */

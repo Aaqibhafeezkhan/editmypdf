@@ -44,7 +44,7 @@ function Article({ slug }: { slug: string }) {
   const index = POSTS.findIndex((item) => item.slug === slug);
   const next = POSTS[index + 1] ?? POSTS[0];
   return (
-    <article className="section container post">
+    <article className="section container post tone-violet">
       <header className="post-header">
         <nav className="crumbs" aria-label="Breadcrumb">
           <Link to={ROUTES.home}>{PRODUCT.name}</Link>

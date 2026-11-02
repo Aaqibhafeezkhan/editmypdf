@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { Scale } from "lucide-react";
 import { COMPETITORS, OURS } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { Mark, Where } from "./Marks.tsx";
@@ -13,7 +14,9 @@ export function Compare() {
     <>
       <section className="section container">
         <div className="section-head">
-          <p className="eyebrow">Compare</p>
+          <p className="eyebrow">
+            <Scale aria-hidden="true" /> Compare
+          </p>
           <h1 className="display">The same questions, asked of every PDF editor.</h1>
           <p className="lede">
             Where does your file go, what does the free tier really allow, and when you retype a line, does

@@ -100,7 +100,7 @@ export function Pricing() {
         </div>
       </section>
 
-      <section className="section container">
+      <section className="section container tone-coral">
         <div className="section-head centered">
           <h2 className="h2">What the alternatives charge for the same edit.</h2>
           <p className="lede">

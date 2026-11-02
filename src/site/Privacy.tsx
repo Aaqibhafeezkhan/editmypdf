@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { ShieldCheck } from "lucide-react";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { useMeta } from "./useMeta.ts";
 
@@ -8,8 +9,10 @@ export function Privacy() {
     description: `${PRODUCT.name} never uploads your PDF. This page lists exactly what the app loads, what it stores in your browser, and how to remove it.`,
   });
   return (
-    <section className="section container page-narrow">
-      <p className="eyebrow">Privacy</p>
+    <section className="section container page-narrow tone-teal">
+      <p className="eyebrow">
+        <ShieldCheck aria-hidden="true" /> Privacy
+      </p>
       <h1 className="display">Your document never leaves your device.</h1>
       <p className="lede">
         This is not a policy written by lawyers. It is a description of what the code does, written so

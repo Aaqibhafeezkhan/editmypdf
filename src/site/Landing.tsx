@@ -382,7 +382,7 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="section container">
+      <section className="section container tone-coral">
         <div className="section-head centered">
           <p className="eyebrow">
             <ListChecks aria-hidden="true" /> Use cases
@@ -429,7 +429,7 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="section fidelity-section">
+      <section className="section fidelity-section tone-violet">
         <div className="container fidelity" data-reveal>
           <div>
             <p className="eyebrow">
@@ -467,7 +467,7 @@ export function Landing() {
         </div>
       </section>
 
-      <section className="privacy-band" id="privacy">
+      <section className="privacy-band tone-teal" id="privacy">
         <div className="privacy-bg" aria-hidden="true" />
         <div className="container">
           <div className="privacy-head" data-reveal>
@@ -584,7 +584,7 @@ export function Landing() {
         </p>
       </section>
 
-      <section className="section container">
+      <section className="section container tone-violet">
         <div className="section-head centered">
           <p className="eyebrow">
             <BookOpen aria-hidden="true" /> From the blog
