@@ -2,30 +2,13 @@ import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BASE_PATH } from "./data/product.ts";
+import { installStaleChunkReload } from "./reload.ts";
 import { Root } from "./root.tsx";
 import { applyTheme, readTheme } from "./theme.ts";
 import "./index.css";
 
 applyTheme(readTheme());
-
-// A deploy replaces every content-hashed chunk, so a tab opened before it fails the next route it
-// lazily imports (the old chunk name is gone). Vite reports that as vite:preloadError; reloading
-// once brings the tab up to the current build instead of an error screen. A chunk still missing
-// after the reload is a real fault, so a second failure within a minute is left to surface, and so
-// is the first when storage is blocked and nothing could stop a loop.
-const RELOAD_KEY = "pdf-editor:chunk-reload";
-window.addEventListener("vite:preloadError", (event) => {
-  let last = 0;
-  try {
-    last = Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
-    if (Date.now() - last < 60_000) return;
-    sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
-  } catch {
-    return;
-  }
-  event.preventDefault();
-  location.reload();
-});
+installStaleChunkReload();
 
 const app = (
   <StrictMode>
