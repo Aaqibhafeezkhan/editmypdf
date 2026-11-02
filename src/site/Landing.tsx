@@ -116,6 +116,7 @@ function Showcase({
   body,
   points,
   visual,
+  caption,
   reverse = false,
   link,
 }: {
@@ -125,16 +126,20 @@ function Showcase({
   body: string;
   points: string[];
   visual: React.ReactNode;
+  // The label on the preview's title bar.
+  caption: string;
   reverse?: boolean;
   link?: { to: string; label: string };
 }) {
   return (
-    <div className={reverse ? "showcase reverse" : "showcase"} data-reveal>
+    <div className={reverse ? "showcase reverse" : "showcase"}>
       <div className="showcase-copy">
-        <span className="showcase-icon" aria-hidden="true">
-          <Icon />
-        </span>
-        <p className="eyebrow">{eyebrow}</p>
+        <p className="showcase-label">
+          <span className="icon-tile" aria-hidden="true">
+            <Icon />
+          </span>
+          <span>{eyebrow}</span>
+        </p>
         <h3 className="h2">{title}</h3>
         <p className="lede">{body}</p>
         <ul className="checklist">
@@ -153,7 +158,15 @@ function Showcase({
           </p>
         )}
       </div>
-      <div className="showcase-visual">{visual}</div>
+      <div className="showcase-visual">
+        <div className="preview-frame">
+          <div className="preview-bar" aria-hidden="true">
+            <span className="preview-dots" />
+            <span className="preview-title">{caption}</span>
+          </div>
+          <div className="preview-body">{visual}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -253,7 +266,7 @@ export function Landing() {
       </section>
 
       <section className="container" aria-label="How it works in three steps">
-        <ol className="steps-strip" data-reveal>
+        <ol className="steps-strip">
           {STEPS.map((step, index) => (
             <li key={step.title} className="step-chip">
               <span className="step-chip-icon" aria-hidden="true">
@@ -313,6 +326,7 @@ export function Landing() {
             "The original words are hidden under the edit and taken out of the page on download.",
           ]}
           visual={<BeforeAfter />}
+          caption="Before and after one edit"
           link={{ to: ROUTES.post("exactly-as-the-page-prints-it"), label: "How the fit is done" }}
         />
 
@@ -332,6 +346,7 @@ export function Landing() {
             "Each face is embedded separately on export.",
           ]}
           visual={<SpansVisual />}
+          caption="One paragraph, three faces"
           link={{ to: ROUTES.post("mixed-face-paragraphs"), label: "How the span editor works" }}
         />
 
@@ -350,6 +365,7 @@ export function Landing() {
             "The result is searchable, selectable and sharp at any zoom.",
           ]}
           visual={<ExportVisual />}
+          caption="What the download contains"
           link={{ to: ROUTES.post("exporting-real-text"), label: "How export works" }}
         />
 
@@ -369,9 +385,10 @@ export function Landing() {
             "Emoji, and a signature drawn by hand or typed in a script face.",
           ]}
           visual={<AnnotateVisual />}
+          caption="Marks on a page"
         />
 
-        <div className="mini-grid" data-reveal>
+        <div className="mini-grid">
           <div className="mini">
             <Layers aria-hidden="true" />
             <strong>Every document at its own link</strong>
@@ -401,7 +418,7 @@ export function Landing() {
             change it without rebuilding it.
           </p>
         </div>
-        <div className="usecases" data-reveal>
+        <div className="usecases">
           {USE_CASES.map((item) => (
             <Link key={item.title} to={ROUTES.app} className="usecase">
               <span className="usecase-icon" aria-hidden="true">
@@ -415,7 +432,7 @@ export function Landing() {
             </Link>
           ))}
         </div>
-        <div className="seo-copy" data-reveal>
+        <div className="seo-copy">
           <div>
             <h3>Edit PDF text online, free, without uploading</h3>
             <p>
@@ -438,7 +455,7 @@ export function Landing() {
       </section>
 
       <section className="section fidelity-section tone-violet">
-        <div className="container fidelity" data-reveal>
+        <div className="container fidelity">
           <div>
             <p className="eyebrow">
               <Ruler aria-hidden="true" /> Fidelity
@@ -478,7 +495,7 @@ export function Landing() {
       <section className="privacy-band tone-teal" id="privacy">
         <div className="privacy-bg" aria-hidden="true" />
         <div className="container privacy-layout">
-          <div className="privacy-copy" data-reveal>
+          <div className="privacy-copy">
             <p className="eyebrow">
               <ShieldCheck aria-hidden="true" /> Privacy
             </p>
@@ -513,14 +530,14 @@ export function Landing() {
               </span>
             </p>
           </div>
-          <div className="privacy-figure" data-reveal>
+          <div className="privacy-figure">
             <PrivacyDiagram />
           </div>
         </div>
       </section>
 
       <section className="section container" aria-labelledby="compare-heading">
-        <div className="cmp-teaser" data-reveal>
+        <div className="cmp-teaser">
           <div className="cmp-teaser-copy">
             <p className="eyebrow">
               <Scale aria-hidden="true" /> Compare
@@ -560,7 +577,7 @@ export function Landing() {
           </p>
           <h2 className="h2">Engineering notes, not announcements.</h2>
         </div>
-        <div className="post-grid" data-reveal>
+        <div className="post-grid">
           {posts.map((post) => (
             <PostCard key={post.slug} post={post} />
           ))}
@@ -596,7 +613,7 @@ export function Landing() {
       </section>
 
       <section className="section container">
-        <div className="cta" data-reveal>
+        <div className="cta">
           <div className="cta-bg" aria-hidden="true" />
           <h2 className="display">Open a PDF and click a line.</h2>
           <p className="lede">Free, in your browser, with nothing to install and nothing to upload.</p>

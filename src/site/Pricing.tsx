@@ -89,7 +89,7 @@ export function Pricing() {
             make.
           </p>
         </div>
-        <div className="price-hero" data-reveal>
+        <div className="price-hero">
           <div className="price-hero-main">
             <span className="price-badge">
               <BadgeCheck aria-hidden="true" /> Everything included
@@ -134,7 +134,7 @@ export function Pricing() {
             paid plan as the vendor showed it, with its caveats beside the figure.
           </p>
         </div>
-        <div className="price-table-wrap" data-reveal>
+        <div className="price-table-wrap">
           <table className="price-table">
             <caption className="sr-only">
               Starting prices of twelve PDF editors next to {PRODUCT.name}, what retyping a line requires with

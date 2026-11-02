@@ -1646,21 +1646,30 @@ a.card:hover {
 
 /* ---- Reveal on scroll ----------------------------------------------------- */
 
-[data-reveal] {
+/* SiteLayout tags the blocks (data-reveal) and marks them "in" as they scroll into view, with a
+   per-sibling delay in --reveal-delay. The hidden state applies only once scripts have run
+   (html[data-js], set by the inline script in index.html), so prerendered HTML without
+   JavaScript shows everything. */
+html[data-js] [data-reveal] {
   opacity: 0;
-  transform: translateY(18px);
-  transition: opacity 700ms var(--ease-out), transform 700ms var(--ease-out);
+  transform: translateY(22px) scale(0.985);
+  transition:
+    opacity 640ms var(--ease-out) var(--reveal-delay, 0ms),
+    transform 760ms var(--ease-out) var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
 }
 
-[data-reveal].in {
+html[data-js] [data-reveal].in {
   opacity: 1;
   transform: none;
+  will-change: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-reveal] {
+  html[data-js] [data-reveal] {
     opacity: 1;
     transform: none;
+    transition: none;
   }
 }
 

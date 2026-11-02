@@ -593,11 +593,107 @@
 
 .showcase {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: var(--sp-12);
-  align-items: center;
+  align-items: stretch;
   padding-block: var(--sp-12);
   border-top: 1px solid var(--rule);
+}
+
+.showcase-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* The icon and the label as one badge above the title. */
+.showcase-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  align-self: flex-start;
+  margin: 0 0 var(--sp-5);
+  padding: 4px 14px 4px 4px;
+  border: 1px solid var(--rule);
+  border-radius: var(--round-full);
+  background: var(--paper-1);
+  box-shadow: var(--elev-1);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--tone-ink);
+}
+
+.showcase-label .icon-tile {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--round-full);
+}
+
+.showcase-label .icon-tile svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* The preview: a framed window with a title bar, as tall as the copy beside it, the
+   illustration centred inside. */
+.showcase-visual {
+  display: flex;
+  min-width: 0;
+}
+
+.preview-frame {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 420px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--round-xl);
+  background: var(--paper-1);
+  box-shadow: var(--elev-3);
+  overflow: hidden;
+}
+
+.preview-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 40px;
+  padding: 0 var(--sp-4);
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-0);
+}
+
+.preview-dots {
+  width: 38px;
+  height: 10px;
+  background: radial-gradient(circle, var(--rule-strong) 4px, transparent 4.5px) 0 0 / 14px 10px repeat-x;
+}
+
+.preview-title {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+
+.preview-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--sp-6);
+  background:
+    radial-gradient(60% 80% at 100% 0%, color-mix(in oklab, var(--tone) 10%, transparent), transparent 70%),
+    var(--paper-2);
+}
+
+.preview-body .vis {
+  border: 0;
+  border-radius: var(--round-lg);
+  box-shadow: var(--elev-2);
 }
 
 .showcase.reverse .showcase-copy {
@@ -605,7 +701,7 @@
 }
 
 .showcase .h2 {
-  font-size: var(--fs-xl);
+  font-size: var(--fs-2xl);
 }
 
 .showcase .lede {
@@ -629,6 +725,18 @@
 
   .showcase.reverse .showcase-copy {
     order: 0;
+  }
+
+  .showcase .h2 {
+    font-size: var(--fs-xl);
+  }
+
+  .preview-frame {
+    min-height: 0;
+  }
+
+  .preview-body {
+    padding: var(--sp-4);
   }
 }
 
@@ -684,19 +792,19 @@
 }
 
 .vis-page {
-  padding: 28px 30px;
+  padding: 32px 34px;
   border-radius: 2px;
   background: #ffffff;
   color: #1a1a1a;
   box-shadow: 0 0 0 1px var(--paper-edge), 0 10px 30px rgb(0 0 0 / 0.08);
   font-family: "Times New Roman", Times, "Liberation Serif", serif;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14.5px;
+  line-height: 1.55;
 }
 
 .vis-page h5 {
-  margin: 0 0 8px;
-  font-size: 17px;
+  margin: 0 0 10px;
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: 0;
 }
@@ -765,8 +873,8 @@
 /* Spans */
 
 .vis-page.spans p {
-  font-size: 16px;
-  line-height: 1.75;
+  font-size: 18px;
+  line-height: 1.8;
   text-align: left;
 }
 
@@ -1580,22 +1688,6 @@
   width: 16px;
   height: 16px;
   color: var(--ink-1);
-}
-
-.showcase-icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  margin-bottom: var(--sp-4);
-  border-radius: 12px;
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-}
-
-.showcase-icon svg {
-  width: 20px;
-  height: 20px;
 }
 
 .mini svg {

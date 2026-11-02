@@ -205,7 +205,7 @@ export function HowItWorks() {
       <section className="container tone-violet">
         <ol className="how-steps">
           {STEPS.map((step) => (
-            <li key={step.n} id={`step-${step.n}`} className="how-step" data-reveal>
+            <li key={step.n} id={`step-${step.n}`} className="how-step">
               <span className="how-step-marker" aria-hidden="true">
                 <span className="icon-tile lg">
                   <step.icon />
@@ -233,7 +233,7 @@ export function HowItWorks() {
             and the <Link to={ROUTES.compare}>comparisons</Link> say which tools do them well.
           </p>
         </div>
-        <ul className="limits-grid" data-reveal>
+        <ul className="limits-grid">
           {LIMITS.map((limit) => (
             <li key={limit.text} className="card limit-card">
               <span className="icon-tile" aria-hidden="true">

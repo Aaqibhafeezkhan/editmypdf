@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation } from "react-router";
 import {
   ArrowRight,
@@ -56,32 +56,115 @@ function siteJsonLd(): string {
   ]);
 }
 
-// Elements marked data-reveal fade in as they scroll into view.
+// The blocks that rise into view as the page is scrolled, on every page of the site: section
+// heads, cards, rows, tables, lists and their items. Children of one parent appear one after
+// another. Blocks already on screen when the page opens are shown at once (the page's own fade
+// covers them), so only what scrolls into view animates.
+const REVEAL = [
+  ".section-head",
+  ".showcase",
+  ".steps-strip",
+  ".trust-strip",
+  ".mini",
+  ".usecase",
+  ".seo-copy > div",
+  ".fidelity > *",
+  ".privacy-copy",
+  ".privacy-figure",
+  ".cmp-teaser-copy",
+  ".glance",
+  ".post-card",
+  ".cmp-card",
+  ".card",
+  ".acc-item",
+  ".cta",
+  ".how-overview > li",
+  ".how-step",
+  ".limit-card",
+  ".terms-points > li",
+  ".cmp-number",
+  ".cmp-checked",
+  ".table-wrap",
+  ".cmp-footnote",
+  ".price-hero",
+  ".price-table-wrap",
+  ".price-foot",
+  ".pro-list",
+  ".cmp-verdict",
+  ".post-header",
+  ".post-side",
+  ".post-body",
+  ".post-related",
+  ".post-footer > .actions",
+  ".stats > div",
+  ".point-list > li",
+  ".hero-window",
+  ".prose",
+  ".crumbs",
+  ".site-main .actions",
+].join(", ");
+
 function useReveal(pathname: string) {
-  useEffect(() => {
-    const nodes = document.querySelectorAll<HTMLElement>("[data-reveal]");
+  // A layout effect, so the blocks are tagged before the browser paints the new route.
+  useLayoutEffect(() => {
+    const nodes = [...document.querySelectorAll<HTMLElement>(REVEAL)].filter((node) => !node.closest("[data-reveal]") || node.hasAttribute("data-reveal"));
     if (nodes.length === 0) return;
-    if (!("IntersectionObserver" in window)) {
-      nodes.forEach((node) => node.classList.add("in"));
-      return;
+    const viewport = window.innerHeight;
+    const pending: HTMLElement[] = [];
+    const counts = new Map<Element | null, number>();
+    for (const node of nodes) {
+      node.setAttribute("data-reveal", "");
+      // Siblings follow one another with a short delay.
+      const parent = node.parentElement;
+      const index = counts.get(parent) ?? 0;
+      counts.set(parent, index + 1);
+      node.style.setProperty("--reveal-delay", `${Math.min(index, 8) * 70}ms`);
+      if (node.getBoundingClientRect().top < viewport * 0.92) node.classList.add("in");
+      else pending.push(node);
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          entry.target.classList.add("in");
-          observer.unobserve(entry.target);
-        }
-      },
-      { rootMargin: "0px 0px -8% 0px", threshold: 0.05 },
-    );
-    nodes.forEach((node) => observer.observe(node));
-    // Whatever the observer does, nothing stays hidden for long: a throttled background tab or a
-    // crawler without intersection events still gets the content.
-    const fallback = window.setTimeout(() => nodes.forEach((node) => node.classList.add("in")), 1400);
+    if (pending.length === 0) return;
+    const waiting = new Set(pending);
+    const show = (node: HTMLElement) => {
+      node.classList.add("in");
+      waiting.delete(node);
+      observer?.unobserve(node);
+    };
+    // The observer does the work; a scroll check backs it up, because a tab opened in the
+    // background gets no intersection notifications until it is shown, and a scroll is the one
+    // thing a reader always does before expecting more.
+    const observer =
+      "IntersectionObserver" in window
+        ? new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) if (entry.isIntersecting) show(entry.target as HTMLElement);
+            },
+            { rootMargin: "0px 0px -8% 0px", threshold: 0.05 },
+          )
+        : null;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      const limit = window.innerHeight * 0.92;
+      for (const node of waiting) if (node.getBoundingClientRect().top < limit) show(node);
+      if (waiting.size === 0) stop();
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    const stop = () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      document.removeEventListener("visibilitychange", schedule);
+    };
+    if (observer) pending.forEach((node) => observer.observe(node));
+    else schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    document.addEventListener("visibilitychange", schedule);
     return () => {
-      observer.disconnect();
-      window.clearTimeout(fallback);
+      stop();
+      observer?.disconnect();
+      if (frame) cancelAnimationFrame(frame);
     };
   }, [pathname]);
 }
