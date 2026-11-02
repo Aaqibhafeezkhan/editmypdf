@@ -12,7 +12,7 @@ import { createSession, listSessions, persistAnnotations, readSession, readySess
 import type { Brush } from "./brushes.ts";
 import { isBoxShape, isLinearShape, isOpenShape, SHAPE_LABEL, shapeFromLine, type ShapeId } from "./shapes.ts";
 import { measureTextWidth } from "./textMeasure.ts";
-import { ChevronDown, Download, FileText, Minus, Plus, Redo2, RotateCw, Undo2, UnfoldHorizontal, UnfoldVertical } from "lucide-react";
+import { ChevronDown, Download, Minus, Plus, Redo2, RotateCw, Undo2, UnfoldHorizontal, UnfoldVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,6 +26,8 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeSelect } from "./ThemeSelect.tsx";
+import { LogoMark } from "./site/Logo.tsx";
+import { PRODUCT, ROUTES } from "./data/product.ts";
 import { ToolDock } from "./ToolDock.tsx";
 import { ToolRail } from "./ToolRail.tsx";
 import {
@@ -430,7 +432,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
   );
 
   useEffect(() => {
-    document.title = loaded ? `${loaded.name} — PDF Editor` : "PDF Editor";
+    document.title = loaded ? `${loaded.name} — ${PRODUCT.name}` : PRODUCT.name;
   }, [loaded]);
 
   useEffect(() => {
@@ -844,7 +846,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
     return (
       <div className="app missing">
         <p>This document is not saved in this browser.</p>
-        <a href="/" onClick={(event) => { if (plainClick(event)) { event.preventDefault(); navigate("/"); } }}>
+        <a href={ROUTES.app} onClick={(event) => { if (plainClick(event)) { event.preventDefault(); navigate(ROUTES.app); } }}>
           Back to documents
         </a>
       </div>
@@ -861,17 +863,16 @@ export function Editor({ sessionId }: { sessionId: string }) {
         <div className="brand">
           <a
             className="home-link"
-            href="/"
+            href={ROUTES.app}
+            aria-label="Documents"
             onClick={(event) => {
               if (!plainClick(event)) return;
               event.preventDefault();
-              navigate("/");
+              navigate(ROUTES.app);
             }}
           >
-            <span className="logo-mark" aria-hidden="true">
-              <FileText className="size-4" />
-            </span>
-            <strong>PDF Editor</strong>
+            <LogoMark size={26} />
+            <strong>{PRODUCT.name}</strong>
           </a>
           <div className="doc-switch">
             <span className="file-name" title={loaded?.name ?? undefined}>

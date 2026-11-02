@@ -1,0 +1,153 @@
+/* The documents screen shares the editor's top bar (App.css) and adds its own body. */
+@import "./App.css";
+
+.home {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.home-main {
+  flex: 1;
+  width: min(880px, 100% - 2 * var(--gutter));
+  margin-inline: auto;
+  padding: var(--sp-12) 0 var(--sp-16);
+}
+
+.home-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-12) var(--sp-8);
+  text-align: center;
+  border: 1.5px dashed var(--rule-strong);
+  border-radius: var(--round-xl);
+  background: var(--panel);
+  box-shadow: var(--elev-2);
+  transition: border-color var(--duration) var(--ease-out), background-color var(--duration) var(--ease-out);
+}
+
+.home-drop.dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.home-drop-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--round-full);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.home-drop-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.home-drop h1 {
+  margin: var(--sp-2) 0 0;
+  font-family: var(--ff-display);
+  font-weight: 400;
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-display);
+}
+
+.home-drop p {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--ink-1);
+  line-height: var(--lh-relaxed);
+}
+
+.home-drop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.home-error {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--round-md);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+
+.home-recent {
+  margin-top: var(--sp-12);
+}
+
+.home-recent-head h2 {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: var(--ls-tight);
+}
+
+.home-recent-head p {
+  margin: 0 0 var(--sp-5);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.session-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--round-lg);
+  background: var(--panel);
+}
+
+.session-list a {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.session-list a strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.session-list a span {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+}
+
+.home-fine {
+  margin: var(--sp-12) 0 0;
+  text-align: center;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+.home-fine a {
+  color: var(--ink-1);
+}
