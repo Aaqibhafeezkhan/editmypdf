@@ -318,7 +318,11 @@ export function SiteLayout() {
           <span>Competitor names and logos belong to their owners and are used only to identify the products compared.</span>
         </div>
       </footer>
-      <ScrollRestoration getKey={(location) => location.pathname} />
+      {/* A link opens its page at the top; Back and Forward return to where the reader was; a reload
+          comes back to the same place on the same page. The history entry's key does that, except on
+          a hard load, where every page's entry is "default": there the pathname keeps the saved
+          position from leaking from one page's reload to another's. */}
+      <ScrollRestoration getKey={(location) => (location.key === "default" ? location.pathname : location.key)} />
       {ANALYTICS.enabled && <Analytics />}
     </div>
   );
