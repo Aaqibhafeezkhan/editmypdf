@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { renderToString } from "react-dom/server";
 import { createStaticHandler, createStaticRouter, StaticRouterProvider } from "react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BASE_PATH } from "./data/product.ts";
 import { PUBLIC_ROUTES } from "./data/routes.ts";
 import { siteRoutes } from "./site/routes.tsx";
 import { takeRenderedMeta, type ResolvedMeta } from "./site/useMeta.ts";
@@ -22,8 +23,10 @@ export type Prerendered = {
 // Renders one route of the site to HTML. The component tree around the router is the same one
 // main.tsx renders, so the browser can hydrate the markup instead of drawing it again.
 export async function render(path: string): Promise<Prerendered> {
-  const { query, dataRoutes } = createStaticHandler(siteRoutes);
-  const context = await query(new Request(new URL(path, "http://localhost")));
+  // The same basename as the browser router in root.tsx, so the links in the prerendered markup
+  // carry the base path; `path` is the route, without it.
+  const { query, dataRoutes } = createStaticHandler(siteRoutes, { basename: BASE_PATH });
+  const context = await query(new Request(new URL(`${BASE_PATH}${path}`, "http://localhost")));
   if (context instanceof Response) {
     throw new Error(`${path} redirected to ${context.headers.get("Location") ?? "another address"}`);
   }

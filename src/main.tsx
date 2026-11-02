@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BASE_PATH } from "./data/product.ts";
 import { Root } from "./root.tsx";
 import { applyTheme, readTheme } from "./theme.ts";
 import "./index.css";
@@ -21,7 +22,9 @@ const app = (
 // index.html) hands other routes the landing page's markup, so the stamp is checked first and markup
 // for another route is dropped before rendering.
 const container = document.getElementById("root")!;
-const here = location.pathname.replace(/\/+$/, "") || "/";
+// The address relative to the base path, which is how the stamp and the router name a route.
+const pathname = location.pathname.startsWith(BASE_PATH) ? location.pathname.slice(BASE_PATH.length) : location.pathname;
+const here = pathname.replace(/\/+$/, "") || "/";
 if (container.dataset.prerendered === here) {
   hydrateRoot(container, app);
 } else {

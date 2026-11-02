@@ -4,20 +4,55 @@
     {
       "name": "pdf-editor",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5173", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
       "port": 5173
     },
     {
       "name": "pdf-editor-site",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5177", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5177",
+        "--strictPort"
+      ],
       "port": 5177
     },
     {
       "name": "pdf-editor-preview",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "preview", "--", "--port", "5178", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "preview",
+        "--",
+        "--port",
+        "5178",
+        "--strictPort"
+      ],
       "port": 5178
+    },
+    {
+      "name": "pdf-editor-pages",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--base",
+        "/pdf-editor/",
+        "--port",
+        "5180",
+        "--strictPort"
+      ],
+      "port": 5180
     }
   ]
 }

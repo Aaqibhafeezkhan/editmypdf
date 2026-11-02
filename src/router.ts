@@ -11,11 +11,13 @@ export function attachRouter(instance: Router): void {
 }
 
 export function navigate(path: string): void {
-  if (window.location.pathname === path) return;
   if (router) {
+    // The router's location is relative to the base path, like `path`; window.location is not.
+    if (router.state.location.pathname === path) return;
     void router.navigate(path);
     return;
   }
+  if (window.location.pathname === path) return;
   window.history.pushState(null, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }

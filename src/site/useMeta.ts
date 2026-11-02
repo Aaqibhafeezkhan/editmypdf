@@ -8,7 +8,8 @@ export type PageMeta = {
   titleSuffix?: boolean;
   description: string;
   type?: "website" | "article";
-  // Absolute or root-relative image for link previews; defaults to the site card.
+  // Image for link previews: absolute, or relative to the site (the base path is added); defaults
+  // to the site card.
   image?: string;
   keywords?: string[];
   noindex?: boolean;

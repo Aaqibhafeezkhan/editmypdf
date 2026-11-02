@@ -1,4 +1,5 @@
 import { Marked, type Tokens } from "marked";
+import { routeHref } from "../data/product.ts";
 
 export function slugify(text: string): string {
   return text
@@ -22,8 +23,11 @@ export const marked = new Marked({
     link({ href, title, tokens }: Tokens.Link) {
       const text = this.parser.parseInline(tokens);
       const external = /^https?:\/\//.test(href);
+      // A link to a page of the site is written as its route ("/compare"); the base path is added here,
+      // and Markdown.tsx hands clicks on it to the router.
+      const internal = href.startsWith("/") && !href.startsWith("//");
       const attrs = [
-        `href="${href}"`,
+        `href="${internal ? routeHref(href) : href}"`,
         title ? `title="${title}"` : "",
         external ? 'rel="noopener noreferrer" target="_blank"' : "",
       ]

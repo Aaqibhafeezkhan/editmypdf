@@ -120,6 +120,8 @@ const lines = [
   "// Twemoji graphics by Twitter, Inc. and other contributors, licensed under CC-BY 4.0.",
   "// https://github.com/twitter/twemoji  —  https://creativecommons.org/licenses/by/4.0/",
   "",
+  'import { publicUrl } from "./data/product.ts";',
+  "",
   "export type EmojiItem = { id: string; name: string };",
   "",
   "export const EMOJI_GROUPS: { title: string; items: EmojiItem[] }[] = [",
@@ -131,7 +133,7 @@ for (const [title, items] of byGroup) {
   }
   lines.push("  ] },");
 }
-lines.push("];", "", "export function emojiSrc(id: string): string {", "  return `/emojis/${id}.png`;", "}", "");
+lines.push("];", "", "export function emojiSrc(id: string): string {", "  return publicUrl(`emojis/${id}.png`);", "}", "");
 
 await writeFile(join(root, "src", "emojis.ts"), lines.join("\n"));
 await writeFile(
