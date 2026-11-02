@@ -3,7 +3,7 @@ import { ArrowRight, BadgeCheck, CalendarCheck, Check, CircleHelp, CirclePlay, T
 import { COMPETITORS, OURS, type Competitor, type Tri } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
-import { Monogram } from "./CompareCard.tsx";
+import { ToolMark } from "./CompareCard.tsx";
 import { faqJsonLd } from "./Faq.tsx";
 import { LogoMark } from "./Logo.tsx";
 import { Markdown } from "./Markdown.tsx";
@@ -176,7 +176,7 @@ export function Pricing() {
                   <tr key={tool.slug}>
                     <th scope="row">
                       <Link to={ROUTES.comparison(tool.slug)} className="price-tool">
-                        <Monogram brand={tool.brand} size={28} />
+                        <ToolMark brand={tool.brand} size={28} />
                         <span>{tool.name}</span>
                       </Link>
                     </th>

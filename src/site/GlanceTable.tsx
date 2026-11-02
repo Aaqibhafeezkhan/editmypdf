@@ -2,6 +2,8 @@ import { Link } from "react-router";
 import { Laptop, Type, TextCursorInput, Check, Minus, X, CircleHelp } from "lucide-react";
 import { OURS, TRI_LABEL, type Tool, type Tri } from "../data/competitors.ts";
 import { ROUTES } from "../data/product.ts";
+import { ToolMark } from "./CompareCard.tsx";
+import { LogoMark } from "./Logo.tsx";
 
 // A table that answers three questions per tool with one icon each, PDF Edit first and
 // highlighted. The icons carry a visually hidden label and a tooltip, so a screen reader and a
@@ -61,7 +63,12 @@ export function GlanceTable({ tools }: { tools: Tool[] }) {
         </thead>
         <tbody>
           <tr className="us">
-            <th scope="row">{OURS.name}</th>
+            <th scope="row">
+              <span className="tool-cell">
+                <LogoMark size={20} />
+                <span>{OURS.name}</span>
+              </span>
+            </th>
             {COLUMNS.map((column) => (
               <td key={column.key}>
                 <Cell value={column.value(OURS)} words={column.words} />
@@ -71,7 +78,10 @@ export function GlanceTable({ tools }: { tools: Tool[] }) {
           {tools.map((tool) => (
             <tr key={tool.slug}>
               <th scope="row">
-                <Link to={ROUTES.comparison(tool.slug)}>{tool.name}</Link>
+                <Link to={ROUTES.comparison(tool.slug)} className="tool-cell">
+                  <ToolMark brand={tool.brand} size={20} />
+                  <span>{tool.name}</span>
+                </Link>
               </th>
               {COLUMNS.map((column) => (
                 <td key={column.key}>

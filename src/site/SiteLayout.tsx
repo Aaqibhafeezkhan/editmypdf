@@ -13,6 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { ThemeSelect } from "../ThemeSelect.tsx";
+import { competitorBySlug } from "../data/competitors.ts";
+import { ToolMark } from "./CompareCard.tsx";
 import { PRODUCT, publicUrl, ROUTES, siteOrigin } from "../data/product.ts";
 import { Logo } from "./Logo.tsx";
 import "./site.css";
@@ -26,6 +28,11 @@ const NAV = [
   { to: ROUTES.blog, label: "Blog", icon: BookOpen },
   { to: ROUTES.faq, label: "FAQ", icon: CircleHelp },
 ];
+
+// The comparisons the footer links to, with their marks.
+const FOOTER_COMPARISONS = ["ilovepdf", "smallpdf", "adobe-acrobat-online", "sejda"]
+  .map((slug) => competitorBySlug(slug))
+  .filter((tool): tool is NonNullable<typeof tool> => tool !== undefined);
 
 // Organisation and site records for search engines, the same on every page.
 function siteJsonLd(): string {
@@ -191,10 +198,12 @@ export function SiteLayout() {
             <h2>
               <Scale aria-hidden="true" /> Compare
             </h2>
-            <Link to={ROUTES.comparison("ilovepdf")}>vs iLovePDF</Link>
-            <Link to={ROUTES.comparison("smallpdf")}>vs Smallpdf</Link>
-            <Link to={ROUTES.comparison("adobe-acrobat-online")}>vs Adobe Acrobat online</Link>
-            <Link to={ROUTES.comparison("sejda")}>vs Sejda</Link>
+            {FOOTER_COMPARISONS.map((tool) => (
+              <Link key={tool.slug} to={ROUTES.comparison(tool.slug)} className="footer-tool">
+                <ToolMark brand={tool.brand} size={16} />
+                <span>vs {tool.name}</span>
+              </Link>
+            ))}
             <Link to={ROUTES.compare}>All comparisons</Link>
           </nav>
           <nav className="footer-col" aria-label="Blog">
@@ -213,7 +222,7 @@ export function SiteLayout() {
             © 2026 {PRODUCT.name}. Free to use. <Link to={ROUTES.privacy}>Privacy</Link> ·{" "}
             <Link to={ROUTES.terms}>Terms</Link>
           </span>
-          <span>Competitor names belong to their owners and are used only to compare products.</span>
+          <span>Competitor names and logos belong to their owners and are used only to identify the products compared.</span>
         </div>
       </footer>
       <ScrollRestoration getKey={(location) => location.pathname} />

@@ -112,6 +112,37 @@
   height: 24px;
 }
 
+/* A tool's own icon, shown beside its name. A white backing and a hairline ring keep icons with
+   transparent backgrounds legible in both themes. */
+.tool-mark {
+  display: inline-block;
+  flex: none;
+  border-radius: 24%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--rule);
+  object-fit: cover;
+}
+
+.tool-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.tool-cell:hover span {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.footer-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
 /* ---- Type ---------------------------------------------------------------- */
 
 .display,

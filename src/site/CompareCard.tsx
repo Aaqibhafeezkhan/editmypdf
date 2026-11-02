@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { Link } from "react-router";
 import { ArrowRight, Laptop, TextCursorInput, Type } from "lucide-react";
 import { OURS, TRI_LABEL, type Brand, type Competitor, type Tool, type Tri } from "../data/competitors.ts";
-import { PRODUCT, ROUTES } from "../data/product.ts";
+import { PRODUCT, publicUrl, ROUTES } from "../data/product.ts";
 import { LogoMark } from "./Logo.tsx";
 import { Price } from "./Price.tsx";
 import "./compare.css";
@@ -39,6 +39,24 @@ export function Monogram({ brand, size = 36 }: { brand: Brand; size?: number }) 
   );
 }
 
+// The tool's own icon when the data has one, the monogram otherwise. The name always sits beside
+// it, so the image is decorative.
+export function ToolMark({ brand, size = 28, className = "" }: { brand: Brand; size?: number; className?: string }) {
+  if (!brand.logo) return <Monogram brand={brand} size={size} />;
+  return (
+    <img
+      className={`tool-mark ${className}`.trim()}
+      src={publicUrl(brand.logo)}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      decoding="async"
+      style={{ width: size, height: size }}
+    />
+  );
+}
+
 function scoreWords(tool: Tool): string {
   return FACTS.map((fact) => `${fact.label}: ${TRI_LABEL[fact.value(tool)].toLowerCase()}`).join(", ");
 }
@@ -65,8 +83,8 @@ export function Duel({ tool }: { tool: Tool }) {
       {FACTS.map((fact) => (
         <span key={fact.key} className={`duel-dot ${fact.value(OURS)}`} aria-hidden="true" />
       ))}
-      <span className="duel-mark">
-        <Monogram brand={tool.brand} size={26} />
+      <span className="duel-mark" aria-hidden="true">
+        <ToolMark brand={tool.brand} size={26} />
       </span>
       <span className="duel-name" aria-hidden="true">
         {tool.name}

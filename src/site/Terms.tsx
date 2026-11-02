@@ -98,7 +98,7 @@ export function Terms() {
         <h2>Comparisons with other products</h2>
         <p>
           The <Link to={ROUTES.compare}>comparison pages</Link> name other PDF editors only to compare them.
-          Their names belong to their owners. The facts on those pages were read from each vendor's own
+          Their names and logos belong to their owners and are shown only to identify the product. The facts on those pages were read from each vendor's own
           pages on the date shown, with links to the sources; if one is out of date, please{" "}
           <a href={`${PRODUCT.repository}/issues`} rel="noopener noreferrer" target="_blank">
             tell us
