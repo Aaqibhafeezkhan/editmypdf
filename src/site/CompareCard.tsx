@@ -99,19 +99,25 @@ export function Duel({ tool }: { tool: Tool }) {
 // One comparison as a card: the thumbnail, vendor and starting price, title, summary.
 export function CompareCard({ tool }: { tool: Competitor }) {
   return (
-    <Link to={ROUTES.comparison(tool.slug)} className="card cmp-card">
-      <Duel tool={tool} />
-      <div className="card-meta">
-        <span className="tag">{tool.vendor.split(",")[0]}</span>
-        <Price price={tool.startingPrice} note={false} className="compact" />
+    <Link to={ROUTES.comparison(tool.slug)} className="cmp-card">
+      {tool.brand.thumbnail ? (
+        <img className="cmp-thumb" src={publicUrl(tool.brand.thumbnail)} alt="" width={1000} height={500} loading="lazy" decoding="async" />
+      ) : (
+        <Duel tool={tool} />
+      )}
+      <div className="cmp-card-body">
+        <div className="card-meta">
+          <span className="tag">{tool.vendor.split(",")[0]}</span>
+          <Price price={tool.startingPrice} note={false} className="compact" />
+        </div>
+        <h3>
+          {PRODUCT.name} vs {tool.name}
+        </h3>
+        <p>{tool.summary}</p>
+        <span className="link-arrow">
+          Read the comparison <ArrowRight aria-hidden="true" />
+        </span>
       </div>
-      <h3>
-        {PRODUCT.name} vs {tool.name}
-      </h3>
-      <p>{tool.summary}</p>
-      <span className="link-arrow">
-        Read the comparison <ArrowRight aria-hidden="true" />
-      </span>
     </Link>
   );
 }

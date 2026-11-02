@@ -6,111 +6,111 @@
 
 /* ---- Index head ------------------------------------------------------------- */
 
-.cmp-index-head {
+.cmp-head-wide {
+  max-width: 760px;
+  margin-bottom: var(--sp-8);
+}
+
+/* Four numbers in a row, big enough to read from across the room. */
+.cmp-numbers {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: var(--sp-10);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin: 0;
+}
+
+.cmp-number {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 2px var(--sp-4);
   align-items: center;
-  margin-bottom: var(--sp-10);
-}
-
-.cmp-index-head .section-head {
-  margin-bottom: 0;
-}
-
-.cmp-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-3);
-  padding: var(--sp-4);
+  padding: var(--sp-5);
   border: 1px solid var(--rule);
   border-radius: var(--round-xl);
   background: var(--paper-1);
-  box-shadow: var(--elev-2);
+  box-shadow: var(--elev-1);
 }
 
-.cmp-stat {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 2px var(--sp-3);
-  align-items: center;
-  padding: var(--sp-3);
-  border-radius: var(--round-lg);
-  background: var(--paper-0);
-}
-
-.cmp-stat .icon-tile {
+.cmp-number .icon-tile {
   grid-row: span 2;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
 }
 
-.cmp-stat .icon-tile svg {
-  width: 18px;
-  height: 18px;
-}
-
-.cmp-stat strong {
+.cmp-number dt {
   font-family: var(--ff-display);
-  font-size: var(--fs-xl);
+  font-size: var(--fs-2xl);
   font-weight: 400;
   line-height: 1;
+  letter-spacing: var(--ls-display);
   color: var(--tone-ink);
 }
 
-.cmp-stat strong small {
-  margin-left: 5px;
+.cmp-number dt small {
+  margin-left: 6px;
   font-family: var(--ff-sans);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 500;
+  letter-spacing: 0;
   color: var(--ink-2);
 }
 
-.cmp-stat > span:not(.icon-tile) {
-  color: var(--ink-2);
-  font-size: var(--fs-xs);
+.cmp-number dd {
+  margin: 0;
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
   line-height: 1.4;
 }
 
-.cmp-stats-foot {
-  grid-column: 1 / -1;
+.cmp-checked {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: var(--sp-2) var(--sp-4);
-  margin: 0;
-  padding: var(--sp-1) var(--sp-2) 0;
-  color: var(--ink-2);
-  font-size: var(--fs-xs);
-}
-
-.cmp-stats-foot span {
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2) var(--sp-4);
+  margin: var(--sp-5) 0 var(--sp-6);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
 }
 
-.cmp-stats-foot svg {
+.cmp-checked .as-of svg {
   width: 14px;
   height: 14px;
   color: var(--tone-ink);
 }
 
-@media (max-width: 900px) {
-  .cmp-index-head {
-    grid-template-columns: 1fr;
-    gap: var(--sp-6);
+@media (max-width: 960px) {
+  .cmp-numbers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 420px) {
-  .cmp-stats {
+@media (max-width: 480px) {
+  .cmp-numbers {
     grid-template-columns: 1fr;
   }
 }
 
 /* ---- The wide table --------------------------------------------------------- */
+
+/* Calmer rows: middle alignment, light stripes, a hover, notes a step smaller. */
+.cmp-main th,
+.cmp-main td {
+  vertical-align: middle;
+  padding-block: var(--sp-4);
+}
+
+.cmp-main tbody tr:nth-child(even):not(.us) {
+  background: color-mix(in oklab, var(--paper-0) 55%, transparent);
+}
+
+.cmp-main tbody tr:not(.us):hover {
+  background: var(--paper-2);
+}
+
+.cmp-main .cell-note {
+  max-width: 26ch;
+  margin-top: 3px;
+  line-height: 1.4;
+}
 
 .cmp-main th[scope="row"] a {
   color: inherit;
@@ -249,7 +249,48 @@
 /* ---- Thumbnail and card ----------------------------------------------------- */
 
 .cmp-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--round-lg);
+  background: var(--paper-1);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out), transform var(--duration) var(--ease-out);
+}
+
+.cmp-card:hover {
+  border-color: var(--rule-strong);
+  box-shadow: var(--elev-2);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmp-card:hover {
+    transform: none;
+  }
+}
+
+.cmp-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 1;
+  border-bottom: 1px solid var(--rule);
+  object-fit: cover;
+}
+
+.cmp-card .duel {
+  margin: var(--sp-4) var(--sp-4) 0;
+}
+
+.cmp-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
 }
 
 .cmp-card .card-meta {
@@ -257,7 +298,23 @@
 }
 
 .cmp-card h3 {
-  margin-top: var(--sp-1);
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+}
+
+.cmp-card p {
+  margin: 0;
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.cmp-card .link-arrow {
+  margin-top: auto;
+  padding-top: var(--sp-2);
+  font-size: var(--fs-sm);
 }
 
 /* Two rows, PDF Edit then the tool: a mark, the name and one dot per fact. */
