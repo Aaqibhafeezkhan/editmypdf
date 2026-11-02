@@ -1,16 +1,37 @@
+import fontkit from "@pdf-lib/fontkit";
 import {
+  beginText,
   degrees,
+  endText,
   LineCapStyle,
   PDFDocument,
+  PDFName,
+  PDFNumber,
+  PDFOperator,
+  PDFOperatorNames,
+  popGraphicsState,
+  pushGraphicsState,
   rgb,
+  setCharacterSpacing,
+  setCharacterSqueeze,
+  setFillingRgbColor,
+  setFontAndSize,
+  setTextMatrix,
+  setTextRenderingMode,
+  setTextRise,
+  setWordSpacing,
   StandardFonts,
+  TextRenderingMode,
   type PDFFont,
+  type PDFHexString,
   type PDFImage,
   type PDFPage,
 } from "pdf-lib";
-import { readPageContent, type ContentElement } from "./content.ts";
+import { pageFonts, readPageContent, type ContentElement } from "./content.ts";
 import { editCover, refreshPatchFace } from "./contentEdit.ts";
-import { blockWidth, paintRun } from "./textLayout.ts";
+import { stripPageText, type StripResult } from "./contentStream.ts";
+import { fontUnicodeMap } from "./fontFix.ts";
+import { blockWidth, measureWidth, paintRun, placeRuns, type PlacedRun } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { rotatePoint } from "./geometry.ts";
 import { arrowBarbs, isBoxShape, isOpenShape, outlinePoints, pointsToPath } from "./shapes.ts";
@@ -236,9 +257,9 @@ function drawMappedRect(
   page.drawRectangle({ x, y, width, height, color: fill });
 }
 
-function backdropColor(value: string) {
+function hexColor(value: string, fallback: ReturnType<typeof rgb>) {
   const match = /^#?([0-9a-f]{6})$/i.exec(value.trim());
-  if (!match?.[1]) return rgb(1, 1, 1);
+  if (!match?.[1]) return fallback;
   const hex = match[1];
   return rgb(
     Number.parseInt(hex.slice(0, 2), 16) / 255,
@@ -247,24 +268,205 @@ function backdropColor(value: string) {
   );
 }
 
+function backdropColor(value: string) {
+  return hexColor(value, rgb(1, 1, 1));
+}
+
+function inkColor(value: string) {
+  return hexColor(value, rgb(0, 0, 0));
+}
+
+// A face of the document embedded in the output, with the code points its cmap covers.
+type EmbeddedFace = { font: PDFFont; cmap: Map<number, number> };
+
+type FaceEmbedder = (pageIndex: number, pdfFont: string) => Promise<EmbeddedFace | null>;
+
+// Embeds the fonts pdf.js converted for the document, once each by pdf.js font name: the copy
+// with the corrected cmap the editor types with when there is one, else the converted font. Null
+// when a face has no bytes to embed (a system or Type3 font) or pdf-lib cannot read them.
+function faceEmbedder(document: PDFDocument, pages: PDFPageProxy[]): FaceEmbedder {
+  const cache = new Map<string, Promise<EmbeddedFace | null>>();
+  return (pageIndex, pdfFont) => {
+    const cached = cache.get(pdfFont);
+    if (cached) return cached;
+    const pending = (async () => {
+      const page = pages[pageIndex];
+      const info = page ? pageFonts(page)?.get(pdfFont) : undefined;
+      const bytes = info?.fixed ?? info?.data;
+      if (!info || info.type3 || !bytes || bytes.length < 12) return null;
+      const cmap = fontUnicodeMap(bytes);
+      if (cmap.size === 0) return null;
+      // The converted font carries the original's whole glyph table, so only the glyphs the edits
+      // use are written; the whole font is the fallback when pdf-lib cannot subset this one.
+      try {
+        return { font: await document.embedFont(bytes, { subset: true }), cmap };
+      } catch {
+        try {
+          return { font: await document.embedFont(bytes), cmap };
+        } catch {
+          return null;
+        }
+      }
+    })();
+    cache.set(pdfFont, pending);
+    return pending;
+  };
+}
+
+const fontKeys = new WeakMap<PDFPage, Map<PDFFont, PDFName>>();
+
+// The name a font goes by in a page's resources, added on first use.
+function pageFontKey(page: PDFPage, font: PDFFont): PDFName {
+  let keys = fontKeys.get(page);
+  if (!keys) {
+    keys = new Map();
+    fontKeys.set(page, keys);
+  }
+  let key = keys.get(font);
+  if (!key) {
+    key = page.node.newFontDictionary(font.name, font.ref);
+    keys.set(font, key);
+  }
+  return key;
+}
+
+// Writes a text patch as text set in the page's own faces, each word where the editor shows it.
+// False when a face cannot be embedded or lacks a glyph the text needs; the caller then paints
+// the patch instead.
+async function drawPatchText(
+  document: PDFDocument,
+  page: PDFPage,
+  patch: PatchAnnotation,
+  map: PdfPointMapper,
+  embed: FaceEmbedder,
+): Promise<boolean> {
+  const runs = placeRuns(patch);
+  const faces = new Map<string, EmbeddedFace>();
+  const nameOf = (run: PlacedRun) => run.span?.pdfFont || patch.pdfFont;
+  for (const run of runs) {
+    const name = nameOf(run);
+    if (!name) return false;
+    let face = faces.get(name);
+    if (!face) {
+      const embedded = await embed(patch.page, name);
+      if (!embedded) return false;
+      face = embedded;
+      faces.set(name, face);
+    }
+    for (const word of run.words) {
+      for (const char of word.text) {
+        const code = char.codePointAt(0);
+        if (code == null || !face.cmap.has(code)) return false;
+      }
+    }
+  }
+  const operators: PDFOperator[] = [
+    pushGraphicsState(),
+    beginText(),
+    setCharacterSqueeze(100),
+    setWordSpacing(0),
+    setTextRise(0),
+    setTextRenderingMode(TextRenderingMode.Fill),
+  ];
+  for (const run of runs) {
+    const face = faces.get(nameOf(run));
+    const first = run.words[0];
+    if (!face || !first) continue;
+    const color = inkColor(run.color || patch.color);
+    // The text matrix maps the editor's page coordinates onto the page: the baseline direction
+    // and the up direction at the run's start, which also carry any page rotation.
+    const origin = map(patch.page, first.x, run.baseline);
+    const along = map(patch.page, first.x + 1, run.baseline);
+    const up = map(patch.page, first.x, run.baseline - 1);
+    operators.push(
+      setFontAndSize(pageFontKey(page, face.font), run.face.fontSize),
+      setCharacterSpacing(run.face.letterSpacing ?? 0),
+      setFillingRgbColor(color.red, color.green, color.blue),
+      setTextMatrix(along.x - origin.x, along.y - origin.y, up.x - origin.x, up.y - origin.y, origin.x, origin.y),
+    );
+    // One TJ per run: each word's glyphs, and before every word but the first a kern that lands it
+    // where the editor put it (in thousandths of the font size, rightward negative). The spaces
+    // themselves are not written: a converted font has no space glyph.
+    const items: (PDFHexString | PDFNumber)[] = [];
+    let cursor = first.x;
+    for (const word of run.words) {
+      if (items.length > 0) items.push(PDFNumber.of(Math.round((((cursor - word.x) * 1000) / run.face.fontSize) * 100) / 100));
+      items.push(face.font.encodeText(word.text));
+      cursor = word.x + measureWidth(word.text, run.face);
+    }
+    operators.push(PDFOperator.of(PDFOperatorNames.ShowTextAdjusted, [document.context.obj(items)]));
+  }
+  operators.push(endText(), popGraphicsState());
+  if (runs.length > 0) page.pushOperators(...operators);
+  if (patch.underlineOffset >= 0) {
+    drawMappedRect(
+      page,
+      map,
+      patch.page,
+      { x: patch.x, y: patch.y + patch.underlineOffset, w: Math.max(1, blockWidth(patch)), h: 0.7 },
+      undefined,
+      inkColor(patch.underlineColor || patch.color),
+    );
+  }
+  return true;
+}
+
+// Takes the original text out from under every text patch, page by page; results by patch id.
+function stripPatchedText(document: PDFDocument, annotations: Annotation[], pages: PDFPageProxy[]): Map<string, StripResult> {
+  const byPage = new Map<number, PatchAnnotation[]>();
+  for (const annotation of annotations) {
+    if (annotation.kind !== "patch" || annotation.role !== "text") continue;
+    const list = byPage.get(annotation.page) ?? [];
+    list.push(annotation);
+    byPage.set(annotation.page, list);
+  }
+  const results = new Map<string, StripResult>();
+  for (const [pageIndex, patches] of byPage) {
+    let outcome: StripResult[];
+    try {
+      outcome = stripPageText(
+        document,
+        pageIndex,
+        patches.map((patch) => ({ x: patch.originX, y: patch.originY, w: patch.originW, h: patch.originH })),
+        pages[pageIndex]?.getViewport({ scale: 1 }),
+      );
+    } catch {
+      outcome = [];
+    }
+    patches.forEach((patch, index) => results.set(patch.id, outcome[index] ?? { removed: 0, uncertain: true }));
+  }
+  return results;
+}
+
 async function drawPatch(
   document: PDFDocument,
   page: PDFPage,
   annotation: PatchAnnotation,
   map: PdfPointMapper,
+  strip: StripResult | undefined,
+  embed: FaceEmbedder,
 ) {
-  drawMappedRect(page, map, annotation.page, editCover(annotation), undefined, backdropColor(annotation.backdrop || "#ffffff"));
-  const src = annotation.role === "graphic" ? annotation.image : await paintRun(annotation);
-  const embedded = src ? embedPngDataUrl(document, src) : null;
-  if (embedded) {
-    const image = await embedded;
-    // The painted run is as wide as the editor's box, slack included, so it lands at the same scale.
-    const box = annotation.role === "text" ? { ...annotation, w: blockWidth(annotation) } : annotation;
-    drawMappedRect(page, map, annotation.page, box, image);
-  }
   const delta = annotation.w - annotation.originW;
-  if (annotation.role !== "text" || annotation.wrap || Math.abs(delta) < 0.4) return;
-  for (const tail of annotation.tails ?? []) {
+  const tailsMove = annotation.role === "text" && !annotation.wrap && Math.abs(delta) >= 0.4 && annotation.tails.length > 0;
+  // Once the text an edit replaces is out of the content stream, the backdrop only has to hide
+  // what the new text does not stand in for: a tail that moved, the old underline.
+  const replaced = annotation.role === "text" && strip != null && strip.removed > 0 && !strip.uncertain;
+  if (!replaced || tailsMove || annotation.underlineOffset >= 0) {
+    drawMappedRect(page, map, annotation.page, editCover(annotation), undefined, backdropColor(annotation.backdrop || "#ffffff"));
+  }
+  const asText = annotation.role === "text" && (await drawPatchText(document, page, annotation, map, embed));
+  if (!asText) {
+    const src = annotation.role === "graphic" ? annotation.image : await paintRun(annotation);
+    const embedded = src ? embedPngDataUrl(document, src) : null;
+    if (embedded) {
+      const image = await embedded;
+      // The painted run is as wide as the editor's box, slack included, so it lands at the same scale.
+      const box = annotation.role === "text" ? { ...annotation, w: blockWidth(annotation) } : annotation;
+      drawMappedRect(page, map, annotation.page, box, image);
+    }
+  }
+  if (!tailsMove) return;
+  for (const tail of annotation.tails) {
     const tailImage = embedPngDataUrl(document, tail.image);
     if (!tailImage) continue;
     const image = await tailImage;
@@ -298,7 +500,9 @@ async function refreshPatchFaces(annotations: Annotation[], pages: PDFPageProxy[
     if (annotation.kind !== "patch" || annotation.role !== "text") return annotation;
     const live = faces.get(annotation.sourceId);
     if (!live?.fontFamily) return annotation;
-    return refreshPatchFace(annotation, live);
+    const refreshed = refreshPatchFace(annotation, live);
+    // A patch saved before patches named their font takes the name from the element it edits.
+    return refreshed.pdfFont || !live.pdfFont ? refreshed : { ...refreshed, pdfFont: live.pdfFont };
   });
 }
 
@@ -310,7 +514,11 @@ export async function exportAnnotatedPdf(
   pages: PDFPageProxy[] = [],
 ): Promise<Uint8Array> {
   const document = await PDFDocument.load(originalBytes.slice(0));
+  document.registerFontkit(fontkit);
   const annotations = await refreshPatchFaces(marks, pages);
+  // The text each edit replaces comes out of its page before anything is drawn on it.
+  const strips = stripPatchedText(document, annotations, pages);
+  const embed = faceEmbedder(document, pages);
   const fonts = new Map<string, PDFFont>();
 
   const fontFor = async (annotation: TextAnnotation) => {
@@ -335,7 +543,7 @@ export async function exportAnnotatedPdf(
   for (const annotation of annotations) {
     const page = document.getPage(annotation.page);
     if (annotation.kind === "patch") {
-      await drawPatch(document, page, annotation, map);
+      await drawPatch(document, page, annotation, map, strips.get(annotation.id), embed);
       continue;
     }
     if (annotation.kind === "emoji" || annotation.kind === "signature") {

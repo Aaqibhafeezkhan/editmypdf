@@ -2,7 +2,7 @@ import type { PatchAnnotation, Point, TextSpan } from "./types.ts";
 
 export type LaidLine = { text: string; start: number; end: number; width: number; hard: boolean };
 
-type Face = Pick<PatchAnnotation, "fontFamily" | "fontWeight" | "fontStyle" | "fontSize"> & {
+export type Face = Pick<PatchAnnotation, "fontFamily" | "fontWeight" | "fontStyle" | "fontSize"> & {
   letterSpacing?: number;
   wordSpacing?: number;
 };
@@ -367,4 +367,51 @@ export async function paintRun(patch: PatchAnnotation): Promise<string> {
     context.fillRect(0, patch.underlineOffset * zoom, width * zoom, Math.max(1, 0.7 * zoom));
   }
   return canvas.toDataURL("image/png");
+}
+
+// One span piece of a laid-out line, ready to be written as text: its words with the left edge of
+// each in page units, the baseline they sit on measured from the top of the page, and the face
+// (spacing resolved) and colour they are set in. `span` is the patch span the piece came from,
+// null for a single-face patch.
+export type PlacedRun = {
+  words: { text: string; x: number }[];
+  baseline: number;
+  face: Face;
+  color: string;
+  span: TextSpan | null;
+};
+
+// Places the patch's text word by word exactly where paintRun paints it.
+export function placeRuns(patch: PatchAnnotation): PlacedRun[] {
+  if (!patch.text.trim()) return [];
+  const spans = spansFor(patch.text, patch);
+  const lines = wrapText(patch.text, patch);
+  const runs: PlacedRun[] = [];
+  lines.forEach((line, index) => {
+    const baseline = patch.y + patch.ascent * patch.fontSize + index * patch.lineHeight + lineShift(patch.lineOffsets, index);
+    const { x, extra } = lineX(patch, line, index, lines.length);
+    const end = line.start + line.text.trimEnd().length;
+    const lineFace = paragraphFace(patch, paragraphOf(patch.text, line.start));
+    let cursor = patch.x + x;
+    for (const piece of pieces(patch.text, line.start, end, patch, spans)) {
+      const face = spans.length > 0 ? spaced(piece.face, lineFace) : lineFace;
+      const gap = measureWidth(" ", face) + extra;
+      const words: { text: string; x: number }[] = [];
+      const parts = piece.text.split(" ");
+      parts.forEach((word, wordIndex) => {
+        if (word) words.push({ text: word, x: cursor });
+        cursor += measureWidth(word, face);
+        if (wordIndex < parts.length - 1) cursor += gap;
+      });
+      if (words.length === 0) continue;
+      runs.push({
+        words,
+        baseline,
+        face,
+        color: spans.length > 0 ? piece.face.color || patch.color : patch.color,
+        span: spans.length > 0 ? piece.face : null,
+      });
+    }
+  });
+  return runs;
 }

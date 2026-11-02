@@ -1,5 +1,5 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
-import { collectGlyphUse, editableFamily, type GlyphUse } from "./fontFix.ts";
+import { collectGlyphUse, editableFamily, familyBytes, type GlyphUse } from "./fontFix.ts";
 import { measureWidth } from "./textLayout.ts";
 import type { Point, TextAlign, TextSpan } from "./types.ts";
 
@@ -193,6 +193,18 @@ const IDENTITY = [1, 0, 0, 1, 0, 0];
 
 const contentCache = new WeakMap<PDFPageProxy, Promise<ContentElement[]>>();
 
+// The bytes of a font a page draws with, as pdf.js converted them: the copy with the corrected
+// cmap when the editor registered one, and the converted font itself. Both null for a font pdf.js
+// drew without bytes (a system font).
+export type PageFont = { data: Uint8Array | null; fixed: Uint8Array | null; type3: boolean };
+
+const fontCache = new WeakMap<PDFPageProxy, Map<string, PageFont>>();
+
+// The fonts of a page that readPageContent has read, by pdf.js font name.
+export function pageFonts(page: PDFPageProxy): Map<string, PageFont> | undefined {
+  return fontCache.get(page);
+}
+
 export function readPageContent(page: PDFPageProxy, pageIndex: number): Promise<ContentElement[]> {
   const cached = contentCache.get(page);
   if (cached) return cached;
@@ -335,13 +347,16 @@ async function resolveFaces(
   const names = new Set<string>();
   for (const item of items) if (isTextRun(item) && item.fontName) names.add(item.fontName);
   const faces = new Map<string, Face>();
+  const fonts = new Map<string, PageFont>();
   await Promise.all(
     [...names].map(async (name) => {
       const font = await fontObject(page, name);
       const family = font?.isType3Font ? null : await editableFamily(name, font?.data, glyphUse.get(name));
       faces.set(name, faceFor(name, font, styles[name], family));
+      fonts.set(name, { data: font?.data ?? null, fixed: family ? familyBytes(family) : null, type3: font?.isType3Font === true });
     }),
   );
+  fontCache.set(page, fonts);
   return faces;
 }
 

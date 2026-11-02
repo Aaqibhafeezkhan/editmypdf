@@ -8,6 +8,7 @@ type Subtable = { platform: number; encoding: number; offset: number };
 
 const registered = new Map<string, Promise<string | null>>();
 const cmaps = new Map<string, Map<number, number>>();
+const bytesByFamily = new Map<string, Uint8Array>();
 let serial = 0;
 
 // pdf.js converts every embedded font to OpenType with each glyph at a private-use code, and adds
@@ -99,7 +100,19 @@ async function install(
   const face = new FontFace(family, fixed.buffer as ArrayBuffer);
   await face.load();
   document.fonts.add(face);
+  bytesByFamily.set(family, fixed);
   return family;
+}
+
+// The rewritten font bytes behind a family `editableFamily` registered, so the same face can be
+// embedded in a file; null for a family it did not make.
+export function familyBytes(family: string): Uint8Array | null {
+  return bytesByFamily.get(family) ?? null;
+}
+
+// Every Unicode code point an OpenType font maps to a glyph, with the glyph's index.
+export function fontUnicodeMap(bytes: Uint8Array): Map<number, number> {
+  return unicodeMap(bytes);
 }
 
 function unicodeMap(bytes: Uint8Array): Map<number, number> {
