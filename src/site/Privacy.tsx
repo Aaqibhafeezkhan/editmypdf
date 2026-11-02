@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { ShieldCheck } from "lucide-react";
-import { PRODUCT, ROUTES } from "../data/product.ts";
+import { ANALYTICS, PRODUCT, ROUTES } from "../data/product.ts";
 import { useMeta } from "./useMeta.ts";
 
 export function Privacy() {
@@ -33,8 +33,10 @@ export function Privacy() {
         </p>
         <p>
           The app makes network requests only for its own static files: its JavaScript, stylesheets, fonts
-          and the emoji images under the emoji tool. There is no analytics script, no error reporter, no
-          account system and no third-party embed.
+          and the emoji images under the emoji tool.{" "}
+          {ANALYTICS.enabled
+            ? "The editor pages load no analytics script, no error reporter and no third-party embed; the only third-party script anywhere on the site is the visit counter described below, on the site's pages, after you agree to it."
+            : "There is no analytics script, no error reporter, no account system and no third-party embed."}
         </p>
 
         <h2>What is stored in your browser</h2>
@@ -53,7 +55,27 @@ export function Privacy() {
             they survive a reload of that tab only.
           </li>
         </ul>
-        <p>None of this is sent anywhere. No cookies are set.</p>
+        <p>
+          None of this is sent anywhere.{" "}
+          {ANALYTICS.enabled
+            ? "The editor sets no cookies; the only cookies on the site are the visit counter's, and only after you agree to it."
+            : "No cookies are set."}
+        </p>
+
+        {ANALYTICS.enabled && (
+          <>
+            <h2>Visit counting</h2>
+            <p>
+              The site's pages (this one, the landing page, the blog, the comparisons) can count visits with
+              Google Analytics: which pages were viewed, roughly where from, on what kind of browser, and
+              which site sent the visit. It loads only after you choose OK in the notice at the bottom of the
+              page, and it then sets Google's cookies on this site. If you choose "No thanks", or never
+              answer, nothing is loaded. The editor pages never load it, so no third-party script runs
+              beside your document. Your answer is kept in this browser's localStorage; clear this site's
+              data to be asked again.
+            </p>
+          </>
+        )}
 
         <h2>How to remove it</h2>
         <p>

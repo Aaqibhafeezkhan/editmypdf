@@ -1644,6 +1644,66 @@ a.card:hover {
   font-size: var(--fs-sm);
 }
 
+/* ---- Visit-counting notice ------------------------------------------------ */
+
+.consent {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-4);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: min(640px, 100% - 2 * var(--gutter));
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--round-lg);
+  background: var(--paper-1);
+  box-shadow: var(--elev-3);
+  transform: translateX(-50%);
+  font-size: var(--fs-sm);
+}
+
+.consent > svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--accent-ink);
+}
+
+.consent p {
+  flex: 1;
+  margin: 0;
+  color: var(--ink-1);
+  line-height: 1.45;
+}
+
+.consent p a {
+  color: var(--accent-ink);
+}
+
+.consent-actions {
+  display: flex;
+  flex: none;
+  gap: var(--sp-2);
+}
+
+@media (max-width: 560px) {
+  .consent {
+    flex-wrap: wrap;
+    bottom: var(--sp-3);
+  }
+
+  .consent > svg {
+    display: none;
+  }
+
+  .consent-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 /* ---- Reveal on scroll ----------------------------------------------------- */
 
 /* SiteLayout tags the blocks (data-reveal="") and sets data-reveal="in" as they scroll into

@@ -1,5 +1,10 @@
 // Questions answered on the FAQ page and, for the first few, on the landing page. Answers are
 // Markdown. Keep them true to the code: every claim here is checked against src/.
+import { ANALYTICS } from "./product.ts";
+
+const TRACKING = ANALYTICS.enabled
+  ? "There is no account. Google Analytics counts visits to the site's pages only if you agree in the notice, and it never runs on the editor pages, so no script runs beside your document and no server ever sees it."
+  : "There is no account, no analytics script and no server that ever sees your document.";
 
 export type FaqEntry = { question: string; answer: string };
 
@@ -7,7 +12,7 @@ export const FAQ: FaqEntry[] = [
   {
     question: "Does PDF Edit upload my PDF anywhere?",
     answer:
-      "No. The file is read by pdf.js inside a web worker in your browser, edited there, and written back with pdf-lib in the same tab. The only network requests the app makes are for its own code, fonts and emoji images. There is no account, no analytics script and no server that ever sees your document. See the [privacy page](/privacy) for exactly what is stored and where.",
+      `No. The file is read by pdf.js inside a web worker in your browser, edited there, and written back with pdf-lib in the same tab. The only network requests the app makes are for its own code, fonts and emoji images. ${TRACKING} See the [privacy page](/privacy) for exactly what is stored and where.`,
   },
   {
     question: "Can I change the words that are already printed in the PDF?",

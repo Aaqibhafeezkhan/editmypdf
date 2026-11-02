@@ -18,7 +18,7 @@ const ROOT_MARK = '<div id="root"></div>';
 // Tags the template carries for the landing page, replaced per page in pageHtml. useMeta finds these same
 // tags by selector in the browser and updates them in place.
 const HEAD_TAGS =
-  /[ \t]*(?:<title>[^<]*<\/title>|<meta\s[^>]*?(?:name|property)="(?:description|robots|keywords|og:[^"]*|twitter:[^"]*)"[^>]*>|<link\s[^>]*?rel="canonical"[^>]*>)[ \t]*\n?/g;
+  /[ \t]*(?:<title>[^<]*<\/title>|<meta\s[^>]*?(?:name|property)="(?:description|robots|keywords|og:[^"]*|twitter:[^"]*|article:[^"]*)"[^>]*>|<link\s[^>]*?rel="canonical"[^>]*>)[ \t]*\n?/g;
 
 
 // The client build's index.html is the template: it has the hashed script and stylesheet tags. Once
@@ -102,6 +102,13 @@ function pageHtml(route, page) {
     tag("property", "og:type", meta.type),
     tag("property", "og:url", meta.url),
     tag("property", "og:image", meta.image),
+    tag("property", "og:image:width", meta.imageWidth),
+    tag("property", "og:image:height", meta.imageHeight),
+    tag("property", "og:image:alt", meta.imageAlt),
+    tag("property", "og:locale", meta.locale),
+    tag("property", "article:published_time", meta.articlePublished),
+    tag("property", "article:modified_time", meta.articleModified),
+    ...meta.articleTags.map((value) => tag("property", "article:tag", value)),
     tag("name", "twitter:card", "summary_large_image"),
     tag("name", "twitter:title", meta.title),
     tag("name", "twitter:description", meta.description),

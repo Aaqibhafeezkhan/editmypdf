@@ -21,6 +21,17 @@ export const PRODUCT = {
   comparisonsCheckedAt: "November 2026",
 } as const;
 
+// Visit counting, off unless the build sets VITE_GA_MEASUREMENT_ID (a GA4 id such as G-XXXXXXX).
+// When it is on, the site shows a notice and loads the script only after the visitor agrees, on
+// the site's pages only; the privacy page, FAQ, terms and landing page describe that state. When
+// it is off, every page says the site runs no analytics, and that is true.
+export const ANALYTICS = {
+  id: (import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined) || undefined,
+  get enabled(): boolean {
+    return Boolean(this.id);
+  },
+} as const;
+
 export const ROUTES = {
   home: "/",
   app: "/app",

@@ -39,10 +39,32 @@ function siteFiles(siteUrl: string): Plugin {
       .join("\n")}\n</urlset>\n`;
   // Editor documents exist only in one browser, so /edit/ is kept out of search results.
   const robots = () => `User-agent: *\nAllow: ${base}\nDisallow: ${base}edit/\n\nSitemap: ${origin}/sitemap.xml\n`;
+  // The web app manifest: installable, with the icons under the base path.
+  const manifest = () =>
+    JSON.stringify(
+      {
+        name: "PDF Edit",
+        short_name: "PDF Edit",
+        description: "Free browser PDF editor that edits the page's own text in its own font. No upload, no account.",
+        start_url: `${base}app`,
+        scope: base,
+        display: "standalone",
+        background_color: "#f8f7f3",
+        theme_color: "#1e59cd",
+        icons: [
+          { src: `${base}icon-192.png`, sizes: "192x192", type: "image/png" },
+          { src: `${base}icon-512.png`, sizes: "512x512", type: "image/png" },
+          { src: `${base}icon-512.png`, sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+      },
+      null,
+      2,
+    );
   const files: Record<string, { type: string; body: () => string }> = {
     "sitemap.xml": { type: "application/xml", body: sitemap },
     "feed.xml": { type: "application/rss+xml", body: () => feed(origin) },
     "robots.txt": { type: "text/plain", body: robots },
+    "site.webmanifest": { type: "application/manifest+json", body: manifest },
   };
   return {
     name: "site-files",
@@ -100,6 +122,18 @@ function prerenderedPages(): Plugin {
   };
 }
 
+// Google Search Console's HTML-tag verification: the tag goes into every page's head when the build
+// has VITE_GOOGLE_SITE_VERIFICATION (the content value Search Console shows), and nowhere otherwise.
+function searchVerification(content: string | undefined): Plugin {
+  return {
+    name: "search-verification",
+    transformIndexHtml() {
+      if (!content) return [];
+      return [{ tag: "meta", attrs: { name: "google-site-verification", content }, injectTo: "head" }];
+    },
+  };
+}
+
 // The path the site is served under: "/" (the default) or "/<repo>/" for a GitHub Pages project
 // site. Read from VITE_BASE at build time; either "/repo" or "/repo/" is accepted.
 function basePath(value: string | undefined): string {
@@ -112,7 +146,7 @@ export default defineConfig(({ mode }) => {
   const siteUrl = (env.VITE_SITE_URL ?? "").replace(/\/$/, "");
   return {
     base: basePath(env.VITE_BASE),
-    plugins: [react(), tailwindcss(), siteFiles(siteUrl), prerenderedPages()],
+    plugins: [react(), tailwindcss(), siteFiles(siteUrl), searchVerification(env.VITE_GOOGLE_SITE_VERIFICATION), prerenderedPages()],
     resolve: {
       alias: {
         "@": path.resolve(root, "src"),
