@@ -134,7 +134,19 @@ type Line = Box & {
 
 // The spacing state of the content stream at one drawn glyph, with the glyph's own advance in
 // the font's units.
-type GlyphState = { text: string; charSpacing: number; wordSpacing: number; fontSize: number; font: string; width: number };
+type GlyphState = {
+  text: string;
+  charSpacing: number;
+  wordSpacing: number;
+  fontSize: number;
+  font: string;
+  width: number;
+  // Index of the operator that drew the glyph: its place in the page's paint order.
+  op: number;
+};
+
+// Something opaque the page painted (an image, a filled shape) and when.
+type Cover = Box & { order: number };
 
 // What the content stream says about one text item: the state its first glyph was drawn in, how
 // many of its letters were matched to glyphs, those glyphs' summed advance in text space at the
@@ -208,6 +220,7 @@ async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promis
         rules: [] as Box[],
         shapes: [] as Box[],
         images: [] as Box[],
+        covers: [] as Cover[],
         colors: [] as string[],
         glyphUse: new Map<string, GlyphUse>(),
         glyphs: [] as GlyphState[],
@@ -223,6 +236,7 @@ async function extractPageContent(page: PDFPageProxy, pageIndex: number): Promis
     graphics.colors,
     faces,
     itemSpacing(textResult.items, graphics.glyphs, faces),
+    graphics.covers,
   );
   const lines = groupLines(runs);
   const tables = findTables(graphics.rules, viewport.width, viewport.height);
@@ -346,13 +360,13 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
   let wordSpacing = 0;
   let fontSize = 1;
   let font = "";
-  const show = (glyphs: unknown) => {
+  const show = (glyphs: unknown, op: number) => {
     if (!Array.isArray(glyphs)) return;
     for (const glyph of glyphs) {
       if (!glyph || typeof glyph !== "object") continue;
       const { unicode, isSpace, width } = glyph as { unicode?: unknown; isSpace?: unknown; width?: unknown };
       const text = isSpace ? " " : typeof unicode === "string" ? unicode : "";
-      if (text) out.push({ text, charSpacing, wordSpacing, fontSize, font, width: number(width, 0) });
+      if (text) out.push({ text, charSpacing, wordSpacing, fontSize, font, width: number(width, 0), op });
     }
   };
   const number = (value: unknown, fallback: number) =>
@@ -378,11 +392,11 @@ function glyphStream(fnArray: number[], argsArray: unknown[]): GlyphState[] {
     else if (fn === OPS.setFont) {
       font = typeof args[0] === "string" ? args[0] : font;
       fontSize = Math.abs(number(args[1], 1)) || 1;
-    } else if (fn === OPS.showText || fn === OPS.nextLineShowText) show(args[0]);
+    } else if (fn === OPS.showText || fn === OPS.nextLineShowText) show(args[0], index);
     else if (fn === OPS.nextLineSetSpacingShowText) {
       wordSpacing = number(args[0], wordSpacing);
       charSpacing = number(args[1], charSpacing);
-      show(args[2]);
+      show(args[2], index);
     }
   }
   return out;
@@ -529,6 +543,7 @@ function textRuns(
   colors: string[],
   faces: Map<string, Face>,
   spacing: Map<number, ItemSpacing>,
+  covers: Cover[] = [],
 ): Run[] {
   const runs: Run[] = [];
   let colorIndex = 0;
@@ -553,7 +568,11 @@ function textRuns(
       style: "normal",
       unitScale: 0.001,
     };
-    const { text, letterSpacing, wordSpacing } = runSpacing(item, fontSize, face, spacing.get(index));
+    const matched = spacing.get(index);
+    // Text the page later painted over (an edit flattened to an image by an earlier export, a
+    // filled box) is not on the page as the reader sees it, so it is not offered for editing.
+    if (matched && hidden(box, matched.state.op, covers)) return;
+    const { text, letterSpacing, wordSpacing } = runSpacing(item, fontSize, face, matched);
     runs.push({
       ...box,
       baseline: tx[5],
@@ -632,6 +651,19 @@ function spaceFit(extra: number, spaces: number, face: Parameters<typeof measure
   const space = measureWidth(" ", face);
   const clamped = Math.max(-space * 0.9, Math.min(face.fontSize * 3, extra / spaces));
   return Math.abs(clamped) < 0.005 ? 0 : Math.round(clamped * 1000) / 1000;
+}
+
+// Whether a run drawn by operator `op` lies wholly under opaque paint that came after it.
+function hidden(box: Box, op: number, covers: Cover[]): boolean {
+  const pad = 0.6;
+  return covers.some(
+    (cover) =>
+      cover.order > op &&
+      cover.x <= box.x + pad &&
+      cover.y <= box.y + pad &&
+      cover.x + cover.w >= box.x + box.w - pad &&
+      cover.y + cover.h >= box.y + box.h - pad,
+  );
 }
 
 function clampSpacing(value: number, fontSize: number, maxEm: number): number {
@@ -903,21 +935,32 @@ function readGraphics(
   fnArray: number[],
   argsArray: unknown[],
   viewport: PageViewport,
-): { rules: Box[]; shapes: Box[]; images: Box[] } {
-  const stack: number[][] = [];
+): { rules: Box[]; shapes: Box[]; images: Box[]; covers: Cover[] } {
+  const stack: { ctm: number[]; fillAlpha: number }[] = [];
   let ctm = IDENTITY.slice();
+  let fillAlpha = 1;
   const rules: Box[] = [];
   const shapes: Box[] = [];
   const images: Box[] = [];
+  // Opaque paint in paint order, so text drawn earlier and lying under it can be told hidden.
+  const covers: Cover[] = [];
   for (let index = 0; index < fnArray.length; index += 1) {
     const fn = fnArray[index];
     const args = argsArray[index];
     if (fn === OPS.save) {
-      stack.push(ctm.slice());
+      stack.push({ ctm: ctm.slice(), fillAlpha });
       continue;
     }
     if (fn === OPS.restore || fn === OPS.paintFormXObjectEnd) {
-      ctm = stack.pop() ?? IDENTITY.slice();
+      const state = stack.pop();
+      ctm = state?.ctm ?? IDENTITY.slice();
+      fillAlpha = state?.fillAlpha ?? 1;
+      continue;
+    }
+    if (fn === OPS.setGState && Array.isArray(args) && Array.isArray(args[0])) {
+      for (const entry of args[0] as unknown[]) {
+        if (Array.isArray(entry) && entry[0] === "ca" && typeof entry[1] === "number") fillAlpha = entry[1];
+      }
       continue;
     }
     if (fn === OPS.transform) {
@@ -926,7 +969,7 @@ function readGraphics(
       continue;
     }
     if (fn === OPS.paintFormXObjectBegin) {
-      stack.push(ctm.slice());
+      stack.push({ ctm: ctm.slice(), fillAlpha });
       const matrix = Array.isArray(args) ? asMatrix(args[0]) : null;
       if (matrix) ctm = Util.transform(ctm, matrix);
       continue;
@@ -937,7 +980,11 @@ function readGraphics(
       const minMax = args[2] as ArrayLike<number> | null;
       const path = Array.isArray(args[1]) ? (args[1][0] as ArrayLike<number> | null) : null;
       const box = pathBox(minMax, ctm, viewport);
-      if (!box || coversPage(box, viewport)) continue;
+      if (!box) continue;
+      // Only a filled polygon counts as a cover: a curved shape's box says little about what it hides.
+      const filled = paint !== OPS.stroke && paint !== OPS.closeStroke;
+      if (filled && fillAlpha >= 0.99 && isPolygon(path)) covers.push({ ...box, order: index });
+      if (coversPage(box, viewport)) continue;
       if (isRule(box) || isSegment(path)) rules.push(padRule(box));
       else if (box.w >= 8 && box.h >= 8) shapes.push(box);
       continue;
@@ -949,13 +996,16 @@ function readGraphics(
       fn === OPS.paintInlineImageXObjectGroup
     ) {
       const box = pathBox([0, 0, 1, 1], ctm, viewport);
-      if (box && box.w >= 8 && box.h >= 8 && !coversPage(box, viewport)) images.push(box);
+      if (!box) continue;
+      if (fillAlpha >= 0.99) covers.push({ ...box, order: index });
+      if (box.w >= 8 && box.h >= 8 && !coversPage(box, viewport)) images.push(box);
     }
   }
   return {
     rules: mergeRules(uniqueBoxes(rules)),
     shapes: uniqueBoxes(shapes).slice(0, 300),
     images: uniqueBoxes(images),
+    covers,
   };
 }
 
@@ -1051,6 +1101,21 @@ function asMatrix(value: unknown): number[] | null {
 
 function isSegment(path: ArrayLike<number> | null): boolean {
   return !!path && path.length === 6 && path[0] === 0 && path[3] === 1;
+}
+
+// A path made only of straight edges (moveTo, lineTo, closePath), with at least three points.
+function isPolygon(path: ArrayLike<number> | null): boolean {
+  if (!path || path.length < 9) return false;
+  let points = 0;
+  for (let index = 0; index < path.length; ) {
+    const op = path[index];
+    if (op === 0 || op === 1) {
+      points += 1;
+      index += 3;
+    } else if (op === 4) index += 1;
+    else return false;
+  }
+  return points >= 3;
 }
 
 function padRule(box: Box): Box {
