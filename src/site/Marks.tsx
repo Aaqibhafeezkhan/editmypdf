@@ -12,8 +12,8 @@ export function Mark({ value, labels }: { value: Tri; labels?: Partial<Record<Tr
   );
 }
 
-export function Where({ where }: { where: "server" | "browser" | "mixed" }) {
-  if (where === "browser") return <Mark value="yes" labels={{ yes: "In your browser" }} />;
-  if (where === "mixed") return <Mark value="partial" labels={{ partial: "Mostly on your device" }} />;
-  return <Mark value="no" labels={{ no: "Uploaded to their servers" }} />;
+export function Where({ where, short = false }: { where: "server" | "browser" | "mixed"; short?: boolean }) {
+  if (where === "browser") return <Mark value="yes" labels={{ yes: short ? "Your browser" : "In your browser" }} />;
+  if (where === "mixed") return <Mark value="partial" labels={{ partial: short ? "Mostly local" : "Mostly on your device" }} />;
+  return <Mark value="no" labels={{ no: short ? "Their servers" : "Uploaded to their servers" }} />;
 }

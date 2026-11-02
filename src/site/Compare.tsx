@@ -49,39 +49,37 @@ export function Compare() {
   return (
     <>
       <section className="section container">
-        <div className="cmp-index-head">
-          <div className="section-head">
-            <p className="eyebrow">
-              <Scale aria-hidden="true" /> Compare
-            </p>
-            <h1 className="display">The same questions, asked of every PDF editor.</h1>
-            <p className="lede">
-              Where does your file go, what does the free tier really allow, and when you retype a line, does
-              it keep the page's font? Facts checked against each vendor's own pages, with sources. Where a
-              competitor is better, the page says so.
-            </p>
-          </div>
-          <aside className="cmp-stats" aria-label="The comparison in numbers">
-            {stats().map((stat) => (
-              <div key={stat.label} className="cmp-stat">
-                <span className="icon-tile" aria-hidden="true">
-                  <stat.icon />
-                </span>
-                <strong>
-                  {stat.figure}
-                  <small>of {stat.of}</small>
-                </strong>
-                <span>{stat.label}</span>
-              </div>
-            ))}
-            <p className="cmp-stats-foot">
-              <span>
-                <CalendarCheck aria-hidden="true" /> Checked {PRODUCT.comparisonsCheckedAt}
-              </span>
-              <span>Sources on every page</span>
-            </p>
-          </aside>
+        <div className="section-head centered cmp-head-wide">
+          <p className="eyebrow">
+            <Scale aria-hidden="true" /> Compare
+          </p>
+          <h1 className="display">The same questions, asked of every PDF editor.</h1>
+          <p className="lede">
+            Where does your file go, what does the free tier really allow, and does retyping a line keep the
+            page's font? Every fact read from the vendor's own pages, with sources. Where a competitor is
+            better, its page says so.
+          </p>
         </div>
+        <dl className="cmp-numbers" aria-label="The comparison in numbers">
+          {stats().map((stat) => (
+            <div key={stat.label} className="cmp-number">
+              <span className="icon-tile" aria-hidden="true">
+                <stat.icon />
+              </span>
+              <dt>
+                {stat.figure}
+                <small>of {stat.of}</small>
+              </dt>
+              <dd>{stat.label}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="cmp-checked">
+          <span className="as-of">
+            <CalendarCheck aria-hidden="true" /> Checked {PRODUCT.comparisonsCheckedAt}
+          </span>
+          <span>{COMPETITORS.length} tools, the same seven questions, sources on every page.</span>
+        </p>
 
         <div className="table-wrap sticky">
           <table className="cmp-table cmp-main">
@@ -92,11 +90,11 @@ export function Compare() {
             <thead>
               <tr>
                 <th scope="col">Tool</th>
-                <th scope="col">Files processed</th>
-                <th scope="col">Account needed</th>
+                <th scope="col">Files go to</th>
+                <th scope="col">Account</th>
                 <th scope="col">Edits existing text</th>
-                <th scope="col">Keeps original font</th>
-                <th scope="col">Free file cap and limit</th>
+                <th scope="col">Keeps the font</th>
+                <th scope="col">Free tier limits</th>
                 <th scope="col" className="num">
                   Paid from
                 </th>
@@ -111,7 +109,7 @@ export function Compare() {
                   </span>
                 </th>
                 <td>
-                  <Where where={OURS.processing.where} />
+                  <Where where={OURS.processing.where} short />
                 </td>
                 <td>
                   <Mark value={OURS.account.required} labels={{ no: "No" }} />
@@ -139,7 +137,7 @@ export function Compare() {
                     </Link>
                   </th>
                   <td>
-                    <Where where={tool.processing.where} />
+                    <Where where={tool.processing.where} short />
                   </td>
                   <td>
                     <Mark value={tool.account.required} labels={{ partial: "For some tasks" }} />
