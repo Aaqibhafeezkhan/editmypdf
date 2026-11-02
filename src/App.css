@@ -497,6 +497,16 @@
   background: #1e40af;
 }
 
+/* The handle on the box's right edge: dragging it changes the width the text wraps in. */
+.content-grip.resize {
+  cursor: ew-resize;
+}
+
+.content-grip.resize:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
 /* The edited text needs more lines than the original block had, so it now covers what sat below. */
 .content-cover.overflowing {
   outline: 1.5px dashed #d97706;

@@ -264,6 +264,7 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
           ? patch.lineIndents.map((indent) => number(indent, 0))
           : [],
         wrap: patch.wrap === true,
+        ...(typeof patch.wrapW === "number" && Number.isFinite(patch.wrapW) && patch.wrapW > 0 ? { wrapW: patch.wrapW } : {}),
         spans: role === "text" ? spanList(patch.spans, text) : [],
         image: role === "text" ? "" : image,
         rotation: 0,

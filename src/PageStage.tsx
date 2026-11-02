@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
-import { GripVertical, RotateCw } from "lucide-react";
+import { ChevronsLeftRight, GripVertical, RotateCw } from "lucide-react";
 import { contentAt, contentLabel, isTextContent, readPageContent, type ContentElement } from "./content.ts";
 import {
   cropGraphic,
@@ -9,6 +9,7 @@ import {
   graphicPatch,
   layoutTextPatch,
   refreshPatchFace,
+  resizeTextPatch,
   sampleColor,
   softenBreaks,
   textPatch,
@@ -67,6 +68,8 @@ type Drag =
       moved: boolean;
     }
   | { type: "move"; origin: Annotation[]; id: string; start: Point; moved: boolean }
+  // The right edge of a text patch's box being dragged: the width its text wraps in.
+  | { type: "width"; origin: Annotation[]; id: string; start: Point; startWidth: number; moved: boolean }
   | {
       type: "resize";
       origin: Annotation[];
@@ -501,7 +504,7 @@ export function PageStage({
       return;
     }
 
-    if (drag.type === "move") {
+    if (drag.type === "move" || drag.type === "width") {
       if (drag.moved && draftText.current?.id !== drag.id) onPushBaseline(drag.origin);
       onSelect(drag.id);
       return;
@@ -597,6 +600,24 @@ export function PageStage({
       const original = drag.origin.find((item) => item.id === drag.id);
       if (!original) return;
       onReplace(drag.origin.map((item) => (item.id === drag.id ? translate(original, dx, dy) : item)));
+      return;
+    }
+
+    if (drag.type === "width") {
+      const dx = point.x - drag.start.x;
+      if (!drag.moved && Math.abs(dx) < 1) return;
+      drag.moved = true;
+      const original = drag.origin.find((item) => item.id === drag.id);
+      if (!original || original.kind !== "patch") return;
+      const resized = resizeTextPatch(original, drag.startWidth + dx);
+      // A single line's editor is replaced by the block's as it starts to wrap; the block's
+      // editor takes the focus over so typing can go on afterwards.
+      if (!original.wrap) {
+        caretRef.current = { id: drag.id, index: resized.text.length };
+        armFocus.current = drag.id;
+        onRequestFocus(drag.id);
+      }
+      onReplace(drag.origin.map((item) => (item.id === drag.id ? resized : item)));
       return;
     }
 
@@ -1281,7 +1302,8 @@ export function PageStage({
             patch.role === "text" &&
             patch.text === (patch.originText ?? "") &&
             Math.abs(patch.x - patch.originX) < 0.01 &&
-            Math.abs(patch.y - patch.originY) < 0.01;
+            Math.abs(patch.y - patch.originY) < 0.01 &&
+            (patch.wrapW == null || Math.abs(patch.wrapW - patch.originW) < 0.01);
           // While a run is being edited its live text replaces the page's rendering, so what the
           // caret sits in is exactly what will be exported.
           const showLive = patch.role === "text" && (selected || !pristine);
@@ -1372,7 +1394,8 @@ export function PageStage({
               latest.kind !== "patch" ||
               (latest.text === (latest.originText || source?.text || "") &&
                 Math.abs(latest.x - latest.originX) < 0.5 &&
-                Math.abs(latest.y - latest.originY) < 0.5);
+                Math.abs(latest.y - latest.originY) < 0.5 &&
+                (latest.wrapW == null || Math.abs(latest.wrapW - latest.originW) < 0.5));
             if (draft?.id === patch.id) {
               draftText.current = null;
               textBaseline.current = null;
@@ -1432,7 +1455,7 @@ export function PageStage({
               ...item,
               wrap: true,
               lineHeight,
-              originW: wrapWidth(item, contentRef.current),
+              wrapW: wrapWidth(item, contentRef.current),
               spans,
               softBreaks: [],
               lineGaps: [],
@@ -1445,11 +1468,29 @@ export function PageStage({
             armFocus.current = item.id;
             onRequestFocus(item.id);
           };
+          // Sets the width the text wraps in, as one step of history.
+          const setWidth = (width: number) => {
+            const current = getAnnotations();
+            const item = current.find((entry): entry is PatchAnnotation => entry.id === patch.id && entry.kind === "patch");
+            if (!item) return;
+            const resized = resizeTextPatch(item, width);
+            if (Math.abs((resized.wrapW ?? 0) - (item.wrapW ?? item.originW)) < 0.01 && item.wrap) return;
+            onReplace(current.map((entry) => (entry.id === item.id ? resized : entry)));
+            if (draftText.current?.id !== patch.id) onPushBaseline(current);
+          };
+          const currentWidth = patch.wrap ? (patch.wrapW ?? patch.originW) : Math.max(patch.w, 1);
           const handleEditorKey = (event: ReactKeyboardEvent<HTMLElement>) => {
             if (event.key === "Enter" && !patch.wrap && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
               event.preventDefault();
               event.stopPropagation();
               breakLine(event.currentTarget);
+              return;
+            }
+            // Alt+Shift+Left/Right narrows or widens the box from the keyboard, four points a step.
+            if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && event.altKey && event.shiftKey) {
+              event.preventDefault();
+              event.stopPropagation();
+              setWidth(currentWidth + (event.key === "ArrowRight" ? 4 : -4));
               return;
             }
             if (event.key === "Escape") {
@@ -1472,6 +1513,35 @@ export function PageStage({
             }
             frameRef.current?.classList.add("interacting");
             dragRef.current = { type: "move", origin: getAnnotations(), id: patch.id, start: toPoint(event), moved: false };
+          };
+          // Dragging the handle on the box's right edge changes the width the text wraps in; a
+          // single line becomes a block, so it stays on one line while the width allows and wraps
+          // when narrowed.
+          const startWidth = (event: ReactPointerEvent<HTMLElement>) => {
+            if (event.button !== 0) return;
+            event.stopPropagation();
+            event.preventDefault();
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              // A very fast click can release the pointer before capture.
+            }
+            frameRef.current?.classList.add("interacting");
+            dragRef.current = {
+              type: "width",
+              origin: getAnnotations(),
+              id: patch.id,
+              start: toPoint(event),
+              startWidth: currentWidth,
+              moved: false,
+            };
+          };
+          const handleWidthKey = (event: ReactKeyboardEvent<HTMLElement>) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            event.stopPropagation();
+            const step = event.shiftKey ? 10 : 1;
+            setWidth(currentWidth + (event.key === "ArrowRight" ? step : -step));
           };
           return (
             <div key={patch.id}>
@@ -1572,6 +1642,28 @@ export function PageStage({
                   onPointerCancel={finishDrag}
                 >
                   <GripVertical size={11} strokeWidth={2.25} aria-hidden="true" />
+                </div>
+              )}
+              {selected && patch.role === "text" && (
+                <div
+                  className="content-grip resize"
+                  role="slider"
+                  tabIndex={-1}
+                  aria-label="Width of the text box"
+                  aria-valuenow={Math.round(currentWidth)}
+                  aria-valuemin={Math.round(Math.max(12, patch.fontSize * 3))}
+                  title="Drag to change the width the text wraps in"
+                  style={{
+                    left: (patch.x - slackShift + (patch.wrap ? blockWidth(patch) : Math.max(patch.w, 1))) * scale + 4,
+                    top: (patch.y + patch.fontSize * 0.5) * scale - 8,
+                  }}
+                  onPointerDown={startWidth}
+                  onPointerMove={moveDrag}
+                  onPointerUp={finishDrag}
+                  onPointerCancel={finishDrag}
+                  onKeyDown={handleWidthKey}
+                >
+                  <ChevronsLeftRight size={11} strokeWidth={2.25} aria-hidden="true" />
                 </div>
               )}
             </div>
