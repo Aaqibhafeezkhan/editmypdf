@@ -1153,3 +1153,80 @@ body.resizing-rows {
   box-shadow: 0 0 0 1.5px color-mix(in oklch, #eab308 35%, transparent);
 }
 
+/* ---- Floating formatting bar over the page's own text ---------------------------------------- */
+
+.format-bar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  visibility: hidden;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--round-md);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--elev-2);
+  color: var(--ink);
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.format-bar-gap {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--line);
+}
+
+.format-bar-step {
+  width: 24px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--ink);
+}
+
+.format-bar-step:hover {
+  background: var(--section);
+}
+
+.format-bar-step svg {
+  width: 14px;
+  height: 14px;
+}
+
+.format-bar-size {
+  width: 44px;
+  height: 28px;
+  margin: 0;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.format-bar-size::-webkit-outer-spin-button,
+.format-bar-size::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.format-bar-size:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}

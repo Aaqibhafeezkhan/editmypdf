@@ -70,10 +70,8 @@ export function selectionOffsets(root: HTMLElement): { start: number; end: numbe
   return { start: Math.min(start, end), end: Math.max(start, end) };
 }
 
-// Puts a collapsed caret at a character offset. Past the end lands after the last character.
-export function placeCaret(root: HTMLElement, index: number): void {
-  const selection = window.getSelection();
-  if (!selection) return;
+// The DOM boundary point of a character offset. Past the end lands after the last character.
+export function pointAt(root: HTMLElement, index: number): { node: Node; offset: number } {
   const lines = lineDivs(root);
   const targets: HTMLElement[] = lines.length > 0 ? lines : [root];
   let remaining = Math.max(0, index);
@@ -87,16 +85,42 @@ export function placeCaret(root: HTMLElement, index: number): void {
     remaining = Math.min(remaining, length);
     const nodes = textNodesOf(line);
     for (const node of nodes) {
-      if (remaining <= node.data.length) {
-        selection.collapse(node, remaining);
-        return;
-      }
+      if (remaining <= node.data.length) return { node, offset: remaining };
       remaining -= node.data.length;
     }
     const last = nodes[nodes.length - 1];
-    if (last) selection.collapse(last, last.data.length);
-    else selection.collapse(line, 0);
+    if (last) return { node: last, offset: last.data.length };
+    return { node: line, offset: 0 };
+  }
+  return { node: root, offset: 0 };
+}
+
+// Puts a collapsed caret at a character offset.
+export function placeCaret(root: HTMLElement, index: number): void {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const point = pointAt(root, index);
+  selection.collapse(point.node, point.offset);
+}
+
+// Selects text[start, end), or puts the caret at `end` when the two are equal.
+export function selectRange(root: HTMLElement, start: number, end: number): void {
+  if (start === end) {
+    placeCaret(root, end);
     return;
   }
-  selection.collapse(root, 0);
+  const selection = window.getSelection();
+  if (!selection) return;
+  const from = pointAt(root, Math.min(start, end));
+  const to = pointAt(root, Math.max(start, end));
+  const range = document.createRange();
+  try {
+    range.setStart(from.node, from.offset);
+    range.setEnd(to.node, to.offset);
+  } catch {
+    placeCaret(root, end);
+    return;
+  }
+  selection.removeAllRanges();
+  selection.addRange(range);
 }

@@ -143,6 +143,9 @@ function spanList(value: unknown, text: string): TextSpan[] {
       ...(typeof span.letterSpacing === "number" && Number.isFinite(span.letterSpacing)
         ? { letterSpacing: span.letterSpacing }
         : {}),
+      ...(span.underline === true ? { underline: true } : {}),
+      ...(span.strike === true ? { strike: true } : {}),
+      ...(span.styled === true ? { styled: true } : {}),
     });
   }
   return spans.map((span) => span.text).join("") === text ? spans : [];
@@ -266,6 +269,9 @@ export function normalizeAnnotations(raw: unknown): Annotation[] {
         wrap: patch.wrap === true,
         ...(typeof patch.wrapW === "number" && Number.isFinite(patch.wrapW) && patch.wrapW > 0 ? { wrapW: patch.wrapW } : {}),
         spans: role === "text" ? spanList(patch.spans, text) : [],
+        ...(patch.underline === true ? { underline: true } : {}),
+        ...(patch.strike === true ? { strike: true } : {}),
+        ...(patch.styled === true ? { styled: true } : {}),
         image: role === "text" ? "" : image,
         rotation: 0,
         x: number(patch.x, 0),

@@ -418,19 +418,26 @@ export async function paintRun(patch: PatchAnnotation): Promise<string> {
       context.font = fontCss(face, face.fontSize * zoom);
       applySpacing(context, face, face.fontSize * zoom);
       context.fillStyle = spans.length > 0 ? piece.face.color || patch.color : patch.color;
+      const pieceStart = cursor;
       if (extra <= 0) {
         context.fillText(piece.text, cursor * zoom, y);
         cursor += measureWidth(piece.text, face);
-        continue;
+      } else {
+        // Justified: every space in the line widens by the same amount, as the editor's text-align does.
+        const spaceWidth = measureWidth(" ", face);
+        const words = piece.text.split(" ");
+        words.forEach((word, wordIndex) => {
+          if (word) context.fillText(word, cursor * zoom, y);
+          cursor += measureWidth(word, face);
+          if (wordIndex < words.length - 1) cursor += spaceWidth + extra;
+        });
       }
-      // Justified: every space in the line widens by the same amount, as the editor's text-align does.
-      const spaceWidth = measureWidth(" ", face);
-      const words = piece.text.split(" ");
-      words.forEach((word, wordIndex) => {
-        if (word) context.fillText(word, cursor * zoom, y);
-        cursor += measureWidth(word, face);
-        if (wordIndex < words.length - 1) cursor += spaceWidth + extra;
-      });
+      const decoration = runDecoration(spans.length > 0 ? piece.face : null, patch);
+      for (const kind of ["underline", "strike"] as const) {
+        if (!decoration[kind]) continue;
+        const rule = decorationLine(face.fontSize, kind);
+        context.fillRect(pieceStart * zoom, y + rule.offset * zoom, (cursor - pieceStart) * zoom, rule.thickness * zoom);
+      }
     }
   });
   if (patch.underlineOffset >= 0) {

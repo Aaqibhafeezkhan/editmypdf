@@ -121,9 +121,12 @@ export function mergeSpans(spans: TextSpan[]): TextSpan[] {
       last.fontStyle === span.fontStyle &&
       Math.abs(last.fontSize - span.fontSize) < 0.05 &&
       Math.abs((last.letterSpacing ?? 0) - (span.letterSpacing ?? 0)) < 0.0015 &&
+      !!last.underline === !!span.underline &&
+      !!last.strike === !!span.strike &&
       closeColors(last.color, span.color)
     ) {
       last.text += span.text;
+      if (span.styled) last.styled = true;
       continue;
     }
     merged.push({ ...span });
@@ -249,33 +252,53 @@ export function editSpans(spans: TextSpan[], from: number, to: number, insert: s
   return next;
 }
 
+type LiveFace = Pick<ContentElement, "fontFamily" | "fontWeight" | "fontStyle" | "pdfFont">;
+
 // Takes the face pdf.js registers for the page now, which can differ from the one the patch was made
-// with when another document was loaded in between. Returns the same object when nothing changed.
-export function refreshPatchFace(patch: PatchAnnotation, live: ContentElement): PatchAnnotation {
+// with when another document was loaded in between. A run whose weight, slant, size or colour the
+// user chose keeps them and only follows the face's name; a run set in a face of another element
+// of the page (a bold the user borrowed from a heading) is found among `others`. Returns the same
+// object when nothing changed.
+export function refreshPatchFace(patch: PatchAnnotation, live: ContentElement, others: ContentElement[] = []): PatchAnnotation {
   const livePdfFont = sameFontRef(patch.pdfFont, live.pdfFont) ? live.pdfFont : patch.pdfFont;
+  const own: LiveFace = patch.styled
+    ? { fontFamily: live.fontFamily, fontWeight: patch.fontWeight, fontStyle: patch.fontStyle, pdfFont: livePdfFont }
+    : { fontFamily: live.fontFamily, fontWeight: live.fontWeight, fontStyle: live.fontStyle, pdfFont: livePdfFont };
   let changed =
-    live.fontFamily !== patch.fontFamily ||
-    live.fontWeight !== patch.fontWeight ||
-    live.fontStyle !== patch.fontStyle ||
-    livePdfFont !== patch.pdfFont;
+    own.fontFamily !== patch.fontFamily ||
+    own.fontWeight !== patch.fontWeight ||
+    own.fontStyle !== patch.fontStyle ||
+    own.pdfFont !== patch.pdfFont;
+  const findFace = (pdfFont: string): LiveFace | null => {
+    if (!pdfFont) return null;
+    const near = live.spans.find((item) => sameFontRef(item.pdfFont, pdfFont)) ?? (sameFontRef(live.pdfFont, pdfFont) ? live : null);
+    if (near) return near;
+    for (const element of others) {
+      if (sameFontRef(element.pdfFont, pdfFont)) return element;
+      const span = element.spans.find((item) => sameFontRef(item.pdfFont, pdfFont));
+      if (span) return span;
+    }
+    return null;
+  };
   const spans = patch.spans.map((span) => {
-    const match =
-      live.spans.find((item) => sameFontRef(item.pdfFont, span.pdfFont)) ??
-      (live.spans.length === 0 && sameFontRef(live.pdfFont, span.pdfFont) ? live : null);
+    const match = findFace(span.pdfFont);
     if (!match || !match.fontFamily) return span;
+    const next: LiveFace = span.styled
+      ? { fontFamily: match.fontFamily, fontWeight: span.fontWeight, fontStyle: span.fontStyle, pdfFont: match.pdfFont }
+      : { fontFamily: match.fontFamily, fontWeight: match.fontWeight, fontStyle: match.fontStyle, pdfFont: match.pdfFont };
     if (
-      match.fontFamily === span.fontFamily &&
-      match.fontWeight === span.fontWeight &&
-      match.fontStyle === span.fontStyle &&
-      match.pdfFont === span.pdfFont
+      next.fontFamily === span.fontFamily &&
+      next.fontWeight === span.fontWeight &&
+      next.fontStyle === span.fontStyle &&
+      next.pdfFont === span.pdfFont
     ) {
       return span;
     }
     changed = true;
-    return { ...span, fontFamily: match.fontFamily, fontWeight: match.fontWeight, fontStyle: match.fontStyle, pdfFont: match.pdfFont };
+    return { ...span, ...next };
   });
   if (!changed) return patch;
-  return { ...patch, fontFamily: live.fontFamily, fontWeight: live.fontWeight, fontStyle: live.fontStyle, pdfFont: livePdfFont, spans };
+  return { ...patch, ...own, spans };
 }
 
 // Whether two pdf.js font names refer to the same font of the file. pdf.js names a font after the
