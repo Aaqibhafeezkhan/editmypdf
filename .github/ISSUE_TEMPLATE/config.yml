@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or idea
+    url: https://github.com/vr-patel/editmypdf/discussions
+    about: Ask how something works, or float an idea before writing it up as a feature request.
+  - name: Privacy and security
+    url: https://editmypdf.dev/privacy/
+    about: What the editor does with your files. Report a security problem privately through "Report a vulnerability" under the Security tab.

@@ -1,0 +1,48 @@
+name: Bug report
+description: Something is wrong in the editor or on the site.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Files never leave your browser, so we cannot see the PDF you had open; the more you can tell us about it, the faster this gets fixed.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        1. Opened a PDF exported from Word and clicked the heading on page 2.
+        2. Expected the heading to open for editing in place.
+        3. The whole line jumped two pixels to the left.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - editmypdf.dev
+        - A local build (npm run dev)
+        - The marketing site, not the editor
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and system
+      placeholder: Chrome 142 on macOS 26, Firefox 148 on Windows 11, Safari on iPadOS…
+    validations:
+      required: true
+  - type: textarea
+    id: pdf
+    attributes:
+      label: About the PDF
+      description: |
+        Which program made it (Word, Google Docs, Chrome "Save as PDF", LaTeX, InDesign, a scanner…)? Roughly how many pages, and does the text select in other viewers? If you can share it, drag the file here or link to a public copy. If you cannot, say so; a similar document made the same way is often enough.
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Anything red in the browser console (F12 or Cmd-Option-I, then "Console").
+      render: text
