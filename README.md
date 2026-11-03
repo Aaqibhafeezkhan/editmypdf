@@ -1,11 +1,11 @@
-# PDF Edit
+# Edit My PDF
 
 A PDF editor that runs entirely in the browser. It edits the text a page already has, in the page's
 own embedded font, and writes the result back as real text. It also annotates: pencil, shapes,
 text boxes, emoji and signatures. Nothing is uploaded; pdf.js reads the file in a web worker and
 pdf-lib writes the new one in the same tab.
 
-Live at **[vr-patel.github.io/pdf-editor](https://vr-patel.github.io/pdf-editor/)**, published from
+Live at **[editmypdf.dev](https://editmypdf.dev/)**, published from
 `main` by GitHub Actions; [How a change goes live](#how-a-change-goes-live) describes the path from a
 pull request to the site.
 
@@ -57,7 +57,7 @@ Pages serves files whose names begin with an underscore.
 
 ## How a change goes live
 
-The site is served by GitHub Pages at https://vr-patel.github.io/pdf-editor/ and is rebuilt from
+The site is served by GitHub Pages at https://editmypdf.dev/, the repository's custom domain, and is rebuilt from
 `main` by the workflow in `.github/workflows/pages.yml`. Nothing is deployed by hand, and no branch
 other than `main` is ever deployed.
 
@@ -67,8 +67,8 @@ other than `main` is ever deployed.
 2. Merge the pull request. The merge is a push to `main`, which starts the "Publish to GitHub
    Pages" run under the **Actions** tab.
 3. The run installs dependencies (`npm ci`), reads the site's address from the Pages settings
-   (`actions/configure-pages`, which sets `VITE_BASE` to `/pdf-editor/` and `VITE_SITE_URL` to the
-   site's address), runs `npm run build`, uploads `dist/` and deploys it. It takes about a minute.
+   (`actions/configure-pages`, which sets `VITE_BASE` to `/`, since the custom domain serves the site at
+   the root, and `VITE_SITE_URL` to `https://editmypdf.dev`), runs `npm run build`, uploads `dist/` and deploys it. It takes about a minute.
    The run's summary and the merge commit on GitHub both link to the deployment.
 4. The site is updated as soon as the run is green. A failed run leaves the previous deployment in
    place, so a broken build never takes the site down; the run's log says what failed.
@@ -193,4 +193,4 @@ sitemap all read from that file.
 ## Contributing and licence
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run, test and change the editor and the site.
-PDF Edit is released under the MIT licence; see [LICENSE](LICENSE).
+Edit My PDF is released under the MIT licence; see [LICENSE](LICENSE).

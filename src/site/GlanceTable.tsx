@@ -5,7 +5,7 @@ import { ROUTES } from "../data/product.ts";
 import { ToolMark } from "./CompareCard.tsx";
 import { LogoMark } from "./Logo.tsx";
 
-// A table that answers three questions per tool with one icon each, PDF Edit first and
+// A table that answers three questions per tool with one icon each, Edit My PDF first and
 // highlighted. The icons carry a visually hidden label and a tooltip, so a screen reader and a
 // hover both get the words.
 const COLUMNS: { key: string; icon: typeof Laptop; label: string; value: (tool: Tool) => Tri; words: Partial<Record<Tri, string>> }[] = [

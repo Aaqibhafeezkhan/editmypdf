@@ -4,8 +4,11 @@
   <path d="M18.25 6.5v4.75H23Z" fill="#9fbcf0"/>
   <g fill="#1e59cd">
     <rect x="11.75" y="14.5" width="6.5" height="1.9" rx="0.95"/>
-    <rect x="11.75" y="18.4" width="8.5" height="1.9" rx="0.95"/>
-    <rect x="11.75" y="22.3" width="4.5" height="1.9" rx="0.95"/>
+    <rect x="11.75" y="18.4" width="7" height="1.9" rx="0.95"/>
+    <rect x="11.75" y="22.3" width="3.5" height="1.9" rx="0.95"/>
   </g>
-  <rect x="17.6" y="21.3" width="1.9" height="3.9" rx="0.95" fill="#d75928"/>
+  <g transform="translate(19.74 20.26) rotate(45)">
+    <rect x="-2" y="-8" width="4" height="11" rx="2" fill="#d75928"/>
+    <path d="M-2 2.6h4L0 6.2Z" fill="#3b2a22"/>
+  </g>
 </svg>

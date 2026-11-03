@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking under the hood. PDF Edit is a browser PDF editor that edits the text a page already
+Thanks for looking under the hood. Edit My PDF is a browser PDF editor that edits the text a page already
 has, in the page's own font, with nothing sent to a server. This file explains how to run it, where
 things live, and the one rule that matters more than any other.
 

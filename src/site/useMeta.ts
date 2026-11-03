@@ -19,7 +19,7 @@ export type PageMeta = {
 };
 
 // The site card's dimensions and alt text, the same for every page that uses it.
-const CARD = { width: "1200", height: "630", alt: "PDF Edit: edit the text in a PDF without disturbing the page" };
+const CARD = { width: "1200", height: "630", alt: "Edit My PDF: edit the text in a PDF without disturbing the page" };
 
 // The head tags a page resolves to, with URLs made absolute where the origin is known.
 export type ResolvedMeta = {

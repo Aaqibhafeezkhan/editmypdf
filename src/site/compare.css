@@ -317,7 +317,7 @@
   font-size: var(--fs-sm);
 }
 
-/* Two rows, PDF Edit then the tool: a mark, the name and one dot per fact. */
+/* Two rows, Edit My PDF then the tool: a mark, the name and one dot per fact. */
 .duel {
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr) repeat(3, 22px);

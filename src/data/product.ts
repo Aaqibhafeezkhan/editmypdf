@@ -2,11 +2,11 @@
 
 export const PRODUCT = {
   // The npm package and the repository are called "pdf-editor".
-  name: "PDF Edit",
+  name: "Edit My PDF",
   nameIsProvisional: false,
   tagline: "Edit the text in a PDF without disturbing the page.",
   description:
-    "PDF Edit is a free PDF editor that runs entirely in your browser. Click any heading, line or paragraph and retype it in the page's own font, size, colour and spacing. Nothing is uploaded, and no account is needed.",
+    "Edit My PDF is a free PDF editor that runs entirely in your browser. Click any heading, line or paragraph and retype it in the page's own font, size, colour and spacing. Nothing is uploaded, and no account is needed.",
   shortDescription: "Free browser PDF editor that edits the page's own text in its own font. No uploads, no account.",
   repository: "https://github.com/vr-patel/pdf-editor",
   issues: "https://github.com/vr-patel/pdf-editor/issues",

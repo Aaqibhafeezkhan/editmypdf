@@ -19,7 +19,7 @@ export type Brand = {
   monogram: string;
   color: string;
   logo?: string;
-  // A "PDF Edit vs <tool>" card image under public/, rendered from the mark, the logo and the
+  // A "Edit My PDF vs <tool>" card image under public/, rendered from the mark, the logo and the
   // site's fonts by the same script that writes the logos.
   thumbnail?: string;
 };
@@ -89,7 +89,7 @@ export type Tool = {
 };
 
 export type Competitor = Tool & {
-  // Where the competitor is genuinely better, and where PDF Edit is.
+  // Where the competitor is genuinely better, and where Edit My PDF is.
   theyWin: string[];
   weWin: string[];
   verdict: string;
@@ -101,8 +101,8 @@ export type Competitor = Tool & {
 const CHECKED = "2 November 2026";
 
 export const OURS: Tool = {
-  slug: "pdf-edit",
-  name: "PDF Edit",
+  slug: "edit-my-pdf",
+  name: "Edit My PDF",
   vendor: "Open source, MIT licence",
   url: "/",
   summary: "A free browser PDF editor that edits the page's own text in its own font, with no server behind it.",
@@ -209,7 +209,7 @@ export const COMPETITORS: Competitor[] = [
       "No one-file-per-task limit.",
     ],
     verdict:
-      "iLovePDF is the right tool when the job is anything but editing text: converting, compressing, OCR, signing. For changing words on a page, it uploads your file and leaves the font question unanswered; PDF Edit does that one job locally, in the page's own font.",
+      "iLovePDF is the right tool when the job is anything but editing text: converting, compressing, OCR, signing. For changing words on a page, it uploads your file and leaves the font question unanswered; Edit My PDF does that one job locally, in the page's own font.",
     changes:
       "Direct editing of existing text arrived in May 2025 and was rebuilt in February 2026. Regional file processing for paid plans followed in March 2026.",
     sources: [
@@ -288,7 +288,7 @@ export const COMPETITORS: Competitor[] = [
       "Embedded or restricted fonts never block an edit.",
     ],
     verdict:
-      "Smallpdf is a polished, well-run suite for converting, signing and compressing, and its OCR handles scans that PDF Edit cannot. Its text editor is paid, server-side and works from a list of standard typefaces. If the job is retyping a line in the page's own font, PDF Edit does it free and locally.",
+      "Smallpdf is a polished, well-run suite for converting, signing and compressing, and its OCR handles scans that Edit My PDF cannot. Its text editor is paid, server-side and works from a list of standard typefaces. If the job is retyping a line in the page's own font, Edit My PDF does it free and locally.",
     changes:
       "In July 2026 Smallpdf sold its PDF Tools subsidiary to Apryse to focus on its own products. The privacy notice was revised in July 2025 to name its hosting and AI sub-processors.",
     sources: [
@@ -360,7 +360,7 @@ export const COMPETITORS: Competitor[] = [
       "Nothing to buy for unlimited use.",
     ],
     verdict:
-      "Sejda has the most generous free text editor of the big web tools and is honest about its fonts. For a small file that also needs OCR or conversion, use Sejda. For editing in the page's own font without uploads or hourly limits, PDF Edit.",
+      "Sejda has the most generous free text editor of the big web tools and is honest about its fonts. For a small file that also needs OCR or conversion, use Sejda. For editing in the page's own font without uploads or hourly limits, Edit My PDF.",
     changes: "Terms updated March 2026 and the privacy policy in October 2026, naming Google Cloud for AI-assisted form-field detection.",
     sources: [
       { label: "Sejda pricing", url: "https://www.sejda.com/pricing", accessed: CHECKED },
@@ -437,7 +437,7 @@ export const COMPETITORS: Competitor[] = [
       "The embedded font is used without having to be installed on your computer.",
     ],
     verdict:
-      "Acrobat is the most complete PDF product there is, and if you need OCR, forms, signatures or review workflows it is worth paying for. For changing a few words on a page it asks you to upload, sign in and subscribe; PDF Edit asks for none of that.",
+      "Acrobat is the most complete PDF product there is, and if you need OCR, forms, signatures or review workflows it is worth paying for. For changing a few words on a page it asks you to upload, sign in and subscribe; Edit My PDF asks for none of that.",
     changes:
       "Acrobat Studio launched in August 2025 and now carries the AI features; Standard and Pro no longer include them on the storefronts we saw.",
     sources: [
@@ -510,7 +510,7 @@ export const COMPETITORS: Competitor[] = [
       "The embedded font is used as it is; Foxit needs the font installed on your system to retype in it.",
     ],
     verdict:
-      "Foxit is a serious desktop editor with a perpetual licence, and the best choice here if you want to own your software. Its browser editor is a paid product with a trial. PDF Edit is for the person who wants to fix a line now, free, without installing or uploading anything.",
+      "Foxit is a serious desktop editor with a perpetual licence, and the best choice here if you want to own your software. Its browser editor is a paid product with a trial. Edit My PDF is for the person who wants to fix a line now, free, without installing or uploading anything.",
     changes: "US list prices were restated in July 2026 and the perpetual product is now Foxit PDF Editor 14. Foxit rebranded in 2023.",
     sources: [
       { label: "Foxit PDF Editor (pricing and plans)", url: "https://www.foxit.com/pdf-editor/", accessed: CHECKED },
@@ -579,7 +579,7 @@ export const COMPETITORS: Competitor[] = [
       "Font handling is documented: the page's embedded font, kept and re-embedded on export.",
     ],
     verdict:
-      "Xodo is the closest of these tools to PDF Edit on privacy, since most of its tools run on your device, and it offers far more of them for a modest price. Its free tier is one action a day and its font behaviour is undocumented. For free, unlimited editing in the page's own font, PDF Edit.",
+      "Xodo is the closest of these tools to Edit My PDF on privacy, since most of its tools run on your device, and it offers far more of them for a modest price. Its free tier is one action a day and its font behaviour is undocumented. For free, unlimited editing in the page's own font, Edit My PDF.",
     changes:
       "PDFTron became Apryse in 2023. An Essentials plan announced in April 2025 is no longer listed; a 40%-off Document Suite promotion runs through December 2026.",
     sources: [
@@ -643,7 +643,7 @@ export const COMPETITORS: Competitor[] = [
       "No ads.",
     ],
     verdict:
-      "For anything other than changing the words on a page, PDF24 is the free tool to reach for, and its privacy terms are among the clearest. It simply does not edit existing text. PDF Edit does only that, and does it in the page's own font.",
+      "For anything other than changing the words on a page, PDF24 is the free tool to reach for, and its privacy terms are among the clearest. It simply does not edit existing text. Edit My PDF does only that, and does it in the page's own font.",
     changes: "PDF24 Creator 11.31 (October 2026) shipped its own PDF engine; e-invoice tools and an optional AI invoice reader arrived in 2026.",
     sources: [
       { label: "PDF24 Edit PDF (no existing-text editing)", url: "https://tools.pdf24.org/en/edit-pdf", accessed: CHECKED },
@@ -715,7 +715,7 @@ export const COMPETITORS: Competitor[] = [
       "No 100 MB cap.",
     ],
     verdict:
-      "pdfFiller is a document workflow product: forms, signatures, templates and teams. If that is the job, it is a reasonable subscription. For editing a page's text it uploads your file, keeps it in an account and does not promise to match the font. PDF Edit keeps the file on your machine and the font exactly.",
+      "pdfFiller is a document workflow product: forms, signatures, templates and teams. If that is the job, it is a reasonable subscription. For editing a page's text it uploads your file, keeps it in an account and does not promise to match the font. Edit My PDF keeps the file on your machine and the font exactly.",
     changes:
       "The privacy notice was updated in October 2026 and the sub-processor list in September 2026 to add OpenAI, Anthropic and Google for AI features.",
     sources: [
@@ -779,12 +779,12 @@ export const COMPETITORS: Competitor[] = [
       "Apps on every platform and a developer API.",
     ],
     weWin: [
-      "The page stays the page: PDF Edit edits in place with the original fonts and layout, where Canva re-sets the document in its own fonts on an A4 page model and warns that layouts may shift.",
+      "The page stays the page: Edit My PDF edits in place with the original fonts and layout, where Canva re-sets the document in its own fonts on an A4 page model and warns that layouts may shift.",
       "No upload and no account.",
       "Scanned pages and flattened images are treated the same by both; neither can edit them.",
     ],
     verdict:
-      "Canva is the right choice when a PDF is really a design you want to rework, restyle or present. It is the wrong choice when the document must come out looking exactly as it went in. That fidelity is what PDF Edit is built for.",
+      "Canva is the right choice when a PDF is really a design you want to rework, restyle or present. It is the wrong choice when the document must come out looking exactly as it went in. That fidelity is what Edit My PDF is built for.",
     changes:
       "Canva Teams is closed to new sign-ups in favour of Business; third-party trackers record several Pro price changes in 2026. The privacy policy was updated on 2 November 2026.",
     sources: [
@@ -852,7 +852,7 @@ export const COMPETITORS: Competitor[] = [
       "No ads, and it works on macOS and Linux, where PDFescape has no desktop app.",
     ],
     verdict:
-      "PDFescape is a fair free choice for filling and publishing forms. For editing the words already on a page it sends you to a paid Windows app. PDF Edit does that in the browser, for free, with the original font.",
+      "PDFescape is a fair free choice for filling and publishing forms. For editing the words already on a page it sends you to a paid Windows app. Edit My PDF does that in the browser, for free, with the original font.",
     changes: "Avanquest (Claranova) bought PDFescape in 2021; the site now carries Avanquest's group privacy policy, updated July 2026.",
     sources: [
       { label: "PDFescape online editor (limits)", url: "https://www.pdfescape.com/online-pdf-editor/", accessed: CHECKED },
@@ -920,7 +920,7 @@ export const COMPETITORS: Competitor[] = [
       "No 31 MB cap.",
     ],
     verdict:
-      "DocHub is a good choice for signing and for teams living in Google Workspace, and its 2026 text editor is a real one. It keeps every file in an account and swaps fonts for the closest Google Font. PDF Edit keeps nothing and swaps nothing.",
+      "DocHub is a good choice for signing and for teams living in Google Workspace, and its 2026 text editor is a real one. It keeps every file in an account and swaps fonts for the closest Google Font. Edit My PDF keeps nothing and swaps nothing.",
     changes: "Native editing of existing text arrived in version 7.0.0 in April 2026, with Google Fonts embedding. The privacy notice was updated in October 2026.",
     sources: [
       { label: "DocHub pricing", url: "https://dochub.com/pricing", accessed: CHECKED },
@@ -988,7 +988,7 @@ export const COMPETITORS: Competitor[] = [
       "Works the same on macOS and Linux, where Soda has no desktop app.",
     ],
     verdict:
-      "Soda PDF is a capable all-rounder if you buy it, and its prices are only revealed at checkout. Its free editor is a demonstration. PDF Edit is a free editor that saves, in the page's own font, without an upload.",
+      "Soda PDF is a capable all-rounder if you buy it, and its prices are only revealed at checkout. Its free editor is a demonstration. Edit My PDF is a free editor that saves, in the page's own font, without an upload.",
     changes: "Online V15 (April 2026) brought a new editing engine and Google Fonts. A free-access policy from August 2025 defines what the free tier may do.",
     sources: [
       { label: "Soda PDF editor (processing, fonts, free limits)", url: "https://www.sodapdf.com/pdf-editor/", accessed: CHECKED },
