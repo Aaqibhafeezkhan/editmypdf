@@ -1039,6 +1039,88 @@
   font-size: var(--ui-xs);
 }
 
+/* Uploaded signature images kept for any document: a tile each, on white so a transparent
+   PNG's ink reads in the dark theme too, with a forget button shown while the tile is hovered. */
+.saved-signature-note {
+  margin: 0 0 8px;
+  color: var(--ink-muted);
+  font-size: var(--ui-xs);
+}
+
+.saved-signature-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.saved-signature {
+  position: relative;
+}
+
+.saved-signature-place {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 64px;
+  padding: 6px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition:
+    border-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out);
+}
+
+.saved-signature-place:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.saved-signature-place:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.saved-signature-place img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.saved-signature-forget {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  color: var(--ink-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms var(--ease-out);
+}
+
+.saved-signature:hover .saved-signature-forget,
+.saved-signature:focus-within .saved-signature-forget {
+  opacity: 1;
+}
+
+.saved-signature-forget:hover {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.saved-signature-forget svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* ---- Page thumbnails ------------------------------------------------------- */
 
 .pages-panel-slot {
