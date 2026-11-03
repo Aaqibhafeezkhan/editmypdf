@@ -32,7 +32,7 @@ import {
   type PDFPage,
 } from "pdf-lib";
 import { pageFonts, readPageContent, type ContentElement } from "./content.ts";
-import { editCover, refreshPatchFace } from "./contentEdit.ts";
+import { editCover, graphicCovers, refreshPatchFace } from "./contentEdit.ts";
 import { stripPageText, type StripResult } from "./contentStream.ts";
 import { fontUnicodeMap } from "./fontFix.ts";
 import { blockWidth, decorationLine, measureWidth, paintRun, placeRuns, runDecoration, type PlacedRun } from "./textLayout.ts";
@@ -482,11 +482,21 @@ async function drawPatch(
 ) {
   const delta = annotation.w - annotation.originW;
   const tailsMove = annotation.role === "text" && !annotation.wrap && Math.abs(delta) >= 0.4 && annotation.tails.length > 0;
-  // Once the text an edit replaces is out of the content stream, the backdrop only has to hide
-  // what the new text does not stand in for: a tail that moved, the old underline.
-  const replaced = annotation.role === "text" && strip != null && strip.removed > 0 && !strip.uncertain;
-  if (!replaced || tailsMove || annotation.underlineOffset >= 0) {
-    drawMappedRect(page, map, annotation.page, editCover(annotation), undefined, backdropColor(annotation.backdrop || "#ffffff"));
+  const backdrop = backdropColor(annotation.backdrop || "#ffffff");
+  if (annotation.role === "graphic") {
+    // The backdrop hides only the page's own pixels where the block was; its picture stands at
+    // the block's new place, and the page between the two is left as it is. An untouched block
+    // is a selection the page already shows, so nothing is drawn for it.
+    const covers = graphicCovers(annotation);
+    if (covers.length === 0) return;
+    for (const box of covers) drawMappedRect(page, map, annotation.page, box, undefined, backdrop);
+  } else {
+    // Once the text an edit replaces is out of the content stream, the backdrop only has to hide
+    // what the new text does not stand in for: a tail that moved, the old underline.
+    const replaced = strip != null && strip.removed > 0 && !strip.uncertain;
+    if (!replaced || tailsMove || annotation.underlineOffset >= 0) {
+      drawMappedRect(page, map, annotation.page, editCover(annotation), undefined, backdrop);
+    }
   }
   const asText = annotation.role === "text" && (await drawPatchText(document, page, annotation, map, embed));
   if (!asText) {

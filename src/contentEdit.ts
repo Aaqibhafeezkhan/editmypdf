@@ -3,8 +3,12 @@ import type { ContentElement } from "./content.ts";
 import { blockWidth, flowWidth, lineShift, paintRun, spansText, wrapText } from "./textLayout.ts";
 import type { EditCapture } from "./pageInk.ts";
 import { uid, type PatchAnnotation, type PatchTail, type TextSpan } from "./types.ts";
+import { patchChanged } from "./changes.ts";
 
 type Box = { x: number; y: number; w: number; h: number };
+
+// How far a graphic's backdrop reaches past the block, in page units: the page's anti-aliased edge.
+const GRAPHIC_PAD = 0.35;
 
 // The area the backdrop has to hide: the original run plus wherever the edited text now sits.
 export function editCover(patch: PatchAnnotation): Box {
@@ -26,7 +30,17 @@ export function editCover(patch: PatchAnnotation): Box {
     });
   }
   // Glyph ink can start a little before the run's origin, so the backdrop reaches slightly past the box.
-  return unionBoxes(boxes, patch.role === "text" ? Math.max(0.6, patch.fontSize * 0.1) : 0.35);
+  return unionBoxes(boxes, patch.role === "text" ? Math.max(0.6, patch.fontSize * 0.1) : GRAPHIC_PAD);
+}
+
+// The boxes a graphic patch's backdrop has to hide: the page's own pixels where the block was,
+// once the block has moved or been resized, padded like `editCover` pads. The picture stands at
+// the block's new place and whatever lies between the two is left alone, unlike `editCover`'s
+// union. Nothing while the block still sits exactly where the page put it: an untouched graphic
+// is a selection, and the page already shows it.
+export function graphicCovers(patch: PatchAnnotation): Box[] {
+  if (patch.role !== "graphic" || !patchChanged(patch)) return [];
+  return [unionBoxes([originBox(patch)], GRAPHIC_PAD)];
 }
 
 function originBox(patch: PatchAnnotation): Box {
