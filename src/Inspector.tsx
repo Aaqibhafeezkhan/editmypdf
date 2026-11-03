@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 
 const INSPECTOR_KEY = "pdf-editor:inspector";
 
@@ -30,6 +31,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ObjectList } from "./ObjectList.tsx";
 import type { ObjectHover, ObjectRow } from "./objects.ts";
 import {
+import {
+  clampInspectorWidth,
+  clampPaneSplit,
+  DEFAULT_LAYOUT,
+  HANDLE_KEY_STEP,
+  INSPECTOR_MIN_WIDTH,
+  maxInspectorWidth,
+  PANE_MIN_HEIGHT_FRACTION,
+  readInspectorLayout,
+  writeInspectorLayout,
+  type InspectorLayout,
+} from "./inspectorLayout.ts";
   Select,
   SelectContent,
   SelectItem,
@@ -45,8 +58,189 @@ import { SHAPE_LABEL, type ShapeId } from "./shapes.ts";
 import type { Align, Annotation, FontId, LineCap, PatchAnnotation, StrokeStyle, TextStyle, Tool } from "./types.ts";
 import { FONT_OPTIONS, SWATCHES } from "./types.ts";
 
-function keepFocus(event: { preventDefault: () => void }) {
-  event.preventDefault();
+type StyleKey = "bold" | "italic" | "underline" | "strike";
+
+// The column's width and the panes' split, kept across reloads and clamped to the window.
+function useInspectorLayout() {
+  const [layout, setLayout] = useState<InspectorLayout>(() =>
+    readInspectorLayout(typeof window === "undefined" ? DEFAULT_LAYOUT.width * 4 : window.innerWidth),
+  );
+  useEffect(() => writeInspectorLayout(layout), [layout]);
+  useEffect(() => {
+    const onResize = () =>
+      setLayout((current) => {
+        const width = clampInspectorWidth(current.width, window.innerWidth);
+        return width === current.width ? current : { ...current, width };
+      });
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const setWidth = (width: number) =>
+    setLayout((current) => {
+      const next = clampInspectorWidth(width, window.innerWidth);
+      return next === current.width ? current : { ...current, width: next };
+    });
+  const setSplit = (split: number) =>
+    setLayout((current) => {
+      const next = clampPaneSplit(split);
+      return Math.abs(next - current.split) < 0.0005 ? current : { ...current, split: next };
+    });
+  return { layout, setWidth, setSplit };
+}
+
+// A drag handle between two areas: pointer drag, arrow keys and a double-click back to the default.
+// `onMove` gets the size in px the drag asks for, measured from `size()` at the start.
+function SplitHandle({
+  className,
+  orientation,
+  label,
+  valueNow,
+  valueMin,
+  valueMax,
+  size,
+  onMove,
+  onReset,
+  onDragging,
+}: {
+  className: string;
+  orientation: "vertical" | "horizontal";
+  label: string;
+  valueNow: number;
+  valueMin: number;
+  valueMax: number;
+  size: () => number;
+  onMove: (px: number) => void;
+  onReset: () => void;
+  onDragging: (dragging: boolean) => void;
+}) {
+  const start = useRef<{ x: number; y: number; size: number } | null>(null);
+  const [active, setActive] = useState(false);
+  const vertical = orientation === "vertical";
+  const begin = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // A very fast press can release the pointer before capture; the drag still runs.
+    }
+    start.current = { x: event.clientX, y: event.clientY, size: size() };
+    setActive(true);
+    onDragging(true);
+    document.body.classList.add(vertical ? "resizing-columns" : "resizing-rows");
+  };
+  const move = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const from = start.current;
+    if (!from) return;
+    // The column's handle is on its left edge, so dragging left makes it wider.
+    const delta = vertical ? from.x - event.clientX : event.clientY - from.y;
+    onMove(from.size + delta);
+  };
+  const finish = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!start.current) return;
+    start.current = null;
+    setActive(false);
+    onDragging(false);
+    document.body.classList.remove("resizing-columns", "resizing-rows");
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  const onKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = HANDLE_KEY_STEP * (event.shiftKey ? 4 : 1);
+    let direction = 0;
+    if (vertical && event.key === "ArrowLeft") direction = 1;
+    else if (vertical && event.key === "ArrowRight") direction = -1;
+    else if (!vertical && event.key === "ArrowUp") direction = -1;
+    else if (!vertical && event.key === "ArrowDown") direction = 1;
+    else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      onMove(event.key === "Home" ? 0 : Number.POSITIVE_INFINITY);
+      return;
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      onReset();
+      return;
+    } else return;
+    event.preventDefault();
+    onMove(size() + direction * step);
+  };
+  return (
+    <div
+      className={`${className}${active ? " active" : ""}`}
+      role="separator"
+      tabIndex={0}
+      aria-label={label}
+      aria-orientation={orientation}
+      aria-valuenow={valueNow}
+      aria-valuemin={valueMin}
+      aria-valuemax={valueMax}
+      title={`${label}: drag, or use the arrow keys. Double-click to reset.`}
+      onPointerDown={begin}
+      onPointerMove={move}
+      onPointerUp={finish}
+      onPointerCancel={finish}
+      onDoubleClick={onReset}
+      onKeyDown={onKey}
+    />
+  );
+}
+
+function StyleToggles({ state, onToggle }: { state: Record<StyleKey, boolean>; onToggle: (key: StyleKey) => void }) {
+  const items: [StyleKey, string, React.ReactNode][] = [
+    ["bold", "Bold", <Bold key="b" />],
+    ["italic", "Italic", <Italic key="i" />],
+    ["underline", "Underline", <Underline key="u" />],
+    ["strike", "Strikethrough", <Strikethrough key="s" />],
+  ];
+  return (
+    <>
+      {items.map(([key, label, icon]) => (
+        <Toggle
+          key={key}
+          variant="outline"
+          size="sm"
+          aria-label={label}
+          title={label}
+          pressed={state[key]}
+          onMouseDown={keepFocus}
+          onPressedChange={() => onToggle(key)}
+        >
+          {icon}
+        </Toggle>
+      ))}
+    </>
+  );
+}
+
+function AlignToggles({ value, justify, onAlign }: { value: TextAlign; justify: boolean; onAlign: (align: TextAlign) => void }) {
+  return (
+    <ToggleGroup
+      type="single"
+      variant="outline"
+      size="sm"
+      spacing={1}
+      value={value}
+      onValueChange={(next) => {
+        if (next === "left" || next === "center" || next === "right" || (justify && next === "justify")) onAlign(next);
+      }}
+      aria-label="Alignment"
+    >
+      <ToggleGroupItem value="left" aria-label="Align left" onMouseDown={keepFocus}>
+        <AlignLeft />
+      </ToggleGroupItem>
+      <ToggleGroupItem value="center" aria-label="Align center" onMouseDown={keepFocus}>
+        <AlignCenter />
+      </ToggleGroupItem>
+      <ToggleGroupItem value="right" aria-label="Align right" onMouseDown={keepFocus}>
+        <AlignRight />
+      </ToggleGroupItem>
+      {justify && (
+        <ToggleGroupItem value="justify" aria-label="Justify" onMouseDown={keepFocus}>
+          <AlignJustify />
+        </ToggleGroupItem>
+      )}
+    </ToggleGroup>
+  );
 }
 
 // Tells the user that typed characters the page's font lacks are shown in a substitute face and
@@ -259,6 +453,11 @@ function NumberSlider({
         onValueChange={(next) => onChange(clampValue(next[0] ?? value))}
         onValueCommit={onAdjustEnd}
         onBlur={onAdjustEnd}
+  const { layout, setWidth, setSplit } = useInspectorLayout();
+  const [dragging, setDragging] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const bodyHeight = () => bodyRef.current?.clientHeight ?? 0;
+  const windowWidth = typeof window === "undefined" ? DEFAULT_LAYOUT.width * 4 : window.innerWidth;
       />
     </div>
   );
@@ -277,6 +476,8 @@ export function Inspector({
   onStrokeWidth,
   onFill,
   onFillOpacity,
+  const className = ["inspector", open ? "" : "collapsed", dragging ? "resizing" : ""].filter(Boolean).join(" ");
+
   onOpacity,
   onCap,
   onDash,
@@ -357,9 +558,23 @@ export function Inspector({
       : `${objects.length} ${objects.length === 1 ? "object" : "objects"} on ${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
 
   return (
-    <aside className={open ? "inspector" : "inspector collapsed"} aria-label="Properties">
-      <div className="inspector-body">
-      <section className="inspector-pane" aria-label="Objects">
+    <aside className={className} style={{ "--inspector-width": `${layout.width}px` } as React.CSSProperties} aria-label="Properties">
+      {open && (
+        <SplitHandle
+          className="inspector-handle"
+          orientation="vertical"
+          label="Width of the properties column"
+          valueNow={Math.round(layout.width)}
+          valueMin={INSPECTOR_MIN_WIDTH}
+          valueMax={maxInspectorWidth(windowWidth)}
+          size={() => layout.width}
+          onMove={setWidth}
+          onReset={() => setWidth(DEFAULT_LAYOUT.width)}
+          onDragging={setDragging}
+        />
+      )}
+      <div className="inspector-body" ref={bodyRef}>
+      <section className="inspector-pane objects" style={{ flexBasis: `${layout.split * 100}%` }} aria-label="Objects">
       <div className="flex items-start gap-2 px-2.5 py-2.5">
         <div className="min-w-0 flex-1 px-1.5 pt-0.5" aria-hidden={!open}>
           <h2 className="text-sm font-semibold tracking-tight">Objects</h2>
@@ -391,7 +606,23 @@ export function Inspector({
       </div>
       </section>
 
-      <section className="inspector-pane" aria-label="Attributes" inert={!open}>
+      <SplitHandle
+        className="inspector-splitter"
+        orientation="horizontal"
+        label="Height of the object list"
+        valueNow={Math.round(layout.split * 100)}
+        valueMin={Math.round(PANE_MIN_HEIGHT_FRACTION * 100)}
+        valueMax={Math.round((1 - PANE_MIN_HEIGHT_FRACTION) * 100)}
+        size={() => layout.split * bodyHeight()}
+        onMove={(px) => {
+          const height = bodyHeight();
+          if (height > 0) setSplit(px / height);
+        }}
+        onReset={() => setSplit(DEFAULT_LAYOUT.split)}
+        onDragging={setDragging}
+      />
+
+      <section className="inspector-pane attributes" aria-label="Attributes" inert={!open}>
       <div className="flex items-start gap-2 px-2.5 py-2.5">
         <div className="min-w-0 flex-1 px-1.5 pt-0.5">
           <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
