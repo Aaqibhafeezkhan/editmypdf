@@ -3,13 +3,13 @@ import { renderToString } from "react-dom/server";
 import { createStaticHandler, createStaticRouter, StaticRouterProvider } from "react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BASE_PATH, PRODUCT } from "./data/product.ts";
-import { PUBLIC_ROUTES } from "./data/routes.ts";
+import { canonicalPath, PUBLIC_ROUTES } from "./data/routes.ts";
 import { siteRoutes } from "./site/routes.tsx";
 import { takeRenderedMeta, type ResolvedMeta } from "./site/useMeta.ts";
 
 // The build-time entry. scripts/prerender.mjs bundles this file after `vite build`, then calls
 // render() for every route in PUBLIC_ROUTES and writes the result into dist/.
-export { PUBLIC_ROUTES, PRODUCT };
+export { canonicalPath, PUBLIC_ROUTES, PRODUCT };
 
 export type Prerendered = {
   // The markup for <div id="root">.

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 import { PRODUCT, siteOrigin } from "../data/product.ts";
+import { canonicalPath } from "../data/routes.ts";
 
 export type PageMeta = {
   // The full <title>; pass `titleSuffix: false` to use it verbatim.
@@ -52,7 +53,7 @@ export function resolveMeta(meta: PageMeta, pathname: string): ResolvedMeta {
     robots: meta.noindex ? "noindex, nofollow" : "index, follow",
     keywords: meta.keywords?.join(", ") ?? "",
     type: meta.type ?? "website",
-    url: `${origin}${pathname === "/" ? "/" : pathname.replace(/\/$/, "")}`,
+    url: `${origin}${canonicalPath(pathname)}`,
     image: image.startsWith("http") ? image : `${origin}${image}`,
     imageWidth: meta.image ? "" : CARD.width,
     imageHeight: meta.image ? "" : CARD.height,
@@ -172,7 +173,7 @@ export function breadcrumbs(items: { name: string; path: string }[]): Record<str
       "@type": "ListItem",
       position: index + 1,
       name: item.name,
-      item: `${origin}${item.path}`,
+      item: `${origin}${canonicalPath(item.path)}`,
     })),
   };
 }
