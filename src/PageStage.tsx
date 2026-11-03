@@ -7,6 +7,7 @@ import {
   cropGraphic,
   editCover,
   editSpans,
+  graphicCovers,
   graphicPatch,
   layoutTextPatch,
   refreshPatchFace,
@@ -1244,6 +1245,13 @@ export function PageStage({
   };
 
   const pageAnnotations = annotations.filter((item) => item.page === pageIndex);
+  // Blocks that were moved or resized: their pictures carry the selection outline, so the box
+  // the page gave them is no longer highlighted as the selected content.
+  const changedGraphicSources = new Set(
+    pageAnnotations
+      .filter((item): item is PatchAnnotation => item.kind === "patch" && item.role === "graphic" && patchChanged(item))
+      .map((item) => item.sourceId),
+  );
   const sideways = rotation % 180 !== 0;
   const frameWidth = baseWidth * scale;
   const frameHeight = baseHeight * scale;
@@ -1276,7 +1284,7 @@ export function PageStage({
         >
           {tool === "select" &&
             content.map((element) => {
-              const selected = selectedContent?.id === element.id;
+              const selected = selectedContent?.id === element.id && !changedGraphicSources.has(element.id);
               const hot = hoverContent === element.id || selected;
               if (!hot) return null;
               return (
@@ -1652,9 +1660,14 @@ export function PageStage({
           const showLive = patch.role === "text" && (selected || !pristine);
           const delta = patch.w - patch.originW;
           const shiftTails = patch.role === "text" && !patch.wrap && !pristine && Math.abs(delta) >= 0.4;
+          // A block that moved or was resized leaves the page's own pixels behind at its origin:
+          // the backdrop hides them there while the picture stands at the block's new place.
+          // Until then the cover is only the selection's outline over the page's own rendering.
+          const graphicCover = patch.role === "graphic" ? graphicCovers(patch)[0] : undefined;
+          const paintCover = showLive || graphicCover != null;
           const baseCover = showLive
             ? editCover(patch)
-            : { x: patch.originX, y: patch.originY, w: patch.originW, h: patch.originH };
+            : (graphicCover ?? { x: patch.originX, y: patch.originY, w: patch.originW, h: patch.originH });
           const underlineAt = patch.underlineOffset ?? -1;
           const cover =
             showLive && underlineAt >= 0
@@ -1671,10 +1684,11 @@ export function PageStage({
           const slack = wrapSlack(patch);
           const slackShift = !patch.wrap ? 0 : patch.align === "center" ? slack / 2 : patch.align === "right" ? slack : 0;
           const overflowing = patch.role === "text" && patch.h > patch.originH + 1;
+          // The outline of a moved block follows its picture, not the blank it left behind.
           const coverClass = [
             "content-cover",
-            selected ? "selected" : "",
-            showLive ? "" : "quiet",
+            selected && graphicCover == null ? "selected" : "",
+            paintCover ? "" : "quiet",
             showLive && overflowing ? "overflowing" : "",
           ]
             .filter(Boolean)
@@ -1922,7 +1936,7 @@ export function PageStage({
                   top: cover.y * scale,
                   width: cover.w * scale,
                   height: cover.h * scale,
-                  background: showLive ? patch.backdrop || "#ffffff" : undefined,
+                  background: paintCover ? patch.backdrop || "#ffffff" : undefined,
                 }}
               />
               {shiftTails &&
