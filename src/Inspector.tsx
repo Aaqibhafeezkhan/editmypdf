@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { ColorControl } from "./ColorControl.tsx";
 import { keepFocus } from "./keepFocus.ts";
-import { contentDetail, contentLabel, patchMissingGlyphs, type ContentElement, type ContentKind } from "./content.ts";
+import { contentDetail, contentLabel, patchGlyphReport, type ContentElement, type ContentKind } from "./content.ts";
+import type { Relation } from "./supplementFonts.ts";
+import { addUserFont, subscribeUserFonts, userFontsVersion } from "./userFonts.ts";
 import {
   AlignCenter,
   AlignJustify,
@@ -244,19 +246,91 @@ function AlignToggles({ value, justify, onAlign }: { value: TextAlign; justify: 
   );
 }
 
-// Tells the user that typed characters the page's font lacks are shown in a substitute face and
-// make the edit an image on download.
-function missingGlyphNote(missing: string[], kind: ContentKind | undefined): string {
-  const shown = missing.slice(0, 6).map((char) => `“${char}”`);
-  const rest = missing.length - shown.length;
-  const list =
-    rest > 0
-      ? `${shown.join(", ")} and ${rest} more`
-      : shown.length === 1
-        ? shown[0]
-        : `${shown.slice(0, -1).join(", ")} or ${shown[shown.length - 1]}`;
+// "“3”, “4” and “5”", or "“3”, “4”, “5”, “6”, “7”, “8” and 2 more".
+function charList(chars: string[], joiner: "and" | "or"): string {
+  const shown = chars.slice(0, 6).map((char) => `“${char}”`);
+  const rest = chars.length - shown.length;
+  if (rest > 0) return `${shown.join(", ")} and ${rest} more`;
+  if (shown.length === 1) return shown[0] ?? "";
+  return `${shown.slice(0, -1).join(", ")} ${joiner} ${shown[shown.length - 1]}`;
+}
+
+const RELATION_TEXT: Record<Relation, string> = {
+  same: "the page's own font",
+  close: "a close match to the page's font",
+  kind: "a stand-in for the page's font",
+  user: "the font you added",
+};
+
+// Tells the user where the characters the page's font lacks come from: the supplement they are
+// set in (a bundled open font of the page font's design, or a font file they added), and, for
+// characters no supplement has, that they are shown in a substitute face and make the edit an
+// image on download. Offers a font file when nothing bundled matches the page's font by name.
+function GlyphNote({ patch, kind }: { patch: PatchAnnotation; kind: ContentKind | undefined }) {
+  // A font the user adds changes what the note says without the patch changing.
+  useSyncExternalStore(subscribeUserFonts, userFontsVersion, () => 0);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const report = patchGlyphReport(patch);
+  if (report.supplied.length === 0 && report.unsupplied.length === 0) return null;
+  const offer = report.offer;
   const noun = kind === "paragraph" || kind === "heading" ? kind : "line";
-  return `The page's font has no ${list}. ${missing.length === 1 ? "It is" : "They are"} shown in a substitute face, and on download this ${noun} is written as an image instead of text.`;
+  const sentences = report.supplied.map((group) => {
+    const named = group.relation === "kind" && offer?.name ? `${RELATION_TEXT[group.relation]}, ${offer.name}` : RELATION_TEXT[group.relation];
+    return `${charList(group.chars, "and")} ${group.chars.length === 1 ? "is" : "are"} set in ${group.label}, ${named}.`;
+  });
+  if (report.unsupplied.length > 0) {
+    sentences.push(
+      `The page's font has no ${charList(report.unsupplied, "or")}. ${report.unsupplied.length === 1 ? "It is" : "They are"} shown in a substitute face, and on download this ${noun} is written as an image instead of text.`,
+    );
+  }
+  const pick = async (file: File, key: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await addUserFont(file, key);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "That font could not be added.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <p role="status" className={`panel-note${report.unsupplied.length === 0 ? " calm" : ""}`}>
+      <Info aria-hidden="true" />
+      <span>
+        {sentences.join(" ")}
+        {offer && (
+          <>
+            {" "}
+            <button
+              type="button"
+              className="panel-note-action"
+              disabled={busy}
+              title={`Pick a TrueType or OpenType file of ${offer.name || "the page's font"}; it is kept in this browser for every document.`}
+              onClick={() => input.current?.click()}
+            >
+              {busy ? "Adding the font…" : "Add this font…"}
+            </button>
+            <input
+              ref={input}
+              type="file"
+              accept=".ttf,.otf,font/ttf,font/otf,font/sfnt"
+              hidden
+              aria-label={`Font file for ${offer.name || "the page's font"}`}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void pick(file, offer.key);
+              }}
+            />
+            {error && <span className="panel-note-error">{error}</span>}
+          </>
+        )}
+      </span>
+    </p>
+  );
 }
 
 function strokePanel(id: ShapeId, selected: boolean) {
@@ -481,7 +555,7 @@ export function Inspector({
   const bodyRef = useRef<HTMLDivElement>(null);
   const bodyHeight = () => bodyRef.current?.clientHeight ?? 0;
   const windowWidth = typeof window === "undefined" ? DEFAULT_LAYOUT.width * 4 : window.innerWidth;
-  const missing = view.panel === "content" && patch?.role === "text" ? patchMissingGlyphs(patch) : [];
+  const glyphPatch = view.panel === "content" && patch?.role === "text" ? patch : null;
   const title = showInk && view.panel === "stroke" ? brushById(stroke.brush).label : view.title;
   const dashValue = DASHES.find((item) => item.dash === stroke.dash)?.id ?? "solid";
   const opacity = Math.round(stroke.opacity * 100);
@@ -879,12 +953,7 @@ export function Inspector({
                 </PanelSection>
               )}
 
-              {missing.length > 0 && (
-                <p role="status" className="panel-note">
-                  <Info aria-hidden="true" />
-                  <span>{missingGlyphNote(missing, content?.kind)}</span>
-                </p>
-              )}
+              {glyphPatch && <GlyphNote patch={glyphPatch} kind={content?.kind} />}
 
               {view.panel === "empty" && (
                 <PanelEmpty icon={<MousePointer2 />} title={view.title}>

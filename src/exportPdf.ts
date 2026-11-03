@@ -35,6 +35,7 @@ import { pageFonts, readPageContent, type ContentElement } from "./content.ts";
 import { editCover, graphicCovers, refreshPatchFace } from "./contentEdit.ts";
 import { stripPageText, type StripResult } from "./contentStream.ts";
 import { fontUnicodeMap } from "./fontFix.ts";
+import { supplementOf } from "./supplementFonts.ts";
 import { blockWidth, decorationLine, measureWidth, paintRun, placeRuns, runDecoration, type PlacedRun } from "./textLayout.ts";
 import { type3FaceBytes } from "./type3Font.ts";
 import { emojiSrc } from "./emojis.ts";
@@ -286,42 +287,72 @@ function inkColor(value: string) {
 // A face of the document embedded in the output, with the code points its cmap covers.
 type EmbeddedFace = { font: PDFFont; cmap: Map<number, number> };
 
-type FaceEmbedder = (pageIndex: number, pdfFont: string) => Promise<EmbeddedFace | null>;
+type Embedder = {
+  // The page's own face, by pdf.js font name; null when it has no bytes to embed (a system or
+  // Type3 font) or pdf-lib cannot read them.
+  face(pageIndex: number, pdfFont: string): Promise<EmbeddedFace | null>;
+  // The face of the font's supplement (supplementFonts.ts) that has the code point; null when
+  // the font has no supplement or none of its files has the character.
+  supplement(pdfFont: string, code: number): Promise<EmbeddedFace | null>;
+};
 
 // Embeds the fonts pdf.js converted for the document, once each by pdf.js font name: the copy
-// with the corrected cmap the editor types with when there is one, else the converted font. Null
-// when a face has no bytes to embed (a system or Type3 font) or pdf-lib cannot read them.
-function faceEmbedder(document: PDFDocument, pages: PDFPageProxy[]): FaceEmbedder {
-  const cache = new Map<string, Promise<EmbeddedFace | null>>();
-  return (pageIndex, pdfFont) => {
-    const cached = cache.get(pdfFont);
-    if (cached) return cached;
-    const pending = (async () => {
-      const page = pages[pageIndex];
-      const info = page ? pageFonts(page)?.get(pdfFont) : undefined;
-      // A Type3 font has bytes only when a face was rebuilt from its outlines; the face may have
-      // been built again with more letters since the page was read.
-      const bytes = (info?.family ? type3FaceBytes(info.family) : null) ?? info?.fixed ?? info?.data;
-      if (!info || !bytes || bytes.length < 12) return null;
-      const cmap = fontUnicodeMap(bytes);
-      if (cmap.size === 0) return null;
-      // The converted font carries the original's whole glyph table, so only the glyphs the edits
-      // use are written; the whole font is the fallback when pdf-lib cannot subset this one. A
-      // face rebuilt from a Type3 font holds only the glyphs the page drew, and is written whole:
-      // its CFF outlines trip fontkit's subsetter, which runs when the file is saved, too late
-      // for anything to catch.
+// with the corrected cmap the editor types with when there is one, else the converted font. The
+// supplements are embedded once each by file, subset to the glyphs the edits use.
+function faceEmbedder(document: PDFDocument, pages: PDFPageProxy[]): Embedder {
+  const faces = new Map<string, Promise<EmbeddedFace | null>>();
+  const supplements = new Map<string, Promise<EmbeddedFace | null>>();
+  // The whole font is the fallback when pdf-lib cannot subset this one.
+  const embedBytes = async (bytes: Uint8Array, subset: boolean): Promise<PDFFont | null> => {
+    try {
+      return await document.embedFont(bytes, { subset });
+    } catch {
       try {
-        return { font: await document.embedFont(bytes, { subset: !info.type3 }), cmap };
+        return await document.embedFont(bytes);
       } catch {
-        try {
-          return { font: await document.embedFont(bytes), cmap };
-        } catch {
-          return null;
-        }
+        return null;
       }
-    })();
-    cache.set(pdfFont, pending);
-    return pending;
+    }
+  };
+  return {
+    face(pageIndex, pdfFont) {
+      const cached = faces.get(pdfFont);
+      if (cached) return cached;
+      const pending = (async () => {
+        const page = pages[pageIndex];
+        const info = page ? pageFonts(page)?.get(pdfFont) : undefined;
+        // A Type3 font has bytes only when a face was rebuilt from its outlines; the face may have
+        // been built again with more letters since the page was read.
+        const bytes = (info?.family ? type3FaceBytes(info.family) : null) ?? info?.fixed ?? info?.data;
+        if (!info || !bytes || bytes.length < 12) return null;
+        const cmap = fontUnicodeMap(bytes);
+        if (cmap.size === 0) return null;
+        // The converted font carries the original's whole glyph table, so only the glyphs the
+        // edits use are written. A face rebuilt from a Type3 font holds only the glyphs the page
+        // drew, and is written whole: its CFF outlines trip fontkit's subsetter, which runs when
+        // the file is saved, too late for anything to catch.
+        const font = await embedBytes(bytes, !info.type3);
+        return font ? { font, cmap } : null;
+      })();
+      faces.set(pdfFont, pending);
+      return pending;
+    },
+    async supplement(pdfFont, code) {
+      const source = await supplementOf(pdfFont)?.source(code);
+      if (!source) return null;
+      let pending = supplements.get(source.key);
+      if (!pending) {
+        pending = (async () => {
+          const cmap = fontUnicodeMap(source.bytes);
+          if (cmap.size === 0) return null;
+          const font = await embedBytes(source.bytes, true);
+          return font ? { font, cmap } : null;
+        })();
+        supplements.set(source.key, pending);
+      }
+      const face = await pending;
+      return face?.cmap.has(code) ? face : null;
+    },
   };
 }
 
@@ -342,35 +373,51 @@ function pageFontKey(page: PDFPage, font: PDFFont): PDFName {
   return key;
 }
 
-// Writes a text patch as text set in the page's own faces, each word where the editor shows it.
-// False when a face cannot be embedded or lacks a glyph the text needs; the caller then paints
-// the patch instead.
+// A stretch of one word set in one face.
+type Piece = { face: EmbeddedFace; text: string };
+
+type PlacedWord = { x: number; text: string; pieces: Piece[] };
+
+// Writes a text patch as text set in the page's own faces, each word where the editor shows it. A
+// character the page's face lacks is set in the font's supplement (supplementFonts.ts) at the
+// same size, colour and spacing, so nothing around it moves. False when a face cannot be embedded
+// or a character has no glyph in the face or its supplement; the caller then paints the patch.
 async function drawPatchText(
   document: PDFDocument,
   page: PDFPage,
   patch: PatchAnnotation,
   map: PdfPointMapper,
-  embed: FaceEmbedder,
+  embed: Embedder,
 ): Promise<boolean> {
   const runs = placeRuns(patch);
   const faces = new Map<string, EmbeddedFace>();
   const nameOf = (run: PlacedRun) => run.span?.pdfFont || patch.pdfFont;
+  const placed: { run: PlacedRun; words: PlacedWord[] }[] = [];
   for (const run of runs) {
     const name = nameOf(run);
     if (!name) return false;
     let face = faces.get(name);
     if (!face) {
-      const embedded = await embed(patch.page, name);
+      const embedded = await embed.face(patch.page, name);
       if (!embedded) return false;
       face = embedded;
       faces.set(name, face);
     }
+    const words: PlacedWord[] = [];
     for (const word of run.words) {
+      const pieces: Piece[] = [];
       for (const char of word.text) {
         const code = char.codePointAt(0);
-        if (code == null || !face.cmap.has(code)) return false;
+        if (code == null) return false;
+        const target = face.cmap.has(code) ? face : await embed.supplement(name, code);
+        if (!target) return false;
+        const last = pieces[pieces.length - 1];
+        if (last && last.face === target) last.text += char;
+        else pieces.push({ face: target, text: char });
       }
+      words.push({ x: word.x, text: word.text, pieces });
     }
+    placed.push({ run, words });
   }
   const operators: PDFOperator[] = [
     pushGraphicsState(),
@@ -383,10 +430,9 @@ async function drawPatchText(
   ];
   // Lines under or through runs, drawn once the text is written.
   const rules: { box: { x: number; y: number; w: number; h: number }; color: ReturnType<typeof inkColor> }[] = [];
-  for (const run of runs) {
-    const face = faces.get(nameOf(run));
-    const first = run.words[0];
-    if (!face || !first) continue;
+  for (const { run, words } of placed) {
+    const first = words[0];
+    if (!first) continue;
     const color = inkColor(run.color || patch.color);
     const size = run.face.fontSize;
     // The page's faces are registered regular whatever their design, so a heavier weight on a run
@@ -403,7 +449,6 @@ async function drawPatchText(
     const alongX = along.x - origin.x;
     const alongY = along.y - origin.y;
     operators.push(
-      setFontAndSize(pageFontKey(page, face.font), size),
       setCharacterSpacing(run.face.letterSpacing ?? 0),
       setFillingRgbColor(color.red, color.green, color.blue),
       setStrokingRgbColor(color.red, color.green, color.blue),
@@ -411,17 +456,35 @@ async function drawPatchText(
       setTextRenderingMode(embolden ? TextRenderingMode.FillAndOutline : TextRenderingMode.Fill),
       setTextMatrix(alongX, alongY, up.x - origin.x + slant * alongX, up.y - origin.y + slant * alongY, origin.x, origin.y),
     );
-    // One TJ per run: each word's glyphs, and before every word but the first a kern that lands it
-    // where the editor put it (in thousandths of the font size, rightward negative). The spaces
-    // themselves are not written: a converted font has no space glyph.
-    const items: (PDFHexString | PDFNumber)[] = [];
+    // One TJ per stretch of text in one face: each word's glyphs, and before every word but the
+    // first a kern that lands it where the editor put it (in thousandths of the font size,
+    // rightward negative). A word whose characters come from two faces changes font between its
+    // pieces, and a kern that falls at a change opens the next face's TJ. The spaces themselves are
+    // not written: a converted font has no space glyph.
+    let items: (PDFHexString | PDFNumber)[] = [];
+    let current: EmbeddedFace | null = null;
+    const flush = () => {
+      if (items.length > 0) operators.push(PDFOperator.of(PDFOperatorNames.ShowTextAdjusted, [document.context.obj(items)]));
+      items = [];
+    };
     let cursor = first.x;
-    for (const word of run.words) {
-      if (items.length > 0) items.push(PDFNumber.of(Math.round((((cursor - word.x) * 1000) / size) * 100) / 100));
-      items.push(face.font.encodeText(word.text));
+    words.forEach((word, index) => {
+      let kern: PDFNumber | null = index > 0 ? PDFNumber.of(Math.round((((cursor - word.x) * 1000) / size) * 100) / 100) : null;
+      for (const piece of word.pieces) {
+        if (piece.face !== current) {
+          flush();
+          current = piece.face;
+          operators.push(setFontAndSize(pageFontKey(page, piece.face.font), size));
+        }
+        if (kern) {
+          items.push(kern);
+          kern = null;
+        }
+        items.push(piece.face.font.encodeText(piece.text));
+      }
       cursor = word.x + measureWidth(word.text, run.face);
-    }
-    operators.push(PDFOperator.of(PDFOperatorNames.ShowTextAdjusted, [document.context.obj(items)]));
+    });
+    flush();
     const decoration = runDecoration(run.span, patch);
     for (const kind of ["underline", "strike"] as const) {
       if (!decoration[kind]) continue;
@@ -478,7 +541,7 @@ async function drawPatch(
   annotation: PatchAnnotation,
   map: PdfPointMapper,
   strip: StripResult | undefined,
-  embed: FaceEmbedder,
+  embed: Embedder,
 ) {
   const delta = annotation.w - annotation.originW;
   const tailsMove = annotation.role === "text" && !annotation.wrap && Math.abs(delta) >= 0.4 && annotation.tails.length > 0;
