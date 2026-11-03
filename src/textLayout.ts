@@ -343,6 +343,49 @@ export function caretIndexAt(patch: PatchAnnotation, point: Point, scale: number
   return line.start + Math.min(best, limit);
 }
 
+export type RangeBox = { x: number; y: number; w: number; h: number };
+
+// Where text[from, to) sits on the page, in page units: one box per line the range touches, laid
+// out exactly as the editor draws the text. A wrapped block's boxes are as tall as its line pitch
+// (capped near the glyph box, so the bands of two lines just meet); a single run's are its height.
+export function rangeBoxes(patch: PatchAnnotation, from: number, to: number): RangeBox[] {
+  const text = patch.text;
+  const start = Math.max(0, Math.min(from, text.length));
+  const end = Math.max(0, Math.min(to, text.length));
+  if (end <= start) return [];
+  const spans = spansFor(text, patch);
+  const lines = wrapText(text, patch);
+  const boxes: RangeBox[] = [];
+  const height = patch.wrap ? Math.min(patch.lineHeight, patch.fontSize * 1.25) : Math.max(patch.fontSize, patch.h);
+  lines.forEach((line, index) => {
+    const lineEnd = line.start + line.text.length;
+    const first = Math.max(start, line.start);
+    const last = Math.min(end, lineEnd);
+    if (last <= first) return;
+    const { x, extra } = lineX(patch, line, index, lines.length);
+    const face = paragraphFace(patch, paragraphOf(text, line.start));
+    const left = x + rangeWidth(text, line.start, first, face, spans) + countSpaces(text.slice(line.start, first)) * extra;
+    const right = x + rangeWidth(text, line.start, last, face, spans) + countSpaces(text.slice(line.start, last)) * extra;
+    const top = index * patch.lineHeight + lineShift(patch.lineOffsets, index);
+    boxes.push({ x: patch.x + left, y: patch.y + top, w: Math.max(0.5, right - left), h: height });
+  });
+  return boxes;
+}
+
+// Whether a run is underlined or struck through: its own flags, else the patch's.
+export function runDecoration(
+  span: Pick<TextSpan, "underline" | "strike"> | null,
+  patch: Pick<PatchAnnotation, "underline" | "strike">,
+): { underline: boolean; strike: boolean } {
+  return { underline: !!(span ? span.underline : patch.underline), strike: !!(span ? span.strike : patch.strike) };
+}
+
+// Where a line under or through text of `fontSize` sits, measured from the baseline (positive
+// is below), and how thick it is; the same on the page, in the painted fallback and in the PDF.
+export function decorationLine(fontSize: number, kind: "underline" | "strike"): { offset: number; thickness: number } {
+  return { offset: kind === "underline" ? fontSize * 0.11 : -fontSize * 0.3, thickness: Math.max(0.5, fontSize * 0.06) };
+}
+
 // Paints the edited text at 3x for the exported PDF, laid out exactly like the on-page editor.
 export async function paintRun(patch: PatchAnnotation): Promise<string> {
   if (!patch.text.trim()) return "";

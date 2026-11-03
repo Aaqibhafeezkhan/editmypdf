@@ -1113,3 +1113,43 @@ body.resizing-rows {
   user-select: none;
 }
 
+/* ---- What the user changed: yellow under the changed words, a tint over a moved box ----------- */
+
+/* The paper is white in both themes, so the yellow is pinned rather than themed. */
+.page-frame {
+  --change-mark: rgb(253 224 71 / 0.6);
+  --change-tint: rgb(253 224 71 / 0.28);
+}
+
+.change-mark,
+.change-tint {
+  position: absolute;
+  margin: 0;
+  pointer-events: none;
+}
+
+/* Under the glyphs (the editor sits at z 4) and over the cover (z 2) that hides the page's own text. */
+.change-mark {
+  z-index: 3;
+  border-radius: 2px;
+  background: var(--change-mark);
+}
+
+.change-tint {
+  z-index: 3;
+  border-radius: 2px;
+  background: var(--change-tint);
+}
+
+/* The dot before a changed row's title in the object list; one yellow that reads on both panels. */
+.object-change {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  vertical-align: 1px;
+  border-radius: 999px;
+  background: #eab308;
+  box-shadow: 0 0 0 1.5px color-mix(in oklch, #eab308 35%, transparent);
+}
+

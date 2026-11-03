@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { ChevronsLeftRight, GripVertical, RotateCw } from "lucide-react";
-import { contentAt, contentLabel, isTextContent, readPageContent, type ContentElement } from "./content.ts";
+import { changedRanges, hasUserStyle, patchChanged, type TextRange } from "./changes.ts";
+import { contentAt, contentLabel, faceTraits, isTextContent, readPageContent, type ContentElement } from "./content.ts";
 import {
   cropGraphic,
   editCover,
@@ -1374,13 +1375,9 @@ export function PageStage({
           const patch = annotation;
           const selected = patch.id === selectedId && tool === "select";
           const live = content.find((element) => element.id === patch.sourceId);
-          // Untouched: the page's own words, still where the page put them.
-          const pristine =
-            patch.role === "text" &&
-            patch.text === (patch.originText ?? "") &&
-            Math.abs(patch.x - patch.originX) < 0.01 &&
-            Math.abs(patch.y - patch.originY) < 0.01 &&
-            (patch.wrapW == null || Math.abs(patch.wrapW - patch.originW) < 0.01);
+          // Untouched: the page's own words in the page's own look, still where the page put them.
+          const changed = patchChanged(patch);
+          const pristine = patch.role === "text" && !changed;
           // While a run is being edited its live text replaces the page's rendering, so what the
           // caret sits in is exactly what will be exported.
           const showLive = patch.role === "text" && (selected || !pristine);
@@ -1827,6 +1824,15 @@ export function PageStage({
             };
           };
           return (
+          // The runs the user changed, lit up under the glyphs; a patch only moved, resized or
+          // restyled, or a graphic one, gets a light tint over its whole box instead.
+          const marks = changed && patch.role === "text" ? changedBoxes(patch) : [];
+          const tint =
+            changed && marks.length === 0
+              ? patch.role === "text"
+                ? { x: patch.x - slackShift, y: patch.y, w: editorWidth, h: Math.max(patch.h, patch.fontSize) }
+                : { x: patch.x, y: patch.y, w: Math.max(patch.w, 1), h: Math.max(patch.h, 1) }
+              : null;
             <div
               key={`${annotation.id}-handles`}
               className="shape-box"
@@ -1897,6 +1903,14 @@ export function PageStage({
                 : { x: top.x + (dx / reach) * gap, y: top.y + (dy / reach) * gap };
           }
           const startRotate = (event: ReactPointerEvent<HTMLButtonElement>) => {
+              {marks.map((box, index) => (
+                <div
+                  key={`${patch.id}-change-${index}`}
+                  className="change-mark"
+                  aria-hidden="true"
+                  style={{ left: box.x * scale, top: box.y * scale, width: box.w * scale, height: box.h * scale }}
+                />
+              ))}
             event.stopPropagation();
             event.preventDefault();
             try {
@@ -1953,6 +1967,27 @@ export function PageStage({
               // The label sits at the line's top (left) end, inside the page: it swings to the
               // other side of a line along the page's right or bottom edge.
               const vertical = guide.axis === "x";
+              {tint && (
+                <div
+                  className="change-tint"
+                  aria-hidden="true"
+                  style={{ left: tint.x * scale, top: tint.y * scale, width: tint.w * scale, height: tint.h * scale }}
+                />
+              )}
+              {selected && patch.role === "text" && (
+                <PatchFormat
+                  patch={patch}
+                  scale={scale}
+                  editorOf={editorOf}
+                  traits={traits}
+                  rangeRef={formatRange}
+                  begin={beginFormat}
+                  apply={applyFormat}
+                  end={endFormat}
+                  onState={onFormatState}
+                  register={registerFormat}
+                />
+              )}
               const flip = vertical ? guide.at > baseWidth - 56 / scale : guide.at > baseHeight - 24 / scale;
               const along = guide.from * scale + 4;
               const across = guide.at * scale + (flip ? -4 : 4);
