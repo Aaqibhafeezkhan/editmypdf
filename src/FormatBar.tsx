@@ -22,14 +22,15 @@ import type { FormatChange, FormatState } from "./textFormat.ts";
 // A rectangle in viewport px.
 export type Anchor = { left: number; top: number; right: number; bottom: number };
 
-// The floating toolbar over the page's own text while it is being edited: bold, italic,
+// The floating toolbar over the page's own text while some of it is selected: bold, italic,
 // underline, strikethrough, size, colour and (for a block) alignment. It is rendered at the
 // document's root, fixed, so it sits above every page overlay, and nothing in it takes the focus
 // from the editor except the size field.
 
 type Props = {
   state: FormatState;
-  // Where the selection or caret sits; the bar floats just above it (below, when there is no room).
+  // The box the bar keeps clear of, with the left end it lines up with: it floats just above the
+  // box (below, when there is no room). Null hides the bar.
   anchor: Anchor | null;
   // The area the bar stays inside: the page scroller.
   bounds: Anchor | null;
