@@ -1883,13 +1883,9 @@ export function PageStage({
               breakLine(event.currentTarget);
               return;
             }
-            // Alt+Shift+Left/Right narrows or widens the box from the keyboard, four points a step.
-            if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && event.altKey && event.shiftKey) {
-              event.preventDefault();
-              event.stopPropagation();
-              setWidth(currentWidth + (event.key === "ArrowRight" ? 4 : -4));
-              return;
-            }
+            // Every other key the browser moves or selects text with (arrows with Shift, Option, Command
+            // or Control, Home and End) is left alone: the editor behaves like any native text field.
+            // The width is changed from the keyboard on the resize handle, a Tab away.
             if (event.key === "Escape") {
               event.preventDefault();
               event.currentTarget.blur();
@@ -2102,11 +2098,11 @@ export function PageStage({
                 <div
                   className="content-grip resize"
                   role="slider"
-                  tabIndex={-1}
+                  tabIndex={0}
                   aria-label="Width of the text box"
                   aria-valuenow={Math.round(currentWidth)}
                   aria-valuemin={Math.round(Math.max(12, patch.fontSize * 3))}
-                  title="Drag to change the width the text wraps in"
+                  title="Drag to change the width the text wraps in, or press Tab and use the arrow keys"
                   style={{
                     left: (patch.x - slackShift + (patch.wrap ? blockWidth(patch) : Math.max(patch.w, 1))) * scale + 4,
                     top: (patch.y + patch.fontSize * 0.5) * scale - 8,
