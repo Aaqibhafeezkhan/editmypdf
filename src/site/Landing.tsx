@@ -45,6 +45,7 @@ import { ANALYTICS, PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
 import { GitHubMark } from "./GitHubMark.tsx";
 import { EditorWindow } from "./EditorWindow.tsx";
+import { IntroVideoButton } from "./IntroVideo.tsx";
 import { faqJsonLd } from "./Faq.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { GlanceTable } from "./GlanceTable.tsx";
@@ -241,9 +242,9 @@ export function Landing() {
             <Link to={ROUTES.app} className="btn btn-primary btn-lg">
               Open the editor <ArrowRight className="btn-arrow" aria-hidden="true" />
             </Link>
-            <Link to={ROUTES.howItWorks} className="btn btn-secondary btn-lg">
+            <IntroVideoButton className="btn btn-secondary btn-lg">
               <CirclePlay className="btn-lead" aria-hidden="true" /> See how it works
-            </Link>
+            </IntroVideoButton>
           </p>
           <ul className="hero-trust">
             <li>
@@ -635,9 +636,9 @@ export function Landing() {
             <Link to={ROUTES.app} className="btn btn-primary btn-lg">
               Open the editor <ArrowRight className="btn-arrow" aria-hidden="true" />
             </Link>
-            <Link to={ROUTES.howItWorks} className="btn btn-secondary btn-lg">
+            <IntroVideoButton className="btn btn-secondary btn-lg">
               <CirclePlay className="btn-lead" aria-hidden="true" /> How it works
-            </Link>
+            </IntroVideoButton>
           </p>
         </div>
       </section>
