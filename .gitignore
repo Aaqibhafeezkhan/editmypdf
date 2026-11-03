@@ -32,3 +32,6 @@ docs/seo-plan.md
 # The Claude desktop app's local state: dev-server launch entries and worktrees. Not needed by the
 # build or the site.
 .claude/
+
+# /brag video working files (the finished video lives in public/video)
+brag-output/
