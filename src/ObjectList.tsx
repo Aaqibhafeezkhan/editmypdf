@@ -1,11 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Image as ImageIcon, Layers, Pencil, Signature, TextCursorInput, Trash2, TriangleAlert, Type } from "lucide-react";
+import { Image as ImageIcon, Layers, Pencil, RotateCcw, Signature, TextCursorInput, Trash2, TriangleAlert, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PanelEmpty } from "./PanelChrome.tsx";
 import { revealIn } from "./reveal.ts";
 import { ShapeGlyph } from "./ShapeGlyph.tsx";
-import type { ObjectHover, ObjectIcon, ObjectRow } from "./objects.ts";
+import type { ObjectHover, ObjectIcon, ObjectRow, Removal } from "./objects.ts";
 
 function RowIcon({ icon }: { icon: ObjectIcon }) {
   switch (icon.kind) {
@@ -33,31 +34,49 @@ function revealRow(list: HTMLElement | null, id: string) {
   if (viewport && row) revealIn(viewport, row, "nearest", false);
 }
 
-// The remove button of a row, which asks first in a small panel anchored to it.
+// The button that takes a row's mark off the page, which asks first in a small panel anchored
+// to it. For an edit of the page's own content it restores the original rather than deleting
+// anything, and its icon, tooltip and question say so.
 function RemoveButton({
   name,
+  removal,
   open,
   onOpenChange,
   onRemove,
 }: {
   name: string;
+  removal: Removal;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRemove: () => void;
 }) {
   const titleId = useId();
+  const textId = useId();
   const keepRef = useRef<HTMLButtonElement>(null);
+  const Icon = removal.restores ? RotateCcw : Trash2;
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        <button type="button" className="object-remove" aria-label={`Remove ${name}`} title="Remove">
-          <Trash2 />
-        </button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={removal.restores ? "object-remove restore" : "object-remove"}
+              aria-label={`${removal.confirm} ${name}`}
+            >
+              <Icon />
+            </button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="left" sideOffset={8}>
+          {removal.hint}
+        </TooltipContent>
+      </Tooltip>
       <PopoverContent
         className="confirm-pop"
         role="alertdialog"
         aria-labelledby={titleId}
+        aria-describedby={textId}
         side="left"
         align="center"
         sideOffset={8}
@@ -68,18 +87,27 @@ function RemoveButton({
         }}
       >
         <div className="confirm-pop-body">
-          <span className="confirm-pop-icon" aria-hidden="true">
-            <TriangleAlert />
+          <span className={removal.restores ? "confirm-pop-icon restore" : "confirm-pop-icon"} aria-hidden="true">
+            {removal.restores ? <RotateCcw /> : <TriangleAlert />}
           </span>
-          <strong id={titleId}>Remove this object?</strong>
+          <strong id={titleId}>{removal.question}</strong>
         </div>
+        <p id={textId} className="confirm-pop-text">
+          {removal.hint}. Undo brings it back.
+        </p>
         <div className="confirm-pop-actions">
           <Button ref={keepRef} type="button" size="sm" variant="ghost" onClick={() => onOpenChange(false)}>
             Keep
           </Button>
-          <Button type="button" size="sm" variant="destructive" className="confirm-pop-yes" onClick={onRemove}>
-            <Trash2 />
-            Remove
+          <Button
+            type="button"
+            size="sm"
+            variant={removal.restores ? "default" : "destructive"}
+            className={removal.restores ? "confirm-pop-yes restore" : "confirm-pop-yes"}
+            onClick={onRemove}
+          >
+            <Icon />
+            {removal.confirm}
           </Button>
         </div>
       </PopoverContent>
@@ -166,6 +194,7 @@ export function ObjectList({
             </button>
             <RemoveButton
               name={name}
+              removal={row.removal}
               open={confirming === row.id}
               onOpenChange={(open) => setConfirming(open ? row.id : null)}
               onRemove={() => {

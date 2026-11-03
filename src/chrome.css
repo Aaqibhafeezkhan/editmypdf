@@ -769,16 +769,29 @@
   border-top: 1px solid var(--hairline);
 }
 
-.delete-button {
+.delete-button,
+.restore-button {
   width: 100%;
   height: 32px;
   justify-content: flex-start;
+}
+
+.delete-button {
   color: var(--bad);
 }
 
 .delete-button:hover {
   background: var(--bad-soft);
   color: var(--bad);
+}
+
+.restore-button {
+  color: var(--accent-ink);
+}
+
+.restore-button:hover {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
 }
 
 .button-kbd {
@@ -1435,6 +1448,12 @@ body.resizing-rows {
 
 .object-list {
   list-style: none;
+  /* The scroll area wraps its content in a table-layout box (a Radix workaround), which grows to
+     the widest row's full text instead of letting the rows shrink and ellipsize: the page number
+     and the row's button were pushed off the panel's edge. A zero width with a full minimum
+     width keeps the list exactly as wide as the panel. */
+  width: 0;
+  min-width: 100%;
   margin: 0;
   padding: 2px 8px 10px;
   display: flex;
@@ -1551,20 +1570,33 @@ body.resizing-rows {
   font-size: var(--ui-xs);
 }
 
+/* The page number sits at the row's right end, and the row's action button slides in over it
+   while the row is hovered, focused or asking to confirm: the narrow panel never shows a column
+   of buttons, and the row's text never shifts to make room. */
 .object-page {
   flex: none;
+  min-width: 24px;
   padding: 0 2px;
   color: var(--ink-muted);
   font-size: 10.5px;
+  text-align: right;
   font-variant-numeric: tabular-nums;
+  transition: opacity 120ms var(--ease-out);
+}
+
+.object-row:hover .object-page,
+.object-row.confirming .object-page,
+.object-row:focus-within .object-page {
+  opacity: 0;
 }
 
 .object-remove {
-  flex: none;
-  align-self: center;
+  position: absolute;
+  top: 50%;
+  right: 4px;
   width: 24px;
   height: 24px;
-  margin: 0 4px 0 0;
+  margin: 0;
   padding: 0;
   border: 0;
   border-radius: 5px;
@@ -1573,22 +1605,33 @@ body.resizing-rows {
   background: transparent;
   color: var(--ink-muted);
   opacity: 0;
+  transform: translate(10px, -50%);
+  pointer-events: none;
   cursor: pointer;
-  transition: opacity 120ms var(--ease-out);
+  transition:
+    opacity 140ms var(--ease-out),
+    transform 200ms var(--ease-out);
 }
 
 .object-row:hover .object-remove,
-.object-row.hot .object-remove,
-.object-row.selected .object-remove,
 .object-row.confirming .object-remove,
 .object-row:focus-within .object-remove {
   opacity: 1;
+  transform: translate(0, -50%);
+  pointer-events: auto;
 }
 
 .object-remove:hover,
-.object-remove[data-state="open"] {
+.object-row.confirming .object-remove {
   background: var(--bad-soft);
   color: var(--bad);
+}
+
+/* Restoring the page's own content is not a deletion, so it is not red. */
+.object-remove.restore:hover,
+.object-row.confirming .object-remove.restore {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
 }
 
 .object-remove svg {
@@ -1640,6 +1683,18 @@ body.resizing-rows {
   height: 14px;
 }
 
+.confirm-pop-icon.restore {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.confirm-pop-text {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--ui-sm);
+  line-height: 1.4;
+}
+
 .confirm-pop-actions {
   display: flex;
   justify-content: flex-end;
@@ -1653,6 +1708,15 @@ body.resizing-rows {
 
 .confirm-pop-yes:hover {
   background: color-mix(in oklab, var(--bad) 90%, var(--ink-0));
+}
+
+.confirm-pop-yes.restore {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.confirm-pop-yes.restore:hover {
+  background: var(--accent-strong);
 }
 
 /* ---- Narrow windows -------------------------------------------------------- */
@@ -1753,7 +1817,9 @@ body.resizing-rows {
   .tool-dock-slot,
   .pages-panel-slot,
   .inspector,
-  .thumb-paper canvas {
+  .thumb-paper canvas,
+  .object-page,
+  .object-remove {
     transition: none;
   }
 }

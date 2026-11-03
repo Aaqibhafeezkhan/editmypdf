@@ -6,7 +6,7 @@ import { clamp } from "./geometry.ts";
 import { useHistory } from "./history.ts";
 import { Inspector } from "./Inspector.tsx";
 import { PageStage } from "./PageStage.tsx";
-import { describeObjects, type ObjectHover } from "./objects.ts";
+import { describeObjects, removalFor, type ObjectHover } from "./objects.ts";
 import { prefersReducedMotion, revealIn } from "./reveal.ts";
 import { loadPdf, type LoadedPdf } from "./pdf.ts";
 import { navigate } from "./router.ts";
@@ -29,6 +29,7 @@ import {
   PanelRight,
   Pencil,
   Redo2,
+  RotateCcw,
   RotateCw,
   Shapes,
   Signature,
@@ -907,6 +908,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
   const liveHover = hover && objectNumbers.has(hover.id) ? hover : null;
 
   const selected = history.value.find((item) => item.id === selectedId) ?? null;
+  const removal = removalFor(selected);
   const selectedShape =
     selected?.kind === "line"
       ? shapeFromLine(selected.head)
@@ -1050,11 +1052,11 @@ export function Editor({ sessionId }: { sessionId: string }) {
         { kind: "separator" },
         {
           kind: "item",
-          label: "Delete selection",
-          icon: <Trash2 />,
+          label: removal.label,
+          icon: removal.restores ? <RotateCcw /> : <Trash2 />,
           shortcut: shortcut("backspace"),
           disabled: selected === null,
-          destructive: true,
+          destructive: !removal.restores,
           onSelect: () => {
             if (selectedId) removeObject(selectedId);
           },

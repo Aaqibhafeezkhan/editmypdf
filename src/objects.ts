@@ -24,7 +24,45 @@ export type ObjectRow = {
   // Whether the mark changes the page's own content: an edited run whose words, look, place or
   // width differ from the page's. Marks the user added are never "changes".
   changed: boolean;
+  // What taking the mark off the page does: see `Removal`.
+  removal: Removal;
 };
+
+// What taking a mark off the page does. An object the user added is deleted. An edit of the
+// page's own content is not: letting it go brings the page's original text or graphic back, so
+// every button, menu item and confirm panel that does it says "restore", never "delete".
+export type Removal = {
+  restores: boolean;
+  // The action's name on a button or menu item.
+  label: string;
+  // What it does, for the tooltip and the confirm panel.
+  hint: string;
+  // The question the confirm panel asks, and the button that agrees.
+  question: string;
+  confirm: string;
+};
+
+export function removalFor(mark: { kind: Annotation["kind"]; role?: "text" | "graphic" } | null): Removal {
+  if (mark?.kind === "patch") {
+    const graphic = mark.role === "graphic";
+    return {
+      restores: true,
+      label: "Restore original",
+      hint: graphic
+        ? "Removes your change and puts the page's own graphic back where it was"
+        : "Removes your edit and brings back the page's own text",
+      question: graphic ? "Restore the original graphic?" : "Restore the original text?",
+      confirm: "Restore",
+    };
+  }
+  return {
+    restores: false,
+    label: "Delete selection",
+    hint: "Removes this object from the page",
+    question: "Remove this object?",
+    confirm: "Remove",
+  };
+}
 
 const EMOJI_NAMES = new Map(EMOJI_GROUPS.flatMap((group) => group.items.map((item) => [item.id, item.name] as const)));
 
@@ -37,7 +75,7 @@ function firstWords(text: string, limit = 40): string | null {
   return `${space > limit / 2 ? cut.slice(0, space) : cut}…`;
 }
 
-function describe(annotation: Annotation): Omit<ObjectRow, "id" | "number" | "page" | "changed"> {
+function describe(annotation: Annotation): Omit<ObjectRow, "id" | "number" | "page" | "changed" | "removal"> {
   switch (annotation.kind) {
     case "text":
       return { title: "Text", detail: firstWords(annotation.text) ?? "Empty", icon: { kind: "text" } };
@@ -75,6 +113,7 @@ export function describeObjects(annotations: Annotation[]): ObjectRow[] {
     number: index + 1,
     page: annotation.page,
     changed: annotation.kind === "patch" && patchChanged(annotation),
+    removal: removalFor(annotation),
     ...describe(annotation),
   }));
 }
