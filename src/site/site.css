@@ -1162,44 +1162,6 @@ a.card:hover {
   }
 }
 
-/* ---- Comparison page ----------------------------------------------------- */
-
-.cmp-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: var(--sp-10);
-  align-items: end;
-}
-
-@media (max-width: 860px) {
-  .cmp-head {
-    grid-template-columns: 1fr;
-  }
-}
-
-.cmp-verdict {
-  padding: var(--sp-5);
-  border-radius: var(--round-lg);
-  background: var(--paper-1);
-  border: 1px solid var(--rule);
-}
-
-.cmp-verdict h2 {
-  margin: 0 0 var(--sp-2);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-
-.cmp-verdict p {
-  margin: 0;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-relaxed);
-  color: var(--ink-1);
-}
-
 .two-col {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
