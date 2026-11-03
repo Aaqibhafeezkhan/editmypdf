@@ -1077,6 +1077,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
                   textStyle={textStyle}
                   selectedId={selectedId}
                   hoverId={liveHover?.id ?? null}
+                  listHoverId={liveHover?.from === "list" ? liveHover.id : null}
                   objectNumbers={objectNumbers}
                   onHover={hoverFromPage}
                   focusId={focusId}
