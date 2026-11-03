@@ -1,9 +1,9 @@
 import { Link, useParams } from "react-router";
-import { ArrowRight, Check, ChevronRight, Minus, Scale } from "lucide-react";
+import { ArrowRight, CalendarCheck, Check, ChevronRight, Minus, Scale } from "lucide-react";
 import { competitorBySlug, COMPETITORS, FEATURE_LABELS, OURS, triWord, type Competitor, type Tool } from "../data/competitors.ts";
 import { PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
-import { CompareCard, Duel, ToolMark } from "./CompareCard.tsx";
+import { CompareCard, Scorecard, ToolMark } from "./CompareCard.tsx";
 import { LogoMark } from "./Logo.tsx";
 import { Mark, Where } from "./Marks.tsx";
 import { Price } from "./Price.tsx";
@@ -68,27 +68,31 @@ function Comparison({ tool }: { tool: Competitor }) {
           <span aria-current="page">{tool.name}</span>
         </nav>
         <div className="cmp-head">
-          <div>
-            <p className="cmp-versus" aria-hidden="true">
-              <LogoMark size={44} />
-              <span>vs</span>
-              <ToolMark brand={tool.brand} size={44} />
-            </p>
+          <div className="cmp-head-copy">
             <p className="eyebrow">
               <Scale aria-hidden="true" /> Comparison
+            </p>
+            <p className="cmp-versus" aria-hidden="true">
+              <LogoMark size={48} />
+              <span>vs</span>
+              <ToolMark brand={tool.brand} size={48} />
             </p>
             <h1 className="display">
               {PRODUCT.name} <em>vs</em> {tool.name}
             </h1>
             <p className="lede">{tool.summary}</p>
-            <p className="as-of" style={{ marginTop: "var(--sp-5)" }}>
-              Facts checked {tool.checkedAt}
+            <p className="cmp-meta">
+              <span className="as-of">
+                <CalendarCheck aria-hidden="true" /> Facts checked {tool.checkedAt}
+              </span>
             </p>
           </div>
-          <aside className="cmp-verdict">
-            <Duel tool={tool} />
-            <h2>In short</h2>
-            <p>{tool.verdict}</p>
+          <aside className="cmp-verdict" aria-labelledby="cmp-in-short">
+            <div className="cmp-verdict-copy">
+              <h2 id="cmp-in-short">In short</h2>
+              <p>{tool.verdict}</p>
+            </div>
+            <Scorecard tool={tool} />
           </aside>
         </div>
       </section>
