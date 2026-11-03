@@ -67,6 +67,7 @@ export function StatusBar({
   maxZoom,
   presets,
   onScale,
+  fitMode,
   onFit,
   onRotate,
   pagesPanelOpen,
@@ -80,6 +81,8 @@ export function StatusBar({
   maxZoom: number;
   presets: number[];
   onScale: (scale: number) => void;
+  // The fit the zoom is following, if any; its button shows pressed.
+  fitMode: FitMode | null;
   onFit: (mode: FitMode) => void;
   onRotate: () => void;
   pagesPanelOpen: boolean;
@@ -156,10 +159,10 @@ export function StatusBar({
       <div className="status-spacer" />
 
       <div className="status-group status-view">
-        <StatusButton label="Fit to width" onClick={() => onFit("width")}>
+        <StatusButton label="Fit to width" pressed={fitMode === "width"} onClick={() => onFit("width")}>
           <UnfoldHorizontal />
         </StatusButton>
-        <StatusButton label="Fit page" onClick={() => onFit("page")}>
+        <StatusButton label="Fit page" pressed={fitMode === "page"} onClick={() => onFit("page")}>
           <Maximize />
         </StatusButton>
         <span className="status-sep" />

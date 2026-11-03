@@ -262,12 +262,23 @@ function chromeKey(sessionId: string): string {
 }
 
 const ZOOM_KEY = "pdf-editor:zoom";
+// The fit the zoom follows ("width", "page" or "height"), kept while the user has not zoomed by hand.
+const FIT_KEY = "pdf-editor:fit";
 const SIDEBAR_KEY = "pdf-editor:inspector";
 const PAGES_PANEL_KEY = "pdf-editor:pages-panel";
 
 // Windows narrower than this open with the side panels closed; they would cover the page.
 const WIDE_WINDOW = 1100;
 const THUMBNAIL_WINDOW = 1280;
+
+function readFit(): FitMode | null {
+  try {
+    const raw = localStorage.getItem(FIT_KEY);
+    return raw === "width" || raw === "page" || raw === "height" ? raw : null;
+  } catch {
+    return null;
+  }
+}
 
 function readZoom(): number {
   try {
@@ -347,6 +358,10 @@ export function Editor({ sessionId }: { sessionId: string }) {
   const [spin, setSpin] = useState<number>(() => readChrome(sessionId).rotation);
   const [viewReady, setViewReady] = useState(false);
   const [scale, setScale] = useState(readZoom);
+  // The fit the zoom follows until the user sets a zoom of their own: while it is set, the pages
+  // refit whenever the room for them changes (a panel opens or closes, the window resizes, the
+  // pages rotate), and it is kept across reloads like the zoom itself.
+  const [fitMode, setFitMode] = useState<FitMode | null>(readFit);
   const [strokeStyle, setStrokeStyle] = useState<StrokeStyle>(DEFAULT_STROKE);
   const [textStyle, setTextStyle] = useState<TextStyle>(DEFAULT_TEXT);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -390,6 +405,11 @@ export function Editor({ sessionId }: { sessionId: string }) {
   const pinchOrigin = useRef(1);
   const toolRef = useRef(tool);
   scaleRef.current = scale;
+  // A zoom the user chose; it ends any fit the zoom was following.
+  const zoomTo = useCallback((next: number | ((value: number) => number)) => {
+    setFitMode(null);
+    setScale((value) => clamp(typeof next === "function" ? next(value) : next, MIN_ZOOM, MAX_ZOOM));
+  }, []);
   toolRef.current = tool;
 
   selectedRef.current = selectedId;
@@ -548,10 +568,12 @@ export function Editor({ sessionId }: { sessionId: string }) {
     try {
       sessionStorage.setItem(chromeKey(sessionId), JSON.stringify({ tool, shape, rotation: pageRotation }));
       localStorage.setItem(ZOOM_KEY, String(scale));
+      if (fitMode) localStorage.setItem(FIT_KEY, fitMode);
+      else localStorage.removeItem(FIT_KEY);
     } catch {
       // Storage can be blocked in private browsing.
     }
-  }, [sessionId, tool, shape, pageRotation, scale]);
+  }, [sessionId, tool, shape, pageRotation, scale, fitMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -618,7 +640,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
       if (performance.now() - gestureAt < 80) return;
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
       const delta = event.deltaY * unit;
-      setScale((value) => clamp(value * Math.exp(-delta * 0.0025), MIN_ZOOM, MAX_ZOOM));
+      zoomTo((value) => value * Math.exp(-delta * 0.0025));
     };
     const onGestureStart = (event: Event) => {
       if (!insideApp(event)) return;
@@ -631,7 +653,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
       event.preventDefault();
       gestureAt = performance.now();
       const factor = (event as Event & { scale?: number }).scale ?? 1;
-      setScale(clamp(pinchOrigin.current * factor, MIN_ZOOM, MAX_ZOOM));
+      zoomTo(pinchOrigin.current * factor);
     };
     const onGestureEnd = () => {
       gestureAt = performance.now();
@@ -646,7 +668,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
       window.removeEventListener("gesturechange", onGestureChange);
       window.removeEventListener("gestureend", onGestureEnd);
     };
-  }, []);
+  }, [zoomTo]);
 
   useEffect(() => {
     if (selectedId && !history.value.some((item) => item.id === selectedId)) {
@@ -768,17 +790,17 @@ export function Editor({ sessionId }: { sessionId: string }) {
       }
       if (meta && (event.key === "=" || event.key === "+")) {
         event.preventDefault();
-        setScale((value) => clamp(value + 0.25, MIN_ZOOM, MAX_ZOOM));
+        zoomTo((value) => value + 0.25);
         return;
       }
       if (meta && event.key === "-") {
         event.preventDefault();
-        setScale((value) => clamp(value - 0.25, MIN_ZOOM, MAX_ZOOM));
+        zoomTo((value) => value - 0.25);
         return;
       }
       if (meta && event.key === "0") {
         event.preventDefault();
-        setScale(1);
+        zoomTo(1);
         return;
       }
       if (typing || meta || event.altKey) return;
@@ -817,7 +839,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [history.redo, history.undo, bump, removeObject, chooseTool, pickShape]);
+  }, [history.redo, history.undo, bump, removeObject, chooseTool, pickShape, zoomTo]);
 
   const placeEmoji = (emojiId: string) => {
     const document = loadedRef.current;
@@ -874,19 +896,45 @@ export function Editor({ sessionId }: { sessionId: string }) {
     setSelectedId(annotation.id);
   };
 
+  // The zoom at which the pages fit the room they have: by width, by height, or both.
+  const fitScale = useCallback(
+    (mode: FitMode): number | null => {
+      const node = pagesRef.current;
+      const viewport = loadedRef.current?.viewports[0];
+      if (!node || !viewport || viewport.width === 0 || viewport.height === 0) return null;
+      const sideways = pageRotation === 90 || pageRotation === 270;
+      const pageWidth = sideways ? viewport.height : viewport.width;
+      const pageHeight = sideways ? viewport.width : viewport.height;
+      const widthScale = (node.clientWidth - 64) / pageWidth;
+      const heightScale = (node.clientHeight - 80) / pageHeight;
+      const next =
+        mode === "width" ? widthScale : mode === "height" ? heightScale : Math.min(widthScale, heightScale);
+      return clamp(next, MIN_ZOOM, MAX_ZOOM);
+    },
+    [pageRotation],
+  );
+
   const fitZoom = (mode: FitMode) => {
-    const node = pagesRef.current;
-    const viewport = loadedRef.current?.viewports[0];
-    if (!node || !viewport || viewport.width === 0 || viewport.height === 0) return;
-    const sideways = pageRotation === 90 || pageRotation === 270;
-    const pageWidth = sideways ? viewport.height : viewport.width;
-    const pageHeight = sideways ? viewport.width : viewport.height;
-    const widthScale = (node.clientWidth - 64) / pageWidth;
-    const heightScale = (node.clientHeight - 80) / pageHeight;
-    const next =
-      mode === "width" ? widthScale : mode === "height" ? heightScale : Math.min(widthScale, heightScale);
-    setScale(clamp(next, MIN_ZOOM, MAX_ZOOM));
+    setFitMode(mode);
+    const next = fitScale(mode);
+    if (next != null) setScale(next);
   };
+
+  // While a fit is on, the pages refit whenever their room changes: the thumbnail strip, a tool
+  // panel or the sidebar opening or closing (the fit follows the slide), the window resizing, a
+  // rotation. The observer also reports once when it starts watching, which applies a fit
+  // restored from storage as soon as the document is loaded.
+  useEffect(() => {
+    if (!fitMode) return;
+    const node = pagesRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => {
+      const next = fitScale(fitMode);
+      if (next != null && Math.abs(next - scaleRef.current) > 0.0005) setScale(next);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [fitMode, fitScale, loaded]);
 
   const rotate = () => {
     setPageRotation((current) => ((current + 90) % 360) as PageRotation);
@@ -1075,16 +1123,16 @@ export function Editor({ sessionId }: { sessionId: string }) {
           label: "Zoom in",
           icon: <ZoomIn />,
           shortcut: shortcut("mod", "plus"),
-          onSelect: () => setScale((value) => clamp(value + 0.25, MIN_ZOOM, MAX_ZOOM)),
+          onSelect: () => zoomTo((value) => value + 0.25),
         },
         {
           kind: "item",
           label: "Zoom out",
           icon: <ZoomOut />,
           shortcut: shortcut("mod", "minus"),
-          onSelect: () => setScale((value) => clamp(value - 0.25, MIN_ZOOM, MAX_ZOOM)),
+          onSelect: () => zoomTo((value) => value - 0.25),
         },
-        { kind: "item", label: "Actual size", shortcut: shortcut("mod", "0"), onSelect: () => setScale(1) },
+        { kind: "item", label: "Actual size", shortcut: shortcut("mod", "0"), onSelect: () => zoomTo(1) },
         { kind: "item", label: "Fit page", onSelect: () => fitZoom("page") },
         { kind: "item", label: "Fit width", onSelect: () => fitZoom("width") },
         { kind: "item", label: "Fit height", onSelect: () => fitZoom("height") },
@@ -1384,7 +1432,8 @@ export function Editor({ sessionId }: { sessionId: string }) {
               minZoom={MIN_ZOOM}
               maxZoom={MAX_ZOOM}
               presets={ZOOM_PRESETS}
-              onScale={(next) => setScale(clamp(next, MIN_ZOOM, MAX_ZOOM))}
+              onScale={zoomTo}
+              fitMode={fitMode}
               onFit={fitZoom}
               onRotate={rotate}
               pagesPanelOpen={pagesPanelOpen}
