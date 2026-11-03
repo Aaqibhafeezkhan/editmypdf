@@ -22,7 +22,7 @@ serves that build the way a static host would; `npm run lint` runs oxlint.
 Two build-time variables describe where the site will live:
 
 - `VITE_SITE_URL`: the full address the site is served at, such as
-  `https://example.com` or `https://owner.github.io/pdf-editor`. It makes canonical links,
+  `https://example.com` or `https://owner.github.io/editmypdf`. It makes canonical links,
   `og:url`, `sitemap.xml`, `feed.xml` and `robots.txt` absolute; without it they are root-relative.
 - `VITE_BASE`: the path the site is served under, `/` by default. Set it to `/<repo>/` when the
   site lives in a sub-path, as a GitHub Pages project site does; every script, stylesheet, image,
@@ -111,11 +111,11 @@ The workflow is already in the repository; a fork or a fresh copy only needs Pag
 ### Checking the Pages build locally
 
 ```bash
-VITE_BASE=/pdf-editor/ VITE_SITE_URL=http://localhost:5180/pdf-editor npm run build
-npx vite preview --base /pdf-editor/ --port 5180
+VITE_BASE=/editmypdf/ VITE_SITE_URL=http://localhost:5180/editmypdf npm run build
+npx vite preview --base /editmypdf/ --port 5180
 ```
 
-Then open `http://localhost:5180/pdf-editor/`. The preview serves the prerendered pages under the
+Then open `http://localhost:5180/editmypdf/`. The preview serves the prerendered pages under the
 prefix the way GitHub Pages does; unknown addresses fall back to the landing page here rather than
 to `404.html`.
 
