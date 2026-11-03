@@ -498,7 +498,7 @@ export function Inspector({
     <aside
       className={className}
       style={{ "--inspector-width": `${layout.width}px` } as React.CSSProperties}
-      aria-label="Objects and properties"
+      aria-label="Edits and properties"
     >
       {open && (
         <SplitHandle
@@ -521,7 +521,7 @@ export function Inspector({
             <PanelRightOpen />
           </StripButton>
           <span className="strip-sep" />
-          <StripButton label="Objects" onClick={() => onOpenChange(true)}>
+          <StripButton label="Your edits" onClick={() => onOpenChange(true)}>
             <Layers />
           </StripButton>
           <StripButton label="Properties" onClick={() => onOpenChange(true)}>
@@ -531,8 +531,8 @@ export function Inspector({
       )}
 
       <div className="inspector-body" ref={bodyRef} inert={!open} aria-hidden={!open}>
-        <section className="inspector-pane objects" style={{ flexBasis: `${layout.split * 100}%` }} aria-label="Objects">
-          <PanelHead title="Objects" count={objects.length} detail={objectsDetail}>
+        <section className="inspector-pane objects" style={{ flexBasis: `${layout.split * 100}%` }} aria-label="Your edits">
+          <PanelHead title="Your edits" count={objects.length} detail={objectsDetail}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

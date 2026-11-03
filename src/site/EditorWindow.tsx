@@ -321,7 +321,7 @@ export function EditorWindow() {
             <div className="ew-pane-head">
               <span className="ew-pane-text">
                 <strong className="ew-pane-title">
-                  Objects
+                  Your edits
                   <span className="ew-count">3</span>
                 </strong>
                 <span className="ew-pane-detail">On 2 pages, in the order added</span>
