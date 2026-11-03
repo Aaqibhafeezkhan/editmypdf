@@ -19,7 +19,7 @@ function feed(origin: string): string {
     (post) =>
       `  <item>\n    <title>${escapeXml(post.title)}</title>\n    <link>${origin}/blog/${post.slug}</link>\n    <guid isPermaLink="true">${origin}/blog/${post.slug}</guid>\n    <pubDate>${new Date(`${post.date}T09:00:00Z`).toUTCString()}</pubDate>\n    <description>${escapeXml(post.description)}</description>\n  </item>`,
   );
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n<channel>\n  <title>PDF Edit blog</title>\n  <link>${origin}/blog</link>\n  <description>Engineering notes on editing PDF text in the browser.</description>\n  <language>en</language>\n${items.join("\n")}\n</channel>\n</rss>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n<channel>\n  <title>Edit My PDF blog</title>\n  <link>${origin}/blog</link>\n  <description>Engineering notes on editing PDF text in the browser.</description>\n  <language>en</language>\n${items.join("\n")}\n</channel>\n</rss>\n`;
 }
 
 // Crawlers' files: sitemap.xml, feed.xml and robots.txt, served in development and written into the
@@ -55,8 +55,8 @@ function siteFiles(siteUrl: string): Plugin {
   const manifest = () =>
     JSON.stringify(
       {
-        name: "PDF Edit",
-        short_name: "PDF Edit",
+        name: "Edit My PDF",
+        short_name: "Edit My PDF",
         description: "Free browser PDF editor that edits the page's own text in its own font. No upload, no account.",
         start_url: `${base}app`,
         scope: base,

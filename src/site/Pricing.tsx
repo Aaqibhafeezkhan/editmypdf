@@ -36,7 +36,7 @@ const QUESTIONS = [
   {
     question: "What are the limits?",
     answer:
-      "Only your browser's memory, since everything happens in the tab. PDF Edit does not do OCR, conversion, merging or form filling; the [comparisons](/compare) say which tools do those well.",
+      "Only your browser's memory, since everything happens in the tab. Edit My PDF does not do OCR, conversion, merging or form filling; the [comparisons](/compare) say which tools do those well.",
   },
   {
     question: "Can I use it for work?",

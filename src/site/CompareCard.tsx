@@ -61,7 +61,7 @@ function scoreWords(tool: Tool): string {
   return FACTS.map((fact) => `${fact.label}: ${TRI_LABEL[fact.value(tool)].toLowerCase()}`).join(", ");
 }
 
-// The thumbnail: PDF Edit and the tool side by side, with a dot per fact for each.
+// The thumbnail: Edit My PDF and the tool side by side, with a dot per fact for each.
 export function Duel({ tool }: { tool: Tool }) {
   return (
     <div className="duel">
