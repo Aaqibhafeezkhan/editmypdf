@@ -7,11 +7,15 @@ import { uid } from "./types.ts";
 // rather than in any document (like the saved signatures), so a font added once supplies the
 // characters an embedded subset of the same face lacks in every later document. A file is kept
 // under the trait key of the page font it was added for and under the keys of its own names, so
-// the same face found under another name is served too.
+// the same face found under another name is served too. A font comes from a file the user picked
+// or from the fonts installed on their machine (`localFonts.ts`); both serve the same way.
+export type UserFontSource = "file" | "local";
+
 export type UserFont = {
   id: string;
   // The font's full name, as its name table gives it: "Garamond Premier Pro Bold".
   label: string;
+  source: UserFontSource;
   // Trait keys (`traitKey`) of the page fonts the file stands in for.
   keys: string[];
   // The file as picked: TrueType or CFF, so it can be read for its cmap and embedded in a PDF.
@@ -21,7 +25,8 @@ export type UserFont = {
   cmap: Map<number, number>;
 };
 
-type StoredFont = Omit<UserFont, "cmap">;
+// Fonts kept before there were two sources have none recorded; they were files.
+type StoredFont = Omit<UserFont, "cmap" | "source"> & { source?: UserFontSource };
 
 const KEY = "user-fonts";
 // How many are kept; the oldest goes when a newer one arrives.
@@ -51,11 +56,11 @@ function valid(record: unknown): record is StoredFont {
 }
 
 function withCmap(stored: StoredFont): UserFont {
-  return { ...stored, cmap: fontUnicodeMap(stored.bytes) };
+  return { ...stored, source: stored.source === "local" ? "local" : "file", cmap: fontUnicodeMap(stored.bytes) };
 }
 
 function stored(font: UserFont): StoredFont {
-  return { id: font.id, label: font.label, keys: font.keys, bytes: font.bytes, addedAt: font.addedAt };
+  return { id: font.id, label: font.label, source: font.source, keys: font.keys, bytes: font.bytes, addedAt: font.addedAt };
 }
 
 function notify(): void {
@@ -101,16 +106,26 @@ export function userFontsVersion(): number {
 // Keeps a TrueType or OpenType file the user picked for the page font with trait key `key`,
 // registers its face, and resolves to the record. Throws, with a sentence for the user, when the
 // file cannot be used.
-export async function addUserFont(file: File, key: string): Promise<UserFont> {
-  if (file.size > BYTES_LIMIT) throw new Error("That font file is too large to keep in the browser.");
-  const bytes = new Uint8Array(await file.arrayBuffer());
+export function addUserFont(file: File, key: string): Promise<UserFont> {
+  return keepUserFont(file, key, file.name.replace(/\.[^.]+$/, ""), "file");
+}
+
+// Keeps the bytes of a TrueType or OpenType font (a file the user picked, or an installed font the
+// browser handed over) for the page font with trait key `key`, named by its own name table or by
+// `fallbackLabel`, registers its face, and resolves to the record. Throws, with a sentence for the
+// user, when the bytes cannot be used.
+export async function keepUserFont(data: Blob | Uint8Array, key: string, fallbackLabel: string, source: UserFontSource): Promise<UserFont> {
+  const size = data instanceof Blob ? data.size : data.length;
+  if (size > BYTES_LIMIT) throw new Error("That font is too large to keep in the browser.");
+  const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
   const names = await fontNames(bytes);
   const cmap = fontUnicodeMap(bytes);
-  if (cmap.size === 0) throw new Error("That file is not a TrueType or OpenType font with a Unicode character map.");
+  if (cmap.size === 0) throw new Error("That is not a TrueType or OpenType font with a Unicode character map.");
   const keys = [...new Set([key, ...names.keys])];
   const font: UserFont = {
     id: uid(),
-    label: names.label || file.name.replace(/\.[^.]+$/, ""),
+    label: names.label || fallbackLabel,
+    source,
     keys,
     bytes,
     addedAt: Date.now(),
@@ -136,7 +151,7 @@ async function fontNames(bytes: Uint8Array): Promise<{ label: string; keys: stri
   try {
     font = opentype.parse(bytes.slice().buffer);
   } catch {
-    throw new Error("That file is not a TrueType or OpenType font.");
+    throw new Error("That is not a TrueType or OpenType font.");
   }
   const english = (name: Record<string, string> | undefined) => name?.en ?? Object.values(name ?? {})[0] ?? "";
   const family = english(font.names.fontFamily);

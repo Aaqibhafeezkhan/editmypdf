@@ -8,13 +8,15 @@ import { loadUserFonts, userFontFor, type UserFont } from "./userFonts.ts";
 // typed one in a system face, and the export would have to paint the edit. A supplement is a full
 // font of the same design where one exists: one of the bundled open fonts below (Google's
 // metric-compatible replacements for the common proprietary faces, and the open faces web-printed
-// PDFs embed), or a font file the user added for a face nothing bundled matches (`userFonts.ts`).
-// Each is registered under a family name of its own, declared regular whatever its cut, so a run
-// can list it after the embedded face without the browser also emboldening or slanting either.
+// PDFs embed), or, for a face nothing bundled matches, the font installed on the user's machine
+// (`localFonts.ts`) or a font file the user added (`userFonts.ts`). Each is registered under a
+// family name of its own, declared regular whatever its cut, so a run can list it after the
+// embedded face without the browser also emboldening or slanting either.
 
 // How a supplement relates to the page's font: the same typeface, a design that matches its
-// metrics, a face of the same kind only, or the user's own file.
-export type Relation = "same" | "close" | "kind" | "user";
+// metrics, a face of the same kind only, the font installed on the user's machine, or the user's
+// own file.
+export type Relation = "same" | "close" | "kind" | "local" | "user";
 
 export type Supplement = {
   // The cut, as the user knows it: "Tinos Bold", "Noto Sans Medium Italic".
@@ -32,8 +34,8 @@ export type Supplement = {
 // without its subset prefix, what the name and pdf.js say about its cut, and its kind.
 export type FontAsk = { name: string; bold: boolean; italic: boolean; kind: FaceKind };
 
-// A font file the user can add for a page font: the font's name as the PDF gives it, and the key
-// the file is kept under.
+// A font the user can supply for a page font: the font's PostScript name as the PDF gives it,
+// without the subset prefix, and the key the font is kept under.
 export type FontOffer = { pdfFont: string; name: string; key: string };
 
 type Bundled = { id: string; label: string; kind: FaceKind; names: RegExp; same: RegExp };
@@ -190,16 +192,16 @@ export function supplementOf(loadedName: string): Supplement | null {
 function userSupplement(user: UserFont, key: string): Supplement {
   return {
     label: user.label,
-    relation: "user",
+    relation: user.source === "local" ? "local" : "user",
     family: userFamilyName(key),
     covers: (code) => user.cmap.has(code),
     source: async (code) => (user.cmap.has(code) ? { key: `user:${user.id}`, bytes: user.bytes } : null),
   };
 }
 
-// Whether a font file the user adds would stand in for a page font: when nothing bundled matches
-// the font by name (its characters come from a Noto face of its kind, or from nothing) and the
-// user has not added one already.
+// Whether a font the user supplies (an installed one, or a file) would stand in for a page font:
+// when nothing bundled matches the font by name (its characters come from a Noto face of its kind,
+// or from nothing) and the user has not supplied one already.
 export function fontOffer(loadedName: string): FontOffer | null {
   const choice = choices.get(loadedName);
   if (!choice) return null;

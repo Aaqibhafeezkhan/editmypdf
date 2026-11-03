@@ -3,7 +3,8 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { ColorControl } from "./ColorControl.tsx";
 import { keepFocus } from "./keepFocus.ts";
 import { contentDetail, contentLabel, patchGlyphReport, type ContentElement, type ContentKind } from "./content.ts";
-import type { Relation } from "./supplementFonts.ts";
+import { localFontsSupported, useLocalFont } from "./localFonts.ts";
+import type { FontOffer, Relation } from "./supplementFonts.ts";
 import { addUserFont, subscribeUserFonts, userFontsVersion } from "./userFonts.ts";
 import {
   AlignCenter,
@@ -259,19 +260,23 @@ const RELATION_TEXT: Record<Relation, string> = {
   same: "the page's own font",
   close: "a close match to the page's font",
   kind: "a stand-in for the page's font",
+  local: "the font installed on this computer",
   user: "the font you added",
 };
 
 // Tells the user where the characters the page's font lacks come from: the supplement they are
-// set in (a bundled open font of the page font's design, or a font file they added), and, for
-// characters no supplement has, that they are shown in a substitute face and make the edit an
-// image on download. Offers a font file when nothing bundled matches the page's font by name.
+// set in (a bundled open font of the page font's design, the font installed on this computer, or
+// a font file they added), and, for characters no supplement has, that they are shown in a
+// substitute face and make the edit an image on download. When nothing bundled matches the page's
+// font by name, offers the installed font (in a browser that can read the installed fonts) and a
+// font file.
 function GlyphNote({ patch, kind }: { patch: PatchAnnotation; kind: ContentKind | undefined }) {
   // A font the user adds changes what the note says without the patch changing.
   useSyncExternalStore(subscribeUserFonts, userFontsVersion, () => 0);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"file" | "local" | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const local = localFontsSupported();
   const report = patchGlyphReport(patch);
   if (report.supplied.length === 0 && report.unsupplied.length === 0) return null;
   const offer = report.offer;
@@ -285,17 +290,20 @@ function GlyphNote({ patch, kind }: { patch: PatchAnnotation; kind: ContentKind 
       `The page's font has no ${charList(report.unsupplied, "or")}. ${report.unsupplied.length === 1 ? "It is" : "They are"} shown in a substitute face, and on download this ${noun} is written as an image instead of text.`,
     );
   }
-  const pick = async (file: File, key: string) => {
-    setBusy(true);
+  const supply = async (source: "file" | "local", add: () => Promise<unknown>) => {
+    setBusy(source);
     setError(null);
     try {
-      await addUserFont(file, key);
+      await add();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "That font could not be added.");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
+  const pick = (file: File, key: string) => supply("file", () => addUserFont(file, key));
+  // The browser asks for the permission inside the click, so nothing may be awaited before it.
+  const lookUp = (offer: FontOffer) => supply("local", () => useLocalFont(offer));
   return (
     <p role="status" className={`panel-note${report.unsupplied.length === 0 ? " calm" : ""}`}>
       <Info aria-hidden="true" />
@@ -304,14 +312,28 @@ function GlyphNote({ patch, kind }: { patch: PatchAnnotation; kind: ContentKind 
         {offer && (
           <>
             {" "}
+            {local && (
+              <>
+                <button
+                  type="button"
+                  className="panel-note-action"
+                  disabled={busy !== null}
+                  title={`Look for ${offer.name || "the page's font"} among the fonts installed on this computer; the browser asks once for permission, and the font is kept in this browser for every document.`}
+                  onClick={() => void lookUp(offer)}
+                >
+                  {busy === "local" ? "Looking for the font…" : "Use the installed font…"}
+                </button>
+                {" · "}
+              </>
+            )}
             <button
               type="button"
               className="panel-note-action"
-              disabled={busy}
+              disabled={busy !== null}
               title={`Pick a TrueType or OpenType file of ${offer.name || "the page's font"}; it is kept in this browser for every document.`}
               onClick={() => input.current?.click()}
             >
-              {busy ? "Adding the font…" : "Add this font…"}
+              {busy === "file" ? "Adding the font…" : "Add this font…"}
             </button>
             <input
               ref={input}
