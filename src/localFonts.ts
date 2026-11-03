@@ -34,7 +34,7 @@ export function localFontsSupported(): boolean {
 // Finds the page font among the installed fonts and keeps it as a user font under the offer's key.
 // Must be called from a click handler. Throws, with a sentence for the user, when the browser was
 // not allowed to read the fonts or none of them matches.
-export async function useLocalFont(offer: FontOffer): Promise<UserFont> {
+export async function adoptLocalFont(offer: FontOffer): Promise<UserFont> {
   const queryLocalFonts = query();
   if (!queryLocalFonts) throw new Error("This browser cannot read the fonts installed on this computer.");
   const label = offer.name || "the page's font";
@@ -56,12 +56,23 @@ export async function useLocalFont(offer: FontOffer): Promise<UserFont> {
 // whose names say it is the same typeface and cut (the installed "Trebuchet MS" in style "Bold" for
 // a page font named "TrebuchetMS-Bold" under some other PostScript name).
 async function findLocalFont(queryLocalFonts: QueryLocalFonts, offer: FontOffer): Promise<FontData | undefined> {
-  if (offer.name) {
-    const exact = await queryLocalFonts({ postscriptNames: [offer.name] });
-    if (exact.length > 0) return exact[0];
+  const names = [...(offer.name ? [offer.name] : []), ...appleAliases(offer)];
+  if (names.length > 0) {
+    const exact = await queryLocalFonts({ postscriptNames: names });
+    const found = names.map((name) => exact.find((font) => font.postscriptName === name)).find(Boolean) ?? exact[0];
+    if (found) return found;
   }
   const all = await queryLocalFonts();
   return all.find((font) => keysOf(font).includes(offer.key));
+}
+
+// macOS embeds its system font under hidden names (".SFNS-Regular", ".SFNSText-Bold", the older
+// ".SFUIText-Regular") that the browser does not list among the installed fonts; the same design
+// is installed as SF Pro, under these PostScript names, on a machine with Apple's download.
+function appleAliases(offer: FontOffer): string[] {
+  if (!/^\.?sf(?:ns|ui)/i.test(offer.name)) return [];
+  const cut = offer.key.endsWith("-bi") ? "BoldItalic" : offer.key.endsWith("-b") ? "Bold" : offer.key.endsWith("-i") ? "RegularItalic" : "Regular";
+  return ["SFPro", "SFProText", "SFProDisplay"].map((family) => `${family}-${cut}`);
 }
 
 function keysOf(font: FontData): string[] {
