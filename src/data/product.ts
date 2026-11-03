@@ -9,6 +9,7 @@ export const PRODUCT = {
     "PDF Edit is a free PDF editor that runs entirely in your browser. Click any heading, line or paragraph and retype it in the page's own font, size, colour and spacing. Nothing is uploaded, and no account is needed.",
   shortDescription: "Free browser PDF editor that edits the page's own text in its own font. No uploads, no account.",
   repository: "https://github.com/vr-patel/pdf-editor",
+  issues: "https://github.com/vr-patel/pdf-editor/issues",
   licenseUrl: "https://github.com/vr-patel/pdf-editor/blob/main/LICENSE",
   // The stack the privacy claims rest on. Verified against the source: pdf.js parses and renders in
   // a web worker, pdf-lib writes the file, IndexedDB and localStorage hold the sessions, and the

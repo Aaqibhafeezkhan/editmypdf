@@ -505,6 +505,11 @@ a.tool-cell:hover span {
   color: var(--accent-ink);
 }
 
+/* The GitHub link is the one nav item that leaves the site; a little space sets it apart. */
+.site-nav-github {
+  margin-left: var(--sp-1);
+}
+
 .site-nav-cta {
   display: none;
 }
@@ -589,7 +594,7 @@ a.tool-cell:hover span {
 
 .footer-grid {
   display: grid;
-  grid-template-columns: 1.6fr repeat(3, 1fr);
+  grid-template-columns: 1.6fr repeat(4, 1fr);
   gap: var(--sp-10);
   padding-block: var(--sp-12) var(--sp-8);
 }
@@ -664,7 +669,8 @@ a.tool-cell:hover span {
   font-size: var(--fs-xs);
 }
 
-@media (max-width: 860px) {
+/* Five columns need the full width; below the nav's own breakpoint they pair up. */
+@media (max-width: 980px) {
   .footer-grid {
     grid-template-columns: 1fr 1fr;
   }

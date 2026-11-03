@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { Link } from "react-router";
 import { getDocument } from "pdfjs-dist";
@@ -42,6 +43,9 @@ type Preview = { src: string; pages: number; bytes: number };
 
 // First-page previews, kept for the visit so going back to this screen does not render them again.
 const previews = new Map<string, Preview>();
+
+// The "confirming" key for the list's Remove all, distinct from any session id.
+const ALL_DOCUMENTS = "all-documents";
 
 function formatWhen(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(
@@ -101,9 +105,72 @@ function usePreviews(sessions: SessionInfo[]): Map<string, Preview> {
   return previews;
 }
 
-// A stored document. Remove asks first in a small panel anchored to the button: the card clips its
-// own box, so the panel is portalled and positioned by the popover, above the button when there is
-// room and below it otherwise.
+// A destructive button that asks first, in a small panel anchored to itself. The card clips its own
+// box, so the panel is portalled and positioned by the popover, above the button when there is room
+// and below it otherwise. Escape, an outside click or "No" close it and give focus back to the button.
+function ConfirmRemove({
+  open,
+  onOpenChange,
+  onConfirm,
+  title,
+  description,
+  yes,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  title: string;
+  description: string;
+  yes: string;
+  children: ReactNode;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const keepRef = useRef<HTMLButtonElement>(null);
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent
+        className="doc-confirm"
+        role="alertdialog"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        side="top"
+        align="end"
+        sideOffset={8}
+        collisionPadding={16}
+        onOpenAutoFocus={(event) => {
+          // Land on the safe choice.
+          event.preventDefault();
+          keepRef.current?.focus({ preventScroll: true });
+        }}
+      >
+        <div className="doc-confirm-body">
+          <span className="doc-confirm-icon" aria-hidden="true">
+            <TriangleAlert />
+          </span>
+          <div className="doc-confirm-text">
+            <strong id={titleId}>{title}</strong>
+            <p id={descriptionId}>{description}</p>
+          </div>
+        </div>
+        <div className="doc-confirm-actions">
+          <Button ref={keepRef} type="button" size="sm" variant="ghost" onClick={() => onOpenChange(false)}>
+            No
+          </Button>
+          <Button type="button" size="sm" variant="destructive" className="doc-confirm-yes" onClick={onConfirm}>
+            <Trash2 />
+            {yes}
+          </Button>
+        </div>
+        <PopoverPrimitive.Arrow className="doc-confirm-arrow" width={12} height={12} aria-hidden="true" />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// A stored document.
 function DocumentCard({
   session,
   preview,
@@ -117,9 +184,6 @@ function DocumentCard({
   onConfirmingChange: (open: boolean) => void;
   onRemove: () => void;
 }) {
-  const titleId = useId();
-  const descriptionId = useId();
-  const keepRef = useRef<HTMLButtonElement>(null);
   const path = ROUTES.edit(session.id);
   const href = routeHref(path);
   const open = (event: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; button: number; preventDefault: () => void }) => {
@@ -153,55 +217,19 @@ function DocumentCard({
           <Button type="button" size="sm" variant="outline" onClick={() => navigate(path)}>
             Open
           </Button>
-          <Popover open={confirming} onOpenChange={onConfirmingChange}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                className="doc-remove"
-                aria-label={`Remove ${session.name}`}
-              >
-                <Trash2 />
-                Remove
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              className="doc-confirm"
-              role="alertdialog"
-              aria-labelledby={titleId}
-              aria-describedby={descriptionId}
-              side="top"
-              align="end"
-              sideOffset={8}
-              collisionPadding={16}
-              onOpenAutoFocus={(event) => {
-                // Land on the safe choice; Escape, an outside click or "No" give focus back to Remove.
-                event.preventDefault();
-                keepRef.current?.focus({ preventScroll: true });
-              }}
-            >
-              <div className="doc-confirm-body">
-                <span className="doc-confirm-icon" aria-hidden="true">
-                  <TriangleAlert />
-                </span>
-                <div className="doc-confirm-text">
-                  <strong id={titleId}>Delete this document?</strong>
-                  <p id={descriptionId}>Its edits in this browser are deleted too.</p>
-                </div>
-              </div>
-              <div className="doc-confirm-actions">
-                <Button ref={keepRef} type="button" size="sm" variant="ghost" onClick={() => onConfirmingChange(false)}>
-                  No
-                </Button>
-                <Button type="button" size="sm" variant="destructive" className="doc-confirm-yes" onClick={onRemove}>
-                  <Trash2 />
-                  Yes, delete
-                </Button>
-              </div>
-              <PopoverPrimitive.Arrow className="doc-confirm-arrow" width={12} height={12} aria-hidden="true" />
-            </PopoverContent>
-          </Popover>
+          <ConfirmRemove
+            open={confirming}
+            onOpenChange={onConfirmingChange}
+            onConfirm={onRemove}
+            title="Delete this document?"
+            description="Its edits in this browser are deleted too."
+            yes="Yes, delete"
+          >
+            <Button type="button" size="sm" variant="destructive" className="doc-remove" aria-label={`Remove ${session.name}`}>
+              <Trash2 />
+              Remove
+            </Button>
+          </ConfirmRemove>
         </div>
       </div>
     </li>
@@ -218,7 +246,7 @@ export function AppHome() {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState<"open" | "blank" | "sample" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The card whose Remove is asking for confirmation; one at a time.
+  // The card whose Remove is asking for confirmation (or ALL_DOCUMENTS for the list's Remove all); one at a time.
   const [confirming, setConfirming] = useState<string | null>(null);
   const previewMap = usePreviews(sessions);
 
@@ -430,11 +458,35 @@ export function AppHome() {
         <section className="home-docs" aria-labelledby="docs-heading">
           <div className="home-docs-head">
             <h2 id="docs-heading">In this browser</h2>
-            <span>
-              {sessions.length === 0
-                ? "Nothing saved yet"
-                : `${sessions.length} ${sessions.length === 1 ? "document" : "documents"} · saved on this device`}
-            </span>
+            <div className="home-docs-tools">
+              <span>
+                {sessions.length === 0
+                  ? "Nothing saved yet"
+                  : `${sessions.length} ${sessions.length === 1 ? "document" : "documents"} · saved on this device`}
+              </span>
+              {sessions.length > 1 && (
+                <ConfirmRemove
+                  open={confirming === ALL_DOCUMENTS}
+                  onOpenChange={(open) => setConfirming(open ? ALL_DOCUMENTS : null)}
+                  onConfirm={() => {
+                    setConfirming(null);
+                    for (const session of sessions) {
+                      removeSession(session.id);
+                      previews.delete(session.id);
+                    }
+                    setSessions(listSessions());
+                  }}
+                  title={`Delete all ${sessions.length} documents?`}
+                  description="Every document saved in this browser is deleted, along with its edits."
+                  yes="Yes, delete all"
+                >
+                  <Button type="button" size="sm" variant="ghost" className="doc-remove-all">
+                    <Trash2 />
+                    Remove all
+                  </Button>
+                </ConfirmRemove>
+              )}
+            </div>
           </div>
           {ready && sessions.length === 0 ? (
             <div className="home-empty">
@@ -470,7 +522,10 @@ export function AppHome() {
 
         <p className="home-fine">
           {PRODUCT.name} runs entirely in this browser. <Link to={ROUTES.privacy}>What is stored, and where</Link> ·{" "}
-          <Link to={ROUTES.howItWorks}>How it works</Link> · <Link to={ROUTES.faq}>FAQ</Link>
+          <Link to={ROUTES.howItWorks}>How it works</Link> · <Link to={ROUTES.faq}>FAQ</Link> ·{" "}
+          <a href={PRODUCT.repository} rel="noopener noreferrer" target="_blank">
+            Source on GitHub
+          </a>
         </p>
       </main>
 

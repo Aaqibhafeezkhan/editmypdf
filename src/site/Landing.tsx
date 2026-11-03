@@ -43,6 +43,7 @@ import { FAQ } from "../data/faq.ts";
 import { POSTS } from "../data/posts.ts";
 import { ANALYTICS, PRODUCT, ROUTES } from "../data/product.ts";
 import { Accordion } from "./Accordion.tsx";
+import { GitHubMark } from "./GitHubMark.tsx";
 import { EditorWindow } from "./EditorWindow.tsx";
 import { faqJsonLd } from "./Faq.tsx";
 import { Markdown } from "./Markdown.tsx";
@@ -256,6 +257,11 @@ export function Landing() {
             </li>
             <li>
               <Check aria-hidden="true" /> No file size limit
+            </li>
+            <li className="hero-trust-link">
+              <a href={PRODUCT.repository} rel="noopener noreferrer" target="_blank" title="Source code on GitHub">
+                <GitHubMark /> Open source
+              </a>
             </li>
           </ul>
         </div>

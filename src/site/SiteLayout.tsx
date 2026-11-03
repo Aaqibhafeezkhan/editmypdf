@@ -19,6 +19,7 @@ import { ToolMark } from "./CompareCard.tsx";
 import { ANALYTICS, PRODUCT, publicUrl, ROUTES, siteOrigin } from "../data/product.ts";
 import { Analytics } from "./Analytics.tsx";
 import { Logo } from "./Logo.tsx";
+import { GitHubMark } from "./GitHubMark.tsx";
 import "./site.css";
 
 // Each item carries the icon its page uses in its own heading, so the nav and the page agree.
@@ -217,6 +218,16 @@ export function SiteLayout() {
                 </NavLink>
               ),
             )}
+            <a
+              href={PRODUCT.repository}
+              className="site-nav-link site-nav-github"
+              rel="noopener noreferrer"
+              target="_blank"
+              title="Source code on GitHub"
+            >
+              <GitHubMark />
+              GitHub
+            </a>
             <Link to={ROUTES.app} className="btn btn-primary site-nav-cta">
               Open the editor <ArrowRight aria-hidden="true" />
             </Link>
@@ -283,6 +294,26 @@ export function SiteLayout() {
             <Link to={ROUTES.faq}>FAQ</Link>
             <Link to={ROUTES.privacy}>Privacy</Link>
             <Link to={ROUTES.terms}>Terms of use</Link>
+          </nav>
+          <nav className="footer-col" aria-label="GitHub">
+            <h2>
+              <GitHubMark /> GitHub
+            </h2>
+            <a href={PRODUCT.repository} rel="noopener noreferrer" target="_blank">
+              Source code
+            </a>
+            <a href={`${PRODUCT.repository}/stargazers`} rel="noopener noreferrer" target="_blank">
+              Star the project
+            </a>
+            <a href={PRODUCT.issues} rel="noopener noreferrer" target="_blank">
+              Report a problem
+            </a>
+            <a href={`${PRODUCT.repository}/releases`} rel="noopener noreferrer" target="_blank">
+              Releases
+            </a>
+            <a href={PRODUCT.licenseUrl} rel="noopener noreferrer" target="_blank">
+              MIT licence
+            </a>
           </nav>
           <nav className="footer-col" aria-label="Compare">
             <h2>
