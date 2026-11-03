@@ -20,6 +20,7 @@ import { domText, placeCaret, selectionOffsets } from "./spanDom.ts";
 import { blockWidth, caretIndexAt, editorTop, fontCss as faceCss, lineShift, wrapSlack } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { boundsOf, dist, hitTest, resizeAnnotation, rotateBy, rotatePoint, shapeFromDrag, translate } from "./geometry.ts";
+import { parentSection, sameGuides, snapMove, type Box, type Guide } from "./guides.ts";
 import { detailCanvas, startRender } from "./pdf.ts";
 import { arrowBarbs, isBoxShape, isLinearShape, isOpenShape, lineHeadFor, outlinePoints, pointsToPath } from "./shapes.ts";
 import { measureTextWidth } from "./textMeasure.ts";
@@ -42,6 +43,9 @@ import {
 
 const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
 type Handle = (typeof HANDLES)[number];
+
+// How close, in screen pixels, a dragged mark's edge or centre comes to a guide before it snaps.
+const SNAP_PX = 4;
 
 type Drag =
   | { type: "ink"; origin: Annotation[]; annotation: InkAnnotation; last: Point }
@@ -68,7 +72,8 @@ type Drag =
       page: number;
       moved: boolean;
     }
-  | { type: "move"; origin: Annotation[]; id: string; start: Point; moved: boolean }
+  // `box` is the mark's bounds where the drag found it, measured before its first move.
+  | { type: "move"; origin: Annotation[]; id: string; start: Point; moved: boolean; box?: Box }
   // The right edge of a text patch's box being dragged: the width its text wraps in.
   | { type: "width"; origin: Annotation[]; id: string; start: Point; startWidth: number; moved: boolean }
   | {
@@ -248,6 +253,8 @@ export function PageStage({
   }, []);
   const [hoverContent, setHoverContent] = useState<string | null>(null);
   const contentRef = useRef<ContentElement[]>([]);
+  // The alignment guides the mark being moved is snapped to; none once the drag ends.
+  const [guides, setGuides] = useState<Guide[]>([]);
 
   const focusText = (id: string) => {
     const element = textareas.current.get(id);
@@ -506,6 +513,7 @@ export function PageStage({
     }
 
     if (drag.type === "move" || drag.type === "width") {
+      setGuides((current) => (current.length === 0 ? current : []));
       if (drag.moved && draftText.current?.id !== drag.id) onPushBaseline(drag.origin);
       onSelect(drag.id);
       return;
@@ -594,12 +602,29 @@ export function PageStage({
     }
 
     if (drag.type === "move") {
-      const dx = point.x - drag.start.x;
-      const dy = point.y - drag.start.y;
+      let dx = point.x - drag.start.x;
+      let dy = point.y - drag.start.y;
       if (!drag.moved && Math.hypot(dx, dy) < 1) return;
-      drag.moved = true;
       const original = drag.origin.find((item) => item.id === drag.id);
       if (!original) return;
+      // The mark's box is measured before its first move, while it still sits where the drag
+      // found it; a text field's comes from its editor, whose height follows its lines.
+      if (!drag.moved) {
+        drag.box = (original.kind === "text" ? textBox(original) : null) ?? boundsOf(original);
+      }
+      drag.moved = true;
+      let shown: Guide[] = [];
+      // Alt moves the mark freely: no snapping, no guides.
+      if (drag.box && !event.altKey) {
+        const raw = { ...drag.box, x: drag.box.x + dx, y: drag.box.y + dy };
+        const section = parentSection(raw, contentRef.current, original.kind === "patch" ? original.sourceId : null);
+        const page = { x: 0, y: 0, w: baseWidth, h: baseHeight };
+        const snap = snapMove(drag.box, dx, dy, page, section, SNAP_PX / scale);
+        dx = snap.dx;
+        dy = snap.dy;
+        shown = snap.guides;
+      }
+      setGuides((current) => (sameGuides(current, shown) ? current : shown));
       onReplace(drag.origin.map((item) => (item.id === drag.id ? translate(original, dx, dy) : item)));
       return;
     }
@@ -1852,6 +1877,45 @@ export function PageStage({
             </button>
           );
         })}
+        {guides.length > 0 && (
+          <div className="align-guides" aria-hidden="true">
+            <svg viewBox={`0 0 ${baseWidth} ${baseHeight}`}>
+              {guides.map((guide) => (
+                <line
+                  key={`${guide.axis}-${guide.scope}-${guide.at}`}
+                  className={`align-guide ${guide.scope}`}
+                  x1={guide.axis === "x" ? guide.at : guide.from}
+                  y1={guide.axis === "x" ? guide.from : guide.at}
+                  x2={guide.axis === "x" ? guide.at : guide.to}
+                  y2={guide.axis === "x" ? guide.to : guide.at}
+                  vectorEffect="non-scaling-stroke"
+                  shapeRendering="crispEdges"
+                />
+              ))}
+            </svg>
+            {guides.map((guide) => {
+              // The label sits at the line's top (left) end, inside the page: it swings to the
+              // other side of a line along the page's right or bottom edge.
+              const vertical = guide.axis === "x";
+              const flip = vertical ? guide.at > baseWidth - 56 / scale : guide.at > baseHeight - 24 / scale;
+              const along = guide.from * scale + 4;
+              const across = guide.at * scale + (flip ? -4 : 4);
+              return (
+                <span
+                  key={`${guide.axis}-${guide.scope}-${guide.at}-tag`}
+                  className={`align-guide-tag ${guide.scope}`}
+                  style={{
+                    left: vertical ? across : along,
+                    top: vertical ? along : across,
+                    transform: flip ? (vertical ? "translateX(-100%)" : "translateY(-100%)") : undefined,
+                  }}
+                >
+                  {guide.scope === "page" ? "Page" : "Section"}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
       </div>
       <span className="page-number">Page {pageIndex + 1}</span>

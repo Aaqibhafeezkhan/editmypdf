@@ -579,6 +579,68 @@
   white-space: nowrap;
 }
 
+/* Alignment guides shown while a mark is dragged: the page's lines run its full length in the
+   accent, the lines of the content block the mark sits over run across that block in coral,
+   dashed. Both sit above the page and its text and below the drag handles. */
+.align-guides {
+  --guide-page: var(--accent);
+  --guide-section: var(--coral);
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* The paper is white in both themes, so the dark theme keeps the light theme's accent and coral
+   rather than its own lighter tints, which would fade on the page. */
+:root[data-appearance="dark"] .align-guides {
+  --guide-page: oklch(0.5 0.19 262);
+  --guide-section: oklch(0.62 0.17 40);
+}
+
+.align-guides svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.align-guide {
+  fill: none;
+  stroke-width: 1;
+}
+
+.align-guide.page {
+  stroke: var(--guide-page);
+}
+
+.align-guide.section {
+  stroke: var(--guide-section);
+  stroke-dasharray: 5 3;
+}
+
+.align-guide-tag {
+  position: absolute;
+  padding: 0 5px;
+  height: 16px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.align-guide-tag.page {
+  background: var(--guide-page);
+}
+
+.align-guide-tag.section {
+  background: var(--guide-section);
+}
+
 .text-box {
   position: absolute;
   z-index: 2;
