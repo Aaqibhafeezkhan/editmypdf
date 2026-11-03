@@ -21,6 +21,7 @@ import { ANALYTICS, PRODUCT, publicUrl, ROUTES, siteOrigin } from "../data/produ
 import { Analytics } from "./Analytics.tsx";
 import { Logo } from "./Logo.tsx";
 import { GitHubMark } from "./GitHubMark.tsx";
+import { LinkedInMark, XMark } from "./SocialMarks.tsx";
 import "./site.css";
 
 // Each item carries the icon its page uses in its own heading, so the nav and the page agree.
@@ -293,6 +294,21 @@ export function SiteLayout() {
                 GitHub
               </a>
               .
+            </p>
+            <p className="footer-contact">
+              <span>
+                Made with{" "}
+                <span role="img" aria-label="love">
+                  ❤️
+                </span>{" "}
+                by <strong className="footer-author">{PRODUCT.author.name}</strong>. Say hello:
+              </span>
+              <a href={PRODUCT.author.linkedin} rel="me noopener noreferrer" target="_blank">
+                <LinkedInMark /> LinkedIn
+              </a>
+              <a href={PRODUCT.author.x} rel="me noopener noreferrer" target="_blank">
+                <XMark /> {PRODUCT.author.xHandle}
+              </a>
             </p>
           </div>
           <nav className="footer-col" aria-label="Product">

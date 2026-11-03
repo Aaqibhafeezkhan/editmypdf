@@ -11,6 +11,13 @@ export const PRODUCT = {
   repository: "https://github.com/vr-patel/editmypdf",
   issues: "https://github.com/vr-patel/editmypdf/issues",
   licenseUrl: "https://github.com/vr-patel/editmypdf/blob/main/LICENSE",
+  // Who made it, and where to reach them. The footer shows these.
+  author: {
+    name: "VR Patel",
+    linkedin: "https://www.linkedin.com/in/vr-patel",
+    x: "https://x.com/_vrpatel",
+    xHandle: "@_vrpatel",
+  },
   // The stack the privacy claims rest on. Verified against the source: pdf.js parses and renders in
   // a web worker, pdf-lib writes the file, IndexedDB and localStorage hold the sessions, and the
   // download is a blob URL. The only fetch() in the app loads its own emoji images.
