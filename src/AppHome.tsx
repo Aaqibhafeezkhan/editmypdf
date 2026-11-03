@@ -30,8 +30,9 @@ import {
   removeSession,
   type SessionInfo,
 } from "./session.ts";
-import { LogoMark } from "./site/Logo.tsx";
+import { AppBar } from "./AppBar.tsx";
 import { ThemeSelect } from "./ThemeSelect.tsx";
+import "./chrome.css";
 import "./AppHome.css";
 
 const SAMPLE_URL = publicUrl("sample.pdf");
@@ -339,24 +340,23 @@ export function AppHome() {
           </div>
         </div>
       )}
-      <header className="topbar">
-        <div className="brand">
-          <Link className="home-link" to={ROUTES.home} aria-label={`${PRODUCT.name} home`}>
-            <LogoMark size={26} />
-            <strong>{PRODUCT.name}</strong>
-          </Link>
-          <div className="doc-switch">
-            <span className="file-name">Documents</span>
+      <AppBar
+        brandTo={ROUTES.home}
+        brandLabel={`${PRODUCT.name} home`}
+        center={
+          <div className="doc-title">
+            <span className="doc-title-static">
+              <span className="doc-title-name">Documents</span>
+            </span>
           </div>
-        </div>
-        <div className="top-actions">
-          <ThemeSelect />
-          <Button type="button" disabled={busy !== null} onClick={() => fileRef.current?.click()}>
-            <Upload />
-            {busy === "open" ? "Opening…" : "Open a PDF"}
-          </Button>
-        </div>
-      </header>
+        }
+      >
+        <ThemeSelect />
+        <Button type="button" disabled={busy !== null} onClick={() => fileRef.current?.click()}>
+          <Upload />
+          {busy === "open" ? "Opening…" : "Open a PDF"}
+        </Button>
+      </AppBar>
 
       <main className="home-main">
         <section className="home-hero">

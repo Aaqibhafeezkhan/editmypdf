@@ -1,13 +1,18 @@
-/* The documents screen shares the editor's top bar (App.css) and adds its own body. */
-@import "./App.css";
+/* The documents screen: the shared app bar comes from chrome.css; this is its body. */
 
 .home {
   position: relative;
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--canvas);
+  background: var(--paper-0);
   color: var(--ink);
+}
+
+/* The documents screen scrolls as a whole, under the fixed-height app bar. */
+.home > .app-bar {
+  position: sticky;
+  top: 0;
 }
 
 .home-main {

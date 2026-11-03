@@ -1,21 +1,21 @@
 import { useState } from "react";
+import { Search } from "lucide-react";
 import { BRUSHES, DASHES, type Brush } from "./brushes.ts";
 import { EMOJI_GROUPS, emojiSrc } from "./emojis.ts";
+import { PanelClose, PanelEmpty, PanelHead, PanelSection, PropRow } from "./PanelChrome.tsx";
 import { SignaturePanel } from "./SignaturePanel.tsx";
 import { ShapeGlyph } from "./ShapeGlyph.tsx";
 import { SHAPE_GROUPS, SHAPE_LABEL, type ShapeId } from "./shapes.ts";
 import type { LineCap, StrokeStyle, Tool } from "./types.ts";
 import { SWATCHES } from "./types.ts";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 function StrokePreview({ brush, color }: { brush: Brush; color: string }) {
   return (
-    <svg viewBox="0 0 148 36" className="h-9 w-full" aria-hidden="true">
+    <svg viewBox="0 0 148 36" className="brush-preview" aria-hidden="true">
       <path
         d="M6 24 C 28 6, 46 30, 74 16 S 118 8, 142 18"
         fill="none"
@@ -40,24 +40,21 @@ function Swatches({
   onColor: (color: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-8 gap-1.5" role="group" aria-label={label}>
-      {SWATCHES.map((swatch) => (
-        <button
-          key={swatch}
-          type="button"
-          aria-label={`${label} ${swatch}`}
-          aria-pressed={color.toLowerCase() === swatch}
-          className="size-6 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          style={{
-            background: swatch,
-            boxShadow:
-              color.toLowerCase() === swatch
-                ? "0 0 0 2px var(--ring)"
-                : "inset 0 0 0 1px var(--swatch-edge)",
-          }}
-          onClick={() => onColor(swatch)}
-        />
-      ))}
+    <div className="swatch-grid" role="group" aria-label={label}>
+      {SWATCHES.map((swatch) => {
+        const selected = color.toLowerCase() === swatch;
+        return (
+          <button
+            key={swatch}
+            type="button"
+            aria-label={`${label} ${swatch}`}
+            aria-pressed={selected}
+            className={selected ? "swatch selected" : "swatch"}
+            style={{ background: swatch }}
+            onClick={() => onColor(swatch)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -77,6 +74,7 @@ export function ToolDock({
   onSignature,
   onAdjustStart,
   onAdjustEnd,
+  onClose,
 }: {
   tool: Tool;
   shape: ShapeId;
@@ -92,12 +90,13 @@ export function ToolDock({
   onDash: (dash: string | null) => void;
   onAdjustStart: () => void;
   onAdjustEnd: () => void;
+  onClose: () => void;
 }) {
   const drawing = tool === "pencil";
   const emojis = tool === "emoji";
   const [shapeQuery, setShapeQuery] = useState("");
   const [emojiQuery, setEmojiQuery] = useState("");
-  if (tool === "signature") return <SignaturePanel onPlace={onSignature} />;
+  if (tool === "signature") return <SignaturePanel onPlace={onSignature} onClose={onClose} />;
   const opacity = Math.round(stroke.opacity * 100);
   const dashValue = DASHES.find((item) => item.dash === stroke.dash)?.id ?? "solid";
   const shapeNeedle = shapeQuery.trim().toLowerCase();
@@ -110,195 +109,213 @@ export function ToolDock({
     ...group,
     items: group.items.filter((item) => item.name.toLowerCase().includes(emojiNeedle)),
   })).filter((group) => group.items.length > 0);
-  const heading = drawing ? "Drawing" : emojis ? "Emojis" : "Shapes";
+  const heading = drawing ? "Pencil" : emojis ? "Emoji" : "Shapes";
   const detail = drawing
-    ? "Pen style, color, and stroke"
+    ? "Pen, colour and stroke for the next line"
     : emojis
-      ? "Choose an emoji to place it on the page"
-      : "Choose a line or shape";
+      ? "Choose one to place it on the page"
+      : "Choose one, then drag on the page";
 
   return (
-    <aside className="tool-dock" aria-label={drawing ? "Drawing options" : emojis ? "Emoji options" : "Shape options"}>
-      <div className="px-4 pt-3.5 pb-2">
-        <h2 className="text-sm font-semibold tracking-tight">{heading}</h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
-        {drawing ? null : (
+    <aside className="tool-dock" aria-label={drawing ? "Pencil options" : emojis ? "Emoji options" : "Shape options"}>
+      <PanelHead title={heading} detail={detail}>
+        <PanelClose label="Close options" onClick={onClose} />
+      </PanelHead>
+      {!drawing && (
+        <div className="dock-search">
+          <Search aria-hidden="true" />
           <Input
             value={emojis ? emojiQuery : shapeQuery}
             onChange={(event) => (emojis ? setEmojiQuery(event.target.value) : setShapeQuery(event.target.value))}
-            placeholder={emojis ? "Search emojis" : "Search shapes"}
-            aria-label={emojis ? "Search emojis" : "Search shapes"}
-            className="mt-3 h-8"
+            placeholder={emojis ? "Search emoji" : "Search shapes"}
+            aria-label={emojis ? "Search emoji" : "Search shapes"}
+            className="dock-search-input"
           />
-        )}
-      </div>
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="grid gap-5 px-3 pt-1 pb-4">
+        </div>
+      )}
+      <ScrollArea className="panel-scroll">
+        <div className="panel-body">
           {drawing ? (
             <>
-              <div className="grid gap-1.5" role="listbox" aria-label="Pen styles">
-                {BRUSHES.map((brush) => {
-                  const selected = stroke.brush === brush.id;
-                  return (
-                    <button
-                      key={brush.id}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      className={
-                        selected
-                          ? "grid gap-1 rounded-lg border border-primary bg-accent px-2.5 py-2 text-left"
-                          : "grid gap-1 rounded-lg border border-transparent px-2.5 py-2 text-left hover:bg-muted"
-                      }
-                      onClick={() => onBrush(brush)}
-                    >
-                      <span className="flex items-baseline justify-between gap-2">
-                        <span className="text-sm font-medium">{brush.label}</span>
-                        <span className="text-[11px] text-muted-foreground">{brush.detail}</span>
-                      </span>
-                      <StrokePreview brush={brush} color={stroke.color} />
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="grid gap-2">
-                <Label className="px-1 text-xs text-muted-foreground">Color</Label>
-                <Swatches label="Stroke color" color={stroke.color} onColor={onStrokeColor} />
-                <div className="flex items-center gap-2 px-1">
+              <PanelSection title="Pen">
+                <div className="brush-list" role="listbox" aria-label="Pen styles">
+                  {BRUSHES.map((brush) => {
+                    const selected = stroke.brush === brush.id;
+                    return (
+                      <button
+                        key={brush.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        className={selected ? "brush-row selected" : "brush-row"}
+                        onClick={() => onBrush(brush)}
+                      >
+                        <span className="brush-text">
+                          <span className="brush-name">{brush.label}</span>
+                          <span className="brush-detail">{brush.detail}</span>
+                        </span>
+                        <StrokePreview brush={brush} color={stroke.color} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </PanelSection>
+              <PanelSection title="Colour">
+                <Swatches label="Stroke colour" color={stroke.color} onColor={onStrokeColor} />
+                <div className="color-row">
                   <Input
                     type="color"
-                    aria-label="Stroke color"
+                    aria-label="Stroke colour"
                     value={stroke.color}
-                    className="h-8 w-10 shrink-0 cursor-pointer p-1"
+                    className="color-well"
                     onPointerDown={onAdjustStart}
                     onChange={(event) => onStrokeColor(event.target.value)}
                     onBlur={onAdjustEnd}
                   />
-                  <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-                    {stroke.color}
-                  </span>
+                  <span className="color-hex">{stroke.color}</span>
                 </div>
-              </div>
-              <div className="grid gap-2 px-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground">Stroke width</Label>
-                  <span className="text-xs tabular-nums text-muted-foreground">{Math.round(stroke.strokeWidth)}</span>
-                </div>
-                <Slider
-                  aria-label="Stroke width"
-                  min={1}
-                  max={48}
-                  step={1}
-                  value={[stroke.strokeWidth]}
-                  onPointerDown={onAdjustStart}
-                  onValueChange={(next) => onStrokeWidth(next[0] ?? stroke.strokeWidth)}
-                  onValueCommit={onAdjustEnd}
-                />
-              </div>
-              <div className="grid gap-2 px-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground">Opacity</Label>
-                  <span className="text-xs tabular-nums text-muted-foreground">{opacity}%</span>
-                </div>
-                <Slider
-                  aria-label="Opacity"
-                  min={5}
-                  max={100}
-                  step={1}
-                  value={[opacity]}
-                  onPointerDown={onAdjustStart}
-                  onValueChange={(next) => onOpacity((next[0] ?? opacity) / 100)}
-                  onValueCommit={onAdjustEnd}
-                />
-              </div>
-              <div className="grid gap-2 px-1">
-                <Label className="text-xs text-muted-foreground">Tip</Label>
-                <ToggleGroup
-                  type="single"
-                  variant="outline"
-                  size="sm"
-                  className="justify-start"
-                  value={stroke.cap}
-                  onValueChange={(value) => {
-                    if (value === "round" || value === "square" || value === "butt") onCap(value);
-                  }}
-                  aria-label="Stroke tip"
-                >
-                  <ToggleGroupItem value="round">Round</ToggleGroupItem>
-                  <ToggleGroupItem value="square">Square</ToggleGroupItem>
-                  <ToggleGroupItem value="butt">Flat</ToggleGroupItem>
-                </ToggleGroup>
-              </div>
-              <div className="grid gap-2 px-1">
-                <Label className="text-xs text-muted-foreground">Stroke</Label>
-                <ToggleGroup
-                  type="single"
-                  variant="outline"
-                  size="sm"
-                  className="justify-start"
-                  value={dashValue}
-                  onValueChange={(value) => {
-                    const preset = DASHES.find((item) => item.id === value);
-                    if (preset) onDash(preset.dash);
-                  }}
-                  aria-label="Stroke pattern"
-                >
-                  {DASHES.map((item) => (
-                    <ToggleGroupItem key={item.id} value={item.id}>
-                      {item.label}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-              </div>
+              </PanelSection>
+              <PanelSection title="Stroke">
+                <PropRow label="Width">
+                  <div className="number-slider">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={48}
+                      aria-label="Stroke width value"
+                      value={Math.round(stroke.strokeWidth)}
+                      className="number-field"
+                      onFocus={onAdjustStart}
+                      onChange={(event) => {
+                        const next = Number(event.target.value);
+                        if (Number.isFinite(next)) onStrokeWidth(Math.min(48, Math.max(1, next)));
+                      }}
+                      onBlur={onAdjustEnd}
+                    />
+                    <Slider
+                      aria-label="Stroke width"
+                      min={1}
+                      max={48}
+                      step={1}
+                      value={[stroke.strokeWidth]}
+                      onPointerDown={onAdjustStart}
+                      onValueChange={(next) => onStrokeWidth(next[0] ?? stroke.strokeWidth)}
+                      onValueCommit={onAdjustEnd}
+                    />
+                  </div>
+                </PropRow>
+                <PropRow label="Opacity">
+                  <div className="number-slider">
+                    <Input
+                      type="number"
+                      min={5}
+                      max={100}
+                      aria-label="Opacity value"
+                      value={opacity}
+                      className="number-field"
+                      onFocus={onAdjustStart}
+                      onChange={(event) => {
+                        const next = Number(event.target.value);
+                        if (Number.isFinite(next)) onOpacity(Math.min(100, Math.max(5, next)) / 100);
+                      }}
+                      onBlur={onAdjustEnd}
+                    />
+                    <Slider
+                      aria-label="Opacity"
+                      min={5}
+                      max={100}
+                      step={1}
+                      value={[opacity]}
+                      onPointerDown={onAdjustStart}
+                      onValueChange={(next) => onOpacity((next[0] ?? opacity) / 100)}
+                      onValueCommit={onAdjustEnd}
+                    />
+                  </div>
+                </PropRow>
+                <PropRow label="Tip">
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    spacing={0}
+                    className="segmented"
+                    value={stroke.cap}
+                    onValueChange={(value) => {
+                      if (value === "round" || value === "square" || value === "butt") onCap(value);
+                    }}
+                    aria-label="Stroke tip"
+                  >
+                    <ToggleGroupItem value="round">Round</ToggleGroupItem>
+                    <ToggleGroupItem value="square">Square</ToggleGroupItem>
+                    <ToggleGroupItem value="butt">Flat</ToggleGroupItem>
+                  </ToggleGroup>
+                </PropRow>
+                <PropRow label="Pattern">
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    spacing={0}
+                    className="segmented"
+                    value={dashValue}
+                    onValueChange={(value) => {
+                      const preset = DASHES.find((item) => item.id === value);
+                      if (preset) onDash(preset.dash);
+                    }}
+                    aria-label="Stroke pattern"
+                  >
+                    {DASHES.map((item) => (
+                      <ToggleGroupItem key={item.id} value={item.id}>
+                        {item.label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </PropRow>
+              </PanelSection>
             </>
           ) : emojis ? (
             emojiGroups.length === 0 ? (
-              <p className="px-1 text-xs text-muted-foreground">No emojis match.</p>
+              <PanelEmpty title="No emoji match">Try another word.</PanelEmpty>
             ) : (
               emojiGroups.map((group) => (
-                <div key={group.title} className="grid gap-2">
-                  <p className="px-1 text-xs font-medium text-muted-foreground">{group.title}</p>
-                  <div className="grid grid-cols-6 gap-1">
+                <PanelSection key={group.title} title={group.title}>
+                  <div className="emoji-grid">
                     {group.items.map((item) => (
-                      <Button
+                      <button
                         key={item.id}
                         type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-9"
+                        className="emoji-tile"
                         aria-label={item.name}
                         title={item.name}
                         onClick={() => onEmoji(item.id)}
                       >
-                        <img src={emojiSrc(item.id)} alt="" className="size-6 object-contain" />
-                      </Button>
+                        <img src={emojiSrc(item.id)} alt="" />
+                      </button>
                     ))}
                   </div>
-                </div>
+                </PanelSection>
               ))
             )
           ) : shapeGroups.length === 0 ? (
-            <p className="px-1 text-xs text-muted-foreground">No shapes match.</p>
+            <PanelEmpty title="No shapes match">Try another word.</PanelEmpty>
           ) : (
             shapeGroups.map((group) => (
-              <div key={group.title} className="grid gap-2">
-                <p className="px-1 text-xs font-medium text-muted-foreground">{group.title}</p>
-                <div className="grid grid-cols-3 gap-1.5">
+              <PanelSection key={group.title} title={group.title}>
+                <div className="shape-grid">
                   {group.ids.map((id) => (
-                    <Button
+                    <button
                       key={id}
                       type="button"
-                      variant={shape === id ? "secondary" : "ghost"}
+                      className={shape === id ? "shape-tile selected" : "shape-tile"}
                       aria-pressed={shape === id}
-                      className="h-auto flex-col gap-1.5 px-1 py-2.5"
                       onClick={() => onShape(id)}
                     >
-                      <ShapeGlyph id={id} className="size-7" />
-                      <span className="text-[11px] leading-tight font-normal">{SHAPE_LABEL[id]}</span>
-                    </Button>
+                      <ShapeGlyph id={id} className="shape-tile-glyph" />
+                      <span className="shape-tile-label">{SHAPE_LABEL[id]}</span>
+                    </button>
                   ))}
                 </div>
-              </div>
+              </PanelSection>
             ))
           )}
         </div>
