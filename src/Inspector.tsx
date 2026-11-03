@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 
 const INSPECTOR_KEY = "pdf-editor:inspector";
 
@@ -9,9 +10,12 @@ function readInspectorOpen(): boolean {
     return true;
   }
 }
+import { ColorControl } from "./ColorControl.tsx";
+import { keepFocus } from "./keepFocus.ts";
 import { contentDetail, contentLabel, patchMissingGlyphs, type ContentElement, type ContentKind } from "./content.ts";
 import {
   AlignCenter,
+  AlignJustify,
   AlignLeft,
   AlignRight,
   Bold,
@@ -19,16 +23,29 @@ import {
   Italic,
   PanelRightClose,
   PanelRightOpen,
+  Strikethrough,
   Trash2,
   Underline,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  clampInspectorWidth,
+  clampPaneSplit,
+  DEFAULT_LAYOUT,
+  HANDLE_KEY_STEP,
+  INSPECTOR_MIN_WIDTH,
+  maxInspectorWidth,
+  PANE_MIN_HEIGHT_FRACTION,
+  readInspectorLayout,
+  writeInspectorLayout,
+  type InspectorLayout,
+} from "./inspectorLayout.ts";
 import { ObjectList } from "./ObjectList.tsx";
 import type { ObjectHover, ObjectRow } from "./objects.ts";
+import type { FormatChange, FormatState } from "./textFormat.ts";
 import {
   Select,
   SelectContent,
@@ -42,11 +59,192 @@ import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { brushById, DASHES } from "./brushes.ts";
 import { SHAPE_LABEL, type ShapeId } from "./shapes.ts";
-import type { Align, Annotation, FontId, LineCap, PatchAnnotation, StrokeStyle, TextStyle, Tool } from "./types.ts";
+import type { Align, Annotation, FontId, LineCap, PatchAnnotation, StrokeStyle, TextAlign, TextStyle, Tool } from "./types.ts";
 import { FONT_OPTIONS, SWATCHES } from "./types.ts";
 
-function keepFocus(event: { preventDefault: () => void }) {
-  event.preventDefault();
+type StyleKey = "bold" | "italic" | "underline" | "strike";
+
+// The column's width and the panes' split, kept across reloads and clamped to the window.
+function useInspectorLayout() {
+  const [layout, setLayout] = useState<InspectorLayout>(() =>
+    readInspectorLayout(typeof window === "undefined" ? DEFAULT_LAYOUT.width * 4 : window.innerWidth),
+  );
+  useEffect(() => writeInspectorLayout(layout), [layout]);
+  useEffect(() => {
+    const onResize = () =>
+      setLayout((current) => {
+        const width = clampInspectorWidth(current.width, window.innerWidth);
+        return width === current.width ? current : { ...current, width };
+      });
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const setWidth = (width: number) =>
+    setLayout((current) => {
+      const next = clampInspectorWidth(width, window.innerWidth);
+      return next === current.width ? current : { ...current, width: next };
+    });
+  const setSplit = (split: number) =>
+    setLayout((current) => {
+      const next = clampPaneSplit(split);
+      return Math.abs(next - current.split) < 0.0005 ? current : { ...current, split: next };
+    });
+  return { layout, setWidth, setSplit };
+}
+
+// A drag handle between two areas: pointer drag, arrow keys and a double-click back to the default.
+// `onMove` gets the size in px the drag asks for, measured from `size()` at the start.
+function SplitHandle({
+  className,
+  orientation,
+  label,
+  valueNow,
+  valueMin,
+  valueMax,
+  size,
+  onMove,
+  onReset,
+  onDragging,
+}: {
+  className: string;
+  orientation: "vertical" | "horizontal";
+  label: string;
+  valueNow: number;
+  valueMin: number;
+  valueMax: number;
+  size: () => number;
+  onMove: (px: number) => void;
+  onReset: () => void;
+  onDragging: (dragging: boolean) => void;
+}) {
+  const start = useRef<{ x: number; y: number; size: number } | null>(null);
+  const [active, setActive] = useState(false);
+  const vertical = orientation === "vertical";
+  const begin = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // A very fast press can release the pointer before capture; the drag still runs.
+    }
+    start.current = { x: event.clientX, y: event.clientY, size: size() };
+    setActive(true);
+    onDragging(true);
+    document.body.classList.add(vertical ? "resizing-columns" : "resizing-rows");
+  };
+  const move = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const from = start.current;
+    if (!from) return;
+    // The column's handle is on its left edge, so dragging left makes it wider.
+    const delta = vertical ? from.x - event.clientX : event.clientY - from.y;
+    onMove(from.size + delta);
+  };
+  const finish = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!start.current) return;
+    start.current = null;
+    setActive(false);
+    onDragging(false);
+    document.body.classList.remove("resizing-columns", "resizing-rows");
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  const onKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = HANDLE_KEY_STEP * (event.shiftKey ? 4 : 1);
+    let direction = 0;
+    if (vertical && event.key === "ArrowLeft") direction = 1;
+    else if (vertical && event.key === "ArrowRight") direction = -1;
+    else if (!vertical && event.key === "ArrowUp") direction = -1;
+    else if (!vertical && event.key === "ArrowDown") direction = 1;
+    else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      onMove(event.key === "Home" ? 0 : Number.POSITIVE_INFINITY);
+      return;
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      onReset();
+      return;
+    } else return;
+    event.preventDefault();
+    onMove(size() + direction * step);
+  };
+  return (
+    <div
+      className={`${className}${active ? " active" : ""}`}
+      role="separator"
+      tabIndex={0}
+      aria-label={label}
+      aria-orientation={orientation}
+      aria-valuenow={valueNow}
+      aria-valuemin={valueMin}
+      aria-valuemax={valueMax}
+      title={`${label}: drag, or use the arrow keys. Double-click to reset.`}
+      onPointerDown={begin}
+      onPointerMove={move}
+      onPointerUp={finish}
+      onPointerCancel={finish}
+      onDoubleClick={onReset}
+      onKeyDown={onKey}
+    />
+  );
+}
+
+function StyleToggles({ state, onToggle }: { state: Record<StyleKey, boolean>; onToggle: (key: StyleKey) => void }) {
+  const items: [StyleKey, string, React.ReactNode][] = [
+    ["bold", "Bold", <Bold key="b" />],
+    ["italic", "Italic", <Italic key="i" />],
+    ["underline", "Underline", <Underline key="u" />],
+    ["strike", "Strikethrough", <Strikethrough key="s" />],
+  ];
+  return (
+    <>
+      {items.map(([key, label, icon]) => (
+        <Toggle
+          key={key}
+          variant="outline"
+          size="sm"
+          aria-label={label}
+          title={label}
+          pressed={state[key]}
+          onMouseDown={keepFocus}
+          onPressedChange={() => onToggle(key)}
+        >
+          {icon}
+        </Toggle>
+      ))}
+    </>
+  );
+}
+
+function AlignToggles({ value, justify, onAlign }: { value: TextAlign; justify: boolean; onAlign: (align: TextAlign) => void }) {
+  return (
+    <ToggleGroup
+      type="single"
+      variant="outline"
+      size="sm"
+      spacing={1}
+      value={value}
+      onValueChange={(next) => {
+        if (next === "left" || next === "center" || next === "right" || (justify && next === "justify")) onAlign(next);
+      }}
+      aria-label="Alignment"
+    >
+      <ToggleGroupItem value="left" aria-label="Align left" onMouseDown={keepFocus}>
+        <AlignLeft />
+      </ToggleGroupItem>
+      <ToggleGroupItem value="center" aria-label="Align center" onMouseDown={keepFocus}>
+        <AlignCenter />
+      </ToggleGroupItem>
+      <ToggleGroupItem value="right" aria-label="Align right" onMouseDown={keepFocus}>
+        <AlignRight />
+      </ToggleGroupItem>
+      {justify && (
+        <ToggleGroupItem value="justify" aria-label="Justify" onMouseDown={keepFocus}>
+          <AlignJustify />
+        </ToggleGroupItem>
+      )}
+    </ToggleGroup>
+  );
 }
 
 // Tells the user that typed characters the page's font lacks are shown in a substitute face and
@@ -117,99 +315,6 @@ function panelFor(
     return { panel: "empty" as const, title: "Eraser", detail: "Click a mark to remove it" };
   }
   return { panel: "empty" as const, title: "Properties", detail: "Select a mark to edit it" };
-}
-
-function ColorControl({
-  label,
-  color,
-  appearance,
-  onColor,
-  onAdjustStart,
-  onAdjustEnd,
-}: {
-  label: string;
-  color: string;
-  appearance: "text" | "stroke";
-  onColor: (color: string) => void;
-  onAdjustStart: () => void;
-  onAdjustEnd: () => void;
-}) {
-  const [draft, setDraft] = useState(color);
-  useEffect(() => setDraft(color), [color]);
-
-  return (
-    <Popover
-      onOpenChange={(open) => {
-        if (open) onAdjustStart();
-        else onAdjustEnd();
-      }}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label={label}
-          title={label}
-          onMouseDown={keepFocus}
-        >
-          {appearance === "text" ? (
-            <span className="flex flex-col items-center gap-0.5">
-              <span className="text-[13px] leading-none font-semibold">A</span>
-              <span className="h-0.5 w-3.5 rounded-full" style={{ background: color }} />
-            </span>
-          ) : (
-            <span
-              className="size-3.5 rounded-full"
-              style={{ background: color, boxShadow: "inset 0 0 0 1px var(--swatch-edge)" }}
-            />
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-56 gap-3">
-        <div className="grid grid-cols-8 gap-1.5" role="group" aria-label={`${label} swatches`}>
-          {SWATCHES.map((swatch) => (
-            <button
-              key={swatch}
-              type="button"
-              aria-label={`${label} ${swatch}`}
-              className="size-5 rounded-full ring-offset-2 ring-offset-popover outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              style={{
-                background: swatch,
-                boxShadow: color.toLowerCase() === swatch ? "0 0 0 2px var(--ring)" : "inset 0 0 0 1px var(--swatch-edge)",
-              }}
-              onMouseDown={keepFocus}
-              onClick={() => onColor(swatch)}
-            />
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <Input
-            type="color"
-            aria-label={label}
-            value={color}
-            className="h-8 w-10 shrink-0 cursor-pointer p-1"
-            onPointerDown={onAdjustStart}
-            onChange={(event) => onColor(event.target.value)}
-            onBlur={onAdjustEnd}
-          />
-          <Input
-            aria-label={`${label} hex`}
-            value={draft}
-            spellCheck={false}
-            className="font-mono uppercase"
-            onFocus={onAdjustStart}
-            onChange={(event) => {
-              const next = event.target.value;
-              setDraft(next);
-              if (/^#[0-9a-fA-F]{6}$/.test(next)) onColor(next);
-            }}
-            onBlur={onAdjustEnd}
-          />
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
 }
 
 function NumberSlider({
@@ -299,6 +404,10 @@ export function Inspector({
   onHoverObject,
   onSelectObject,
   onRemoveObject,
+  format,
+  onFormat,
+  onFormatBegin,
+  onFormatEnd,
 }: {
   tool: Tool;
   shape: ShapeId;
@@ -318,7 +427,7 @@ export function Inspector({
   onFont: (fontId: FontId) => void;
   onFontSize: (size: number) => void;
   onTextColor: (color: string) => void;
-  onToggle: (key: "bold" | "italic" | "underline") => void;
+  onToggle: (key: StyleKey) => void;
   onAlign: (align: Align) => void;
   onWidth: (width: number) => void;
   onAutoWidth: (autoWidth: boolean) => void;
@@ -336,8 +445,19 @@ export function Inspector({
   onHoverObject: (id: string | null) => void;
   onSelectObject: (id: string) => void;
   onRemoveObject: (id: string) => void;
+  // How the selected text patch's caret or selection is formatted, and the actions on it; the
+  // same ones the floating bar over the page offers.
+  format: FormatState | null;
+  onFormat: (change: FormatChange) => void;
+  onFormatBegin: () => void;
+  onFormatEnd: () => void;
 }) {
   const view = panelFor(tool, selectedKind, shape, selectedShape, content);
+  const { layout, setWidth, setSplit } = useInspectorLayout();
+  const [dragging, setDragging] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const bodyHeight = () => bodyRef.current?.clientHeight ?? 0;
+  const windowWidth = typeof window === "undefined" ? DEFAULT_LAYOUT.width * 4 : window.innerWidth;
   const missing = view.panel === "content" && patch?.role === "text" ? patchMissingGlyphs(patch) : [];
   const [open, setOpen] = useState(readInspectorOpen);
   useEffect(() => {
@@ -356,10 +476,26 @@ export function Inspector({
       ? "Nothing inserted yet"
       : `${objects.length} ${objects.length === 1 ? "object" : "objects"} on ${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
 
+  const className = ["inspector", open ? "" : "collapsed", dragging ? "resizing" : ""].filter(Boolean).join(" ");
+
   return (
-    <aside className={open ? "inspector" : "inspector collapsed"} aria-label="Properties">
-      <div className="inspector-body">
-      <section className="inspector-pane" aria-label="Objects">
+    <aside className={className} style={{ "--inspector-width": `${layout.width}px` } as React.CSSProperties} aria-label="Properties">
+      {open && (
+        <SplitHandle
+          className="inspector-handle"
+          orientation="vertical"
+          label="Width of the properties column"
+          valueNow={Math.round(layout.width)}
+          valueMin={INSPECTOR_MIN_WIDTH}
+          valueMax={maxInspectorWidth(windowWidth)}
+          size={() => layout.width}
+          onMove={setWidth}
+          onReset={() => setWidth(DEFAULT_LAYOUT.width)}
+          onDragging={setDragging}
+        />
+      )}
+      <div className="inspector-body" ref={bodyRef}>
+      <section className="inspector-pane objects" style={{ flexBasis: `${layout.split * 100}%` }} aria-label="Objects">
       <div className="flex items-start gap-2 px-2.5 py-2.5">
         <div className="min-w-0 flex-1 px-1.5 pt-0.5" aria-hidden={!open}>
           <h2 className="text-sm font-semibold tracking-tight">Objects</h2>
@@ -391,7 +527,23 @@ export function Inspector({
       </div>
       </section>
 
-      <section className="inspector-pane" aria-label="Attributes" inert={!open}>
+      <SplitHandle
+        className="inspector-splitter"
+        orientation="horizontal"
+        label="Height of the object list"
+        valueNow={Math.round(layout.split * 100)}
+        valueMin={Math.round(PANE_MIN_HEIGHT_FRACTION * 100)}
+        valueMax={Math.round((1 - PANE_MIN_HEIGHT_FRACTION) * 100)}
+        size={() => layout.split * bodyHeight()}
+        onMove={(px) => {
+          const height = bodyHeight();
+          if (height > 0) setSplit(px / height);
+        }}
+        onReset={() => setSplit(DEFAULT_LAYOUT.split)}
+        onDragging={setDragging}
+      />
+
+      <section className="inspector-pane attributes" aria-label="Attributes" inert={!open}>
       <div className="flex items-start gap-2 px-2.5 py-2.5">
         <div className="min-w-0 flex-1 px-1.5 pt-0.5">
           <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
@@ -431,57 +583,17 @@ export function Inspector({
                 <div className="grid gap-2">
                   <Label className="text-xs text-muted-foreground">Style</Label>
                   <div className="flex flex-wrap items-center gap-1">
-                    <Toggle
-                      variant="outline"
-                      size="sm"
-                      aria-label="Bold"
-                      pressed={text.bold}
-                      onMouseDown={keepFocus}
-                      onPressedChange={() => onToggle("bold")}
-                    >
-                      <Bold />
-                    </Toggle>
-                    <Toggle
-                      variant="outline"
-                      size="sm"
-                      aria-label="Italic"
-                      pressed={text.italic}
-                      onMouseDown={keepFocus}
-                      onPressedChange={() => onToggle("italic")}
-                    >
-                      <Italic />
-                    </Toggle>
-                    <Toggle
-                      variant="outline"
-                      size="sm"
-                      aria-label="Underline"
-                      pressed={text.underline}
-                      onMouseDown={keepFocus}
-                      onPressedChange={() => onToggle("underline")}
-                    >
-                      <Underline />
-                    </Toggle>
-                    <ToggleGroup
-                      type="single"
-                      variant="outline"
-                      size="sm"
-                      spacing={1}
+                    <StyleToggles
+                      state={{ bold: text.bold, italic: text.italic, underline: text.underline, strike: !!text.strike }}
+                      onToggle={onToggle}
+                    />
+                    <AlignToggles
                       value={text.align}
-                      onValueChange={(value) => {
-                        if (value === "left" || value === "center" || value === "right") onAlign(value);
+                      justify={false}
+                      onAlign={(align) => {
+                        if (align !== "justify") onAlign(align);
                       }}
-                      aria-label="Alignment"
-                    >
-                      <ToggleGroupItem value="left" aria-label="Align left" onMouseDown={keepFocus}>
-                        <AlignLeft />
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="center" aria-label="Align center" onMouseDown={keepFocus}>
-                        <AlignCenter />
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="right" aria-label="Align right" onMouseDown={keepFocus}>
-                        <AlignRight />
-                      </ToggleGroupItem>
-                    </ToggleGroup>
+                    />
                     <ColorControl
                       label="Text color"
                       appearance="text"
@@ -689,6 +801,38 @@ export function Inspector({
                     </div>
                   </>
                 )}
+              </>
+            )}
+
+            {view.panel === "content" && patch?.role === "text" && format && (
+              <>
+                <NumberSlider
+                  label={format.selection ? "Size of the selection" : "Size"}
+                  value={format.fontSize}
+                  min={4}
+                  max={120}
+                  onChange={(fontSize) => onFormat({ fontSize })}
+                  onAdjustStart={onFormatBegin}
+                  onAdjustEnd={onFormatEnd}
+                />
+                <div className="grid gap-2">
+                  <Label className="text-xs text-muted-foreground">{format.selection ? "Style of the selection" : "Style"}</Label>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <StyleToggles
+                      state={{ bold: format.bold, italic: format.italic, underline: format.underline, strike: format.strike }}
+                      onToggle={(key) => onFormat({ [key]: !format[key] })}
+                    />
+                    {format.wrap && <AlignToggles value={format.align} justify onAlign={(align) => onFormat({ align })} />}
+                    <ColorControl
+                      label="Text color"
+                      appearance="text"
+                      color={format.color}
+                      onColor={(color) => onFormat({ color })}
+                      onAdjustStart={onFormatBegin}
+                      onAdjustEnd={onFormatEnd}
+                    />
+                  </div>
+                </div>
               </>
             )}
 

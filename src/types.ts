@@ -28,6 +28,8 @@ export type TextStyle = {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  // Optional so fields saved before it existed still load.
+  strike?: boolean;
   align: Align;
   width: number;
   autoWidth: boolean;
@@ -180,6 +182,12 @@ export type TextSpan = {
   // The run's own extra advance after every character, in page units, when it differs from the
   // patch's (a tracked word inside a line); absent means the patch's applies.
   letterSpacing?: number;
+  // Lines the user drew under or through the run; the page's own text never carries either.
+  underline?: boolean;
+  strike?: boolean;
+  // The run's weight, slant, size or colour was chosen by the user rather than read from the
+  // page, so a refresh of the page's faces keeps them (the face itself is still refreshed).
+  styled?: boolean;
 };
 
 export type PatchTail = {
@@ -251,6 +259,13 @@ export type PatchAnnotation = Base & {
   underlineColor: string;
   backdrop: string;
   tails: PatchTail[];
+  // Lines the user drew under or through a single-face patch's text (a mixed-face patch carries
+  // them on its spans).
+  underline?: boolean;
+  strike?: boolean;
+  // The patch's face, size, colour or alignment was chosen by the user rather than read from the
+  // page: the edit counts as a change even while its words are the page's own.
+  styled?: boolean;
 };
 
 export type Annotation =

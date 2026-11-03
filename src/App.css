@@ -1011,3 +1011,222 @@
     0 0 0 1.5px #fff,
     0 1px 3px rgb(0 0 0 / 0.3);
 }
+
+/* ---- Inspector sizing: the column's width handle and the splitter between its panes ---------- */
+
+.inspector {
+  position: relative;
+  width: var(--inspector-width, 288px);
+}
+
+.inspector-body {
+  width: var(--inspector-width, 288px);
+}
+
+/* No width animation while the handle is being dragged: the column follows the pointer. */
+.inspector.resizing {
+  transition: none;
+}
+
+.inspector-handle,
+.inspector-splitter {
+  position: relative;
+  flex: none;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.inspector-handle::after,
+.inspector-splitter::after {
+  content: "";
+  position: absolute;
+  background: transparent;
+  transition: background-color var(--duration) var(--ease-out);
+}
+
+.inspector-handle:hover::after,
+.inspector-handle:focus-visible::after,
+.inspector-handle.active::after,
+.inspector-splitter:hover::after,
+.inspector-splitter:focus-visible::after,
+.inspector-splitter.active::after {
+  background: var(--accent);
+}
+
+/* On the column's left edge, over its border. */
+.inspector-handle {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+}
+
+.inspector-handle::after {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+/* Between the two panes, straddling the rule that separates them. */
+.inspector-splitter {
+  z-index: 1;
+  height: 7px;
+  margin: -3px 0;
+  cursor: row-resize;
+}
+
+.inspector-splitter::after {
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 1px;
+  background: var(--line);
+}
+
+.inspector-splitter:hover::after,
+.inspector-splitter:focus-visible::after,
+.inspector-splitter.active::after {
+  top: 2px;
+  height: 2px;
+}
+
+.inspector-pane.objects {
+  flex: 0 1 auto;
+}
+
+.inspector-pane.attributes {
+  flex: 1 1 0;
+}
+
+body.resizing-columns {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.resizing-rows {
+  cursor: row-resize;
+  user-select: none;
+}
+
+/* ---- What the user changed: yellow under the changed words, a tint over a moved box ----------- */
+
+/* The paper is white in both themes, so the yellow is pinned rather than themed. */
+.page-frame {
+  --change-mark: rgb(253 224 71 / 0.6);
+  --change-tint: rgb(253 224 71 / 0.28);
+}
+
+.change-mark,
+.change-tint {
+  position: absolute;
+  margin: 0;
+  pointer-events: none;
+}
+
+/* Under the glyphs (the editor sits at z 4) and over the cover (z 2) that hides the page's own text. */
+.change-mark {
+  z-index: 3;
+  border-radius: 2px;
+  background: var(--change-mark);
+}
+
+.change-tint {
+  z-index: 3;
+  border-radius: 2px;
+  background: var(--change-tint);
+}
+
+/* The dot before a changed row's title in the object list; one yellow that reads on both panels. */
+.object-change {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  vertical-align: 1px;
+  border-radius: 999px;
+  background: #eab308;
+  box-shadow: 0 0 0 1.5px color-mix(in oklch, #eab308 35%, transparent);
+}
+
+/* ---- Floating formatting bar over the page's own text ---------------------------------------- */
+
+.format-bar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  visibility: hidden;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--round-md);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--elev-2);
+  color: var(--ink);
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.format-bar-gap {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--line);
+}
+
+.format-bar-step {
+  width: 24px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--ink);
+}
+
+.format-bar-step:hover {
+  background: var(--section);
+}
+
+.format-bar-step svg {
+  width: 14px;
+  height: 14px;
+}
+
+.format-bar-size {
+  width: 44px;
+  height: 28px;
+  margin: 0;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.format-bar-size::-webkit-outer-spin-button,
+.format-bar-size::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.format-bar-size:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}

@@ -13,6 +13,7 @@ import { navigate, plainClick } from "./router.ts";
 import { createSession, listSessions, persistAnnotations, readSession, readySessions, type SessionInfo } from "./session.ts";
 import type { Brush } from "./brushes.ts";
 import { isBoxShape, isLinearShape, isOpenShape, SHAPE_LABEL, shapeFromLine, type ShapeId } from "./shapes.ts";
+import type { FormatApi, FormatChange, FormatState } from "./textFormat.ts";
 import { measureTextWidth } from "./textMeasure.ts";
 import { ChevronDown, Download, Minus, Plus, Redo2, RotateCw, Undo2, UnfoldHorizontal, UnfoldVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,7 @@ const DEFAULT_TEXT: TextStyle = {
   bold: false,
   italic: false,
   underline: false,
+  strike: false,
   align: "left",
   width: 220,
   autoWidth: true,
@@ -300,6 +302,16 @@ export function Editor({ sessionId }: { sessionId: string }) {
   const [focusId, setFocusId] = useState<string | null>(null);
   // The mark under the pointer, on a page or in the object list; the other side mirrors it.
   const [hover, setHover] = useState<ObjectHover | null>(null);
+  // How the selected text patch's caret or selection is formatted, as the page reports it, and
+  // the page's actions on it, for the attributes pane.
+  const [formatState, setFormatState] = useState<FormatState | null>(null);
+  const formatApi = useRef<FormatApi | null>(null);
+  const registerFormat = useCallback((api: FormatApi | null) => {
+    formatApi.current = api;
+  }, []);
+  const applyFormat = useCallback((change: FormatChange) => formatApi.current?.apply(change), []);
+  const beginFormat = useCallback(() => formatApi.current?.begin(), []);
+  const endFormat = useCallback(() => formatApi.current?.end(), []);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [missing, setMissing] = useState(false);
@@ -834,6 +846,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
           bold: selected.bold,
           italic: selected.italic,
           underline: selected.underline,
+          strike: selected.strike ?? false,
           align: selected.align,
           width: selected.width,
           autoWidth: selected.autoWidth,
@@ -1076,6 +1089,8 @@ export function Editor({ sessionId }: { sessionId: string }) {
                   onSelectContent={setContentSelection}
                   onRequestFocus={requestFocus}
                   onConsumeFocus={consumeFocus}
+                  onFormatState={setFormatState}
+                  registerFormat={registerFormat}
                 />
               ))}
             </div>
@@ -1218,6 +1233,10 @@ export function Editor({ sessionId }: { sessionId: string }) {
           onHoverObject={hoverFromList}
           onSelectObject={setSelectedId}
           onRemoveObject={removeObject}
+          format={selected?.kind === "patch" ? formatState : null}
+          onFormat={applyFormat}
+          onFormatBegin={beginFormat}
+          onFormatEnd={endFormat}
         />
       </div>
     </div>

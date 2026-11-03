@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { editSpans } from "./contentEdit.ts";
-import { domText, offsetAt, placeCaret, selectionOffsets } from "./spanDom.ts";
+import { domText, offsetAt, selectRange, selectionOffsets } from "./spanDom.ts";
 import { lineIndent, lineShift, spansText } from "./textLayout.ts";
 import type { PatchAnnotation, TextSpan } from "./types.ts";
 
@@ -14,6 +14,9 @@ import type { PatchAnnotation, TextSpan } from "./types.ts";
 type Model = { text: string; spans: TextSpan[] };
 
 type Snapshot = Model & { caret: number };
+
+// Where the selection sits, as character offsets; a caret when both are equal.
+type Caret = { start: number; end: number };
 
 type View = {
   face: TextSpan;
@@ -48,16 +51,17 @@ type LineView = { pieces: { text: string; span: TextSpan }[]; soft: boolean };
 // Everything that decides how the editor is drawn.
 function viewKey(model: Model, view: View): string {
   const face = view.face;
+  const decoration = (span: TextSpan) => `${span.underline ? "u" : ""}${span.strike ? "s" : ""}`;
   const spans = model.spans
     .map(
       (span) =>
-        `${span.text}\u0000${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${span.fontSize}|${span.color}|${span.letterSpacing ?? ""}`,
+        `${span.text}\u0000${span.fontFamily}|${span.fontWeight}|${span.fontStyle}|${span.fontSize}|${span.color}|${span.letterSpacing ?? ""}|${decoration(span)}`,
     )
     .join("\u0001");
   return [
     model.text,
     spans,
-    `${face.fontFamily}|${face.fontWeight}|${face.fontStyle}|${face.fontSize}|${face.color}`,
+    `${face.fontFamily}|${face.fontWeight}|${face.fontStyle}|${face.fontSize}|${face.color}|${decoration(face)}`,
     view.align,
     view.indent,
     view.softBreaks.join(","),
@@ -116,6 +120,10 @@ function render(root: HTMLElement, model: Model, view: View): void {
       // line box: every line is exactly as tall as the block's line height, whatever runs it holds.
       node.style.lineHeight = "0";
       if (piece.span.letterSpacing != null) node.style.letterSpacing = `${piece.span.letterSpacing * view.scale}px`;
+      // Lines the user drew under or through the run; they take the run's colour, so they go
+      // transparent with it while the page's own rendering shows.
+      const lines = [piece.span.underline ? "underline" : "", piece.span.strike ? "line-through" : ""].filter(Boolean);
+      node.style.textDecoration = lines.length > 0 ? lines.join(" ") : "none";
       node.style.color = view.showLive ? piece.span.color : "transparent";
       node.textContent = piece.text;
       block.append(node);
@@ -179,6 +187,8 @@ export function SpanEditor({
       fontSize: patch.fontSize,
       color: patch.color,
       pdfFont: "",
+      ...(patch.underline ? { underline: true } : {}),
+      ...(patch.strike ? { strike: true } : {}),
     },
     align: patch.align,
     indent: patch.indent,
@@ -196,19 +206,19 @@ export function SpanEditor({
   // Moves an edit the browser applied on its own into the model; set once the handlers exist.
   const reconcileRef = useRef<() => void>(() => undefined);
 
-  const draw = (next: Model, caret: number | null) => {
+  const draw = (next: Model, caret: Caret | null) => {
     const root = ref.current;
     if (!root) return;
     render(root, next, latest.current.view);
     drawn.current = viewKey(next, latest.current.view);
-    if (caret != null && document.activeElement === root) placeCaret(root, caret);
+    if (caret && document.activeElement === root) selectRange(root, caret.start, caret.end);
   };
 
   const commit = (next: Model, caret: number) => {
     const root = ref.current;
     if (!root) return;
     model.current = next;
-    draw(next, caret);
+    draw(next, { start: caret, end: caret });
     const offsets = latest.current.view.lineOffsets;
     const shifted = lineShift(offsets, offsets.length - 1) * latest.current.view.scale;
     latest.current.onEdit(next.text, next.spans, measureRows(root, latest.current.lineHeight, shifted));
@@ -240,15 +250,16 @@ export function SpanEditor({
   };
 
   // Something outside the editor changed what it shows (undo, a face refresh, zoom, a soft break
-  // turning into a space): draw it again, keeping the caret where it was.
+  // turning into a space, a run restyled): draw it again, keeping the selection where it was.
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root) return;
     const next = { text: patch.text, spans: patch.spans };
     if (drawn.current === viewKey(next, view)) return;
-    const caret = document.activeElement === root ? (selectionOffsets(root)?.end ?? null) : null;
+    const offsets = document.activeElement === root ? selectionOffsets(root) : null;
     model.current = next;
-    draw(next, caret == null ? null : Math.min(caret, patch.text.length));
+    const length = patch.text.length;
+    draw(next, offsets ? { start: Math.min(offsets.start, length), end: Math.min(offsets.end, length) } : null);
   });
 
   useEffect(() => {

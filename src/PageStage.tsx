@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { ChevronsLeftRight, GripVertical, RotateCw } from "lucide-react";
-import { contentAt, contentLabel, isTextContent, readPageContent, type ContentElement } from "./content.ts";
+import { changedRanges, hasUserStyle, patchChanged, type TextRange } from "./changes.ts";
+import { contentAt, contentLabel, faceTraits, isTextContent, readPageContent, type ContentElement } from "./content.ts";
 import {
   cropGraphic,
   editCover,
@@ -14,10 +15,12 @@ import {
   softenBreaks,
   textPatch,
 } from "./contentEdit.ts";
+import { FormatBar, type Anchor } from "./FormatBar.tsx";
 import { captureEdit } from "./pageInk.ts";
 import { SpanEditor } from "./SpanEditor.tsx";
-import { domText, placeCaret, selectionOffsets } from "./spanDom.ts";
-import { blockWidth, caretIndexAt, editorTop, fontCss as faceCss, lineShift, wrapSlack } from "./textLayout.ts";
+import { domText, placeCaret, selectRange, selectionOffsets } from "./spanDom.ts";
+import { faceCandidates, formatAt, formatPatch, sameFormat, type FaceLookup, type FormatApi, type FormatChange, type FormatState } from "./textFormat.ts";
+import { blockWidth, caretIndexAt, editorTop, fontCss as faceCss, lineShift, rangeBoxes, wrapSlack, type RangeBox } from "./textLayout.ts";
 import { emojiSrc } from "./emojis.ts";
 import { boundsOf, dist, hitTest, resizeAnnotation, rotateBy, rotatePoint, shapeFromDrag, translate } from "./geometry.ts";
 import { parentSection, sameGuides, snapMove, type Box, type Guide } from "./guides.ts";
@@ -179,6 +182,160 @@ function wrapWidth(patch: PatchAnnotation, content: ContentElement[]): number {
   return Math.max(patch.originW, Math.min(...bounds) - patch.originX);
 }
 
+// The boxes of the runs the user changed inside a text patch, laid out once per patch version.
+const changeBoxes = new WeakMap<PatchAnnotation, RangeBox[]>();
+
+function changedBoxes(patch: PatchAnnotation): RangeBox[] {
+  const cached = changeBoxes.get(patch);
+  if (cached) return cached;
+  const boxes = changedRanges(patch.originText ?? "", patch.text).flatMap((range) => rangeBoxes(patch, range.start, range.end));
+  changeBoxes.set(patch, boxes);
+  return boxes;
+}
+
+function sameAnchor(a: Anchor | null, b: Anchor | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return Math.abs(a.left - b.left) < 0.5 && Math.abs(a.top - b.top) < 0.5 && Math.abs(a.right - b.right) < 0.5 && Math.abs(a.bottom - b.bottom) < 0.5;
+}
+
+// Where the selection inside a mixed-face editor sits on screen: the left end of its first line
+// to the far end of its last. Null when the selection is elsewhere or has no box yet.
+function selectionAnchor(editor: HTMLElement): Anchor | null {
+  if (editor instanceof HTMLTextAreaElement) return null;
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return null;
+  const rects = [...range.getClientRects()];
+  const whole = range.getBoundingClientRect();
+  if (rects.length === 0) rects.push(whole);
+  if (rects.every((rect) => rect.width === 0 && rect.height === 0)) return null;
+  let anchor: Anchor | null = null;
+  for (const rect of rects) {
+    if (rect.width === 0 && rect.height === 0) continue;
+    if (!anchor) anchor = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    else {
+      if (rect.top < anchor.top - 0.5) {
+        anchor.top = rect.top;
+        anchor.left = rect.left;
+      }
+      anchor.right = Math.max(anchor.right, rect.right);
+      anchor.bottom = Math.max(anchor.bottom, rect.bottom);
+    }
+  }
+  return anchor;
+}
+
+function toAnchor(rect: DOMRect): Anchor {
+  return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+}
+
+// Tracks the selection inside the selected text patch's editor, shows the floating formatting
+// bar over it and hands the rest of the editor (the attributes pane) the same state and actions.
+// The range it last saw stays in force while the focus visits a control, so a size typed in the
+// bar or the pane still applies to the words that were selected.
+function PatchFormat({
+  patch,
+  scale,
+  editorOf,
+  traits,
+  rangeRef,
+  begin,
+  apply,
+  end,
+  onState,
+  register,
+}: {
+  patch: PatchAnnotation;
+  scale: number;
+  editorOf: (id: string) => HTMLElement | null;
+  traits: FaceLookup;
+  rangeRef: RefObject<TextRange | null>;
+  begin: () => void;
+  apply: (change: FormatChange) => void;
+  end: () => void;
+  onState: (state: FormatState | null) => void;
+  register: (api: FormatApi | null) => void;
+}) {
+  const [range, setRange] = useState<TextRange | null>(null);
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const [bounds, setBounds] = useState<Anchor | null>(null);
+  const latest = useRef({ begin, apply, end });
+  useLayoutEffect(() => {
+    latest.current = { begin, apply, end };
+  });
+  const readRef = useRef<() => void>(() => undefined);
+  const id = patch.id;
+
+  useEffect(() => {
+    const read = () => {
+      const editor = editorOf(id);
+      if (!editor) return;
+      const focused = document.activeElement === editor;
+      let next: TextRange | null = rangeRef.current;
+      if (editor instanceof HTMLTextAreaElement) {
+        // A textarea keeps its own selection while the focus is elsewhere.
+        next = { start: editor.selectionStart ?? 0, end: editor.selectionEnd ?? 0 };
+      } else if (focused) {
+        next = selectionOffsets(editor);
+      } else {
+        // Unfocused, the editor's DOM selection is only trusted when it still spans text: a
+        // redraw (an undo, a zoom) collapses whatever selection was left in it.
+        const offsets = selectionOffsets(editor);
+        if (offsets && offsets.end > offsets.start) next = offsets;
+      }
+      rangeRef.current = next;
+      setRange((current) => (current?.start === next?.start && current?.end === next?.end ? current : next));
+      const at = (focused ? selectionAnchor(editor) : null) ?? toAnchor(editor.getBoundingClientRect());
+      setAnchor((current) => (sameAnchor(current, at) ? current : at));
+      const scroller = editor.closest<HTMLElement>(".pages");
+      const area = scroller ? toAnchor(scroller.getBoundingClientRect()) : null;
+      setBounds((current) => (sameAnchor(current, area) ? current : area));
+    };
+    readRef.current = read;
+    read();
+    document.addEventListener("selectionchange", read);
+    window.addEventListener("scroll", read, true);
+    window.addEventListener("resize", read);
+    return () => {
+      document.removeEventListener("selectionchange", read);
+      window.removeEventListener("scroll", read, true);
+      window.removeEventListener("resize", read);
+    };
+  }, [editorOf, id, rangeRef]);
+
+  // Typing moves the caret and zoom moves the box: read again whenever the patch or the scale changes.
+  useEffect(() => {
+    readRef.current();
+  }, [patch, scale]);
+
+  useEffect(() => {
+    register({
+      begin: () => latest.current.begin(),
+      apply: (change) => latest.current.apply(change),
+      end: () => latest.current.end(),
+    });
+    return () => register(null);
+  }, [register]);
+
+  const state = formatAt(patch, range, traits);
+  const reported = useRef<FormatState | null>(null);
+  useEffect(() => {
+    if (sameFormat(reported.current, state)) return;
+    reported.current = state;
+    onState(state);
+  });
+  useEffect(() => {
+    return () => {
+      reported.current = null;
+      onState(null);
+    };
+  }, [onState]);
+
+  return <FormatBar state={state} anchor={anchor} bounds={bounds} onChange={apply} onBegin={begin} onEnd={end} />;
+}
+
 export function PageStage({
   page,
   pageIndex,
@@ -206,6 +363,8 @@ export function PageStage({
   onConsumeFocus,
   selectedContent,
   onSelectContent,
+  onFormatState,
+  registerFormat,
 }: {
   page: PDFPageProxy;
   pageIndex: number;
@@ -234,6 +393,10 @@ export function PageStage({
   getEpoch: () => number;
   selectedContent: ContentElement | null;
   onSelectContent: (element: ContentElement | null) => void;
+  // What the selected text patch's caret or selection is formatted like, for the attributes pane.
+  onFormatState: (state: FormatState | null) => void;
+  // The formatting actions on the selected text patch, while this page holds it.
+  registerFormat: (api: FormatApi | null) => void;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -245,7 +408,14 @@ export function PageStage({
   // contentEditable blocks of patches that mix faces.
   const textareas = useRef(new Map<string, HTMLTextAreaElement | HTMLDivElement>());
   const armFocus = useRef<string | null>(null);
-  const caretRef = useRef<{ id: string; index: number } | null>(null);
+  // Where the caret goes when an editor takes the focus; with `from`, a selection up to `index`.
+  const caretRef = useRef<{ id: string; index: number; from?: number } | null>(null);
+  // The run of the selected text patch that formatting acts on, as the format tracker last saw it.
+  const formatRange = useRef<TextRange | null>(null);
+  // An adjustment in progress (a slider drag, an open colour picker): where it started, so the
+  // whole of it is one undo step.
+  const formatGesture = useRef<Annotation[] | null>(null);
+  const formatOpen = useRef(false);
   const [seen, setSeen] = useState(pageIndex === 0);
   const [content, setContent] = useState<ContentElement[]>([]);
   // Editors are placed by measuring their face; a face pdf.js registers after an editor opened
@@ -271,9 +441,12 @@ export function PageStage({
     const length = element instanceof HTMLTextAreaElement ? element.value.length : domText(element).length;
     const index = caret?.id === id ? caret.index : length;
     const clamped = Math.max(0, Math.min(index, length));
-    if (element instanceof HTMLTextAreaElement) element.setSelectionRange(clamped, clamped);
+    const from = caret?.id === id && caret.from != null ? Math.max(0, Math.min(caret.from, clamped)) : null;
+    if (element instanceof HTMLTextAreaElement) element.setSelectionRange(from ?? clamped, clamped);
+    else if (from != null) selectRange(element, from, clamped);
     else placeCaret(element, clamped);
   };
+  const editorOf = useCallback((id: string): HTMLElement | null => textareas.current.get(id) ?? null, []);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -357,7 +530,7 @@ export function PageStage({
       if (annotation.kind !== "patch" || annotation.role !== "text") return annotation;
       const live = content.find((element) => element.id === annotation.sourceId);
       if (!live?.fontFamily || !isTextContent(live.kind)) return annotation;
-      const refreshed = refreshPatchFace(annotation, live);
+      const refreshed = refreshPatchFace(annotation, live, content);
       if (refreshed !== annotation) changed = true;
       return refreshed;
     });
@@ -395,6 +568,67 @@ export function PageStage({
       return cleaned;
     }
     return getAnnotations();
+  };
+
+  const traits: FaceLookup = (pdfFont) => faceTraits(page, pdfFont);
+
+  // Makes a formatting action one undo step. The typing before it (or, for a patch opened by the
+  // focus still in it, its opening with that typing) becomes a step of its own first, and the
+  // typing after it is measured from here.
+  const commitFormat = (id: string, before: Annotation[], changedBefore: boolean) => {
+    const draft = draftText.current;
+    if (draft?.id === id) {
+      draftText.current = null;
+      onPushBaseline(draft.origin);
+      if (changedBefore) onPushBaseline(before);
+    } else {
+      const pending = textBaseline.current;
+      if (pending && pending !== before && getEpoch() === epochOnFocus.current) onPushBaseline(pending);
+      onPushBaseline(before);
+    }
+    const editor = textareas.current.get(id);
+    if (editor && document.activeElement === editor) {
+      textBaseline.current = getAnnotations();
+      epochOnFocus.current = getEpoch();
+    }
+  };
+  const beginFormat = () => {
+    formatOpen.current = true;
+  };
+  // Applies a change to the selected text patch: to the selected run of its text, or to all of it.
+  const applyFormat = (change: FormatChange) => {
+    const current = getAnnotations();
+    const item = current.find((entry): entry is PatchAnnotation => entry.id === selectedId && entry.kind === "patch");
+    if (!item || item.role !== "text") return;
+    const next = formatPatch(item, formatRange.current, change, faceCandidates(contentRef.current), traits);
+    if (next === item) return;
+    const editor = textareas.current.get(item.id);
+    // A single run's textarea gives way to the span editor once part of it is styled; the editor
+    // that takes over gets the focus and the selection back.
+    if (editor instanceof HTMLTextAreaElement && (next.spans.length > 0 || next.wrap) && document.activeElement === editor) {
+      const range = formatRange.current;
+      caretRef.current = {
+        id: item.id,
+        index: range?.end ?? next.text.length,
+        ...(range && range.end > range.start ? { from: range.start } : {}),
+      };
+      armFocus.current = item.id;
+      onRequestFocus(item.id);
+    }
+    onReplace(current.map((entry) => (entry.id === item.id ? next : entry)));
+    if (formatOpen.current) {
+      if (!formatGesture.current) formatGesture.current = current;
+      return;
+    }
+    commitFormat(item.id, current, patchChanged(item));
+  };
+  const endFormat = () => {
+    formatOpen.current = false;
+    const origin = formatGesture.current;
+    formatGesture.current = null;
+    if (!origin || !selectedId) return;
+    const before = origin.find((entry) => entry.id === selectedId);
+    commitFormat(selectedId, origin, before?.kind === "patch" ? patchChanged(before) : true);
   };
 
   const toPoint = (event: ReactPointerEvent | PointerEvent): Point => {
@@ -1291,7 +1525,8 @@ export function PageStage({
                   color: annotation.color,
                   fontWeight: annotation.bold ? 700 : 400,
                   fontStyle: annotation.italic ? "italic" : "normal",
-                  textDecoration: annotation.underline ? "underline" : "none",
+                  textDecoration:
+                    [annotation.underline ? "underline" : "", annotation.strike ? "line-through" : ""].filter(Boolean).join(" ") || "none",
                   textAlign: annotation.align,
                   whiteSpace: annotation.autoWidth ? "pre" : "pre-wrap",
                   overflowWrap: annotation.autoWidth ? "normal" : "anywhere",
@@ -1374,13 +1609,9 @@ export function PageStage({
           const patch = annotation;
           const selected = patch.id === selectedId && tool === "select";
           const live = content.find((element) => element.id === patch.sourceId);
-          // Untouched: the page's own words, still where the page put them.
-          const pristine =
-            patch.role === "text" &&
-            patch.text === (patch.originText ?? "") &&
-            Math.abs(patch.x - patch.originX) < 0.01 &&
-            Math.abs(patch.y - patch.originY) < 0.01 &&
-            (patch.wrapW == null || Math.abs(patch.wrapW - patch.originW) < 0.01);
+          // Untouched: the page's own words in the page's own look, still where the page put them.
+          const changed = patchChanged(patch);
+          const pristine = patch.role === "text" && !changed;
           // While a run is being edited its live text replaces the page's rendering, so what the
           // caret sits in is exactly what will be exported.
           const showLive = patch.role === "text" && (selected || !pristine);
@@ -1450,7 +1681,9 @@ export function PageStage({
             const length = node instanceof HTMLTextAreaElement ? node.value.length : domText(node).length;
             const index = mark?.id === patch.id ? mark.index : length;
             const clamped = Math.max(0, Math.min(index, length));
-            if (node instanceof HTMLTextAreaElement) node.setSelectionRange(clamped, clamped);
+            const from = mark?.id === patch.id && mark.from != null ? Math.max(0, Math.min(mark.from, clamped)) : null;
+            if (node instanceof HTMLTextAreaElement) node.setSelectionRange(from ?? clamped, clamped);
+            else if (from != null) selectRange(node, from, clamped);
             else placeCaret(node, clamped);
           };
           const handleEditorFocus = () => {
@@ -1470,6 +1703,7 @@ export function PageStage({
               !latest ||
               latest.kind !== "patch" ||
               (latest.text === (latest.originText || source?.text || "") &&
+                !hasUserStyle(latest) &&
                 Math.abs(latest.x - latest.originX) < 0.5 &&
                 Math.abs(latest.y - latest.originY) < 0.5 &&
                 (latest.wrapW == null || Math.abs(latest.wrapW - latest.originW) < 0.5));
@@ -1575,8 +1809,30 @@ export function PageStage({
               event.currentTarget.blur();
               return;
             }
+            // The usual formatting shortcuts, on the selection or the whole patch like the bar's buttons.
+            if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+              const key = event.key.toLowerCase();
+              const shortcut =
+                key === "b" ? "bold" : key === "i" ? "italic" : key === "u" ? "underline" : key === "x" && event.shiftKey ? "strike" : null;
+              if (shortcut) {
+                event.preventDefault();
+                event.stopPropagation();
+                const current = formatAt(patch, formatRange.current, traits);
+                applyFormat({ [shortcut]: !current[shortcut] });
+                return;
+              }
+            }
             event.stopPropagation();
           };
+          // The runs the user changed, lit up under the glyphs; a patch only moved, resized or
+          // restyled, or a graphic one, gets a light tint over its whole box instead.
+          const marks = changed && patch.role === "text" ? changedBoxes(patch) : [];
+          const tint =
+            changed && marks.length === 0
+              ? patch.role === "text"
+                ? { x: patch.x - slackShift, y: patch.y, w: editorWidth, h: Math.max(patch.h, patch.fontSize) }
+                : { x: patch.x, y: patch.y, w: Math.max(patch.w, 1), h: Math.max(patch.h, 1) }
+              : null;
           // Dragging the grip beside the box moves the text, so an edit that has grown past its
           // cell can be nudged back into it. The editor keeps the focus while the text moves.
           const startMove = (event: ReactPointerEvent<HTMLElement>) => {
@@ -1647,6 +1903,14 @@ export function PageStage({
                     }}
                   />
                 ))}
+              {marks.map((box, index) => (
+                <div
+                  key={`${patch.id}-change-${index}`}
+                  className="change-mark"
+                  aria-hidden="true"
+                  style={{ left: box.x * scale, top: box.y * scale, width: box.w * scale, height: box.h * scale }}
+                />
+              ))}
               {patch.role === "graphic" && patch.image ? (
                 <img
                   className={selected ? "content-graphic selected" : "content-graphic"}
@@ -1701,6 +1965,27 @@ export function PageStage({
                     applyEdit(value, patch.spans, measured);
                   }}
                   onKeyDown={handleEditorKey}
+                />
+              )}
+              {tint && (
+                <div
+                  className="change-tint"
+                  aria-hidden="true"
+                  style={{ left: tint.x * scale, top: tint.y * scale, width: tint.w * scale, height: tint.h * scale }}
+                />
+              )}
+              {selected && patch.role === "text" && (
+                <PatchFormat
+                  patch={patch}
+                  scale={scale}
+                  editorOf={editorOf}
+                  traits={traits}
+                  rangeRef={formatRange}
+                  begin={beginFormat}
+                  apply={applyFormat}
+                  end={endFormat}
+                  onState={onFormatState}
+                  register={registerFormat}
                 />
               )}
               {selected && patch.role === "text" && (

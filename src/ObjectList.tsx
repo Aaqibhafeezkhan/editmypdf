@@ -71,12 +71,12 @@ export function ObjectList({
       {objects.map((row) => {
         const selected = row.id === selectedId;
         const hot = row.id === hotId;
-        const name = `${row.number}, ${row.title}${row.detail ? `: ${row.detail}` : ""}, page ${row.page + 1}`;
+        const name = `${row.number}, ${row.title}${row.detail ? `: ${row.detail}` : ""}${row.changed ? ", changed" : ""}, page ${row.page + 1}`;
         return (
           <li
             key={row.id}
             data-object-id={row.id}
-            className={`object-row${selected ? " selected" : ""}${hot ? " hot" : ""}`}
+            className={`object-row${selected ? " selected" : ""}${hot ? " hot" : ""}${row.changed ? " changed" : ""}`}
             onMouseEnter={() => onHover(row.id)}
             onMouseLeave={() => onHover(null)}
           >
@@ -96,7 +96,10 @@ export function ObjectList({
                 <RowIcon icon={row.icon} />
               </span>
               <span className="object-text" aria-hidden="true">
-                <span className="object-title">{row.title}</span>
+                <span className="object-title">
+                  {row.changed && <span className="object-change" title="Changed" />}
+                  {row.title}
+                </span>
                 {row.detail && <span className="object-detail">{row.detail}</span>}
               </span>
               <span className="object-page" aria-hidden="true">

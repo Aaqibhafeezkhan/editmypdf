@@ -1,4 +1,5 @@
 import { brushById } from "./brushes.ts";
+import { patchChanged } from "./changes.ts";
 import { EMOJI_GROUPS, emojiSrc } from "./emojis.ts";
 import { isBoxShape, SHAPE_LABEL, shapeFromLine, type ShapeId } from "./shapes.ts";
 import type { Annotation } from "./types.ts";
@@ -20,6 +21,9 @@ export type ObjectRow = {
   title: string;
   detail: string | null;
   icon: ObjectIcon;
+  // Whether the mark changes the page's own content: an edited run whose words, look, place or
+  // width differ from the page's. Marks the user added are never "changes".
+  changed: boolean;
 };
 
 const EMOJI_NAMES = new Map(EMOJI_GROUPS.flatMap((group) => group.items.map((item) => [item.id, item.name] as const)));
@@ -33,7 +37,7 @@ function firstWords(text: string, limit = 40): string | null {
   return `${space > limit / 2 ? cut.slice(0, space) : cut}…`;
 }
 
-function describe(annotation: Annotation): Omit<ObjectRow, "id" | "number" | "page"> {
+function describe(annotation: Annotation): Omit<ObjectRow, "id" | "number" | "page" | "changed"> {
   switch (annotation.kind) {
     case "text":
       return { title: "Text", detail: firstWords(annotation.text) ?? "Empty", icon: { kind: "text" } };
@@ -70,6 +74,7 @@ export function describeObjects(annotations: Annotation[]): ObjectRow[] {
     id: annotation.id,
     number: index + 1,
     page: annotation.page,
+    changed: annotation.kind === "patch" && patchChanged(annotation),
     ...describe(annotation),
   }));
 }

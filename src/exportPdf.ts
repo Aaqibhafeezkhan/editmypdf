@@ -4,6 +4,7 @@ import {
   degrees,
   endText,
   LineCapStyle,
+  LineJoinStyle,
   PDFDocument,
   PDFName,
   PDFNumber,
@@ -16,6 +17,9 @@ import {
   setCharacterSqueeze,
   setFillingRgbColor,
   setFontAndSize,
+  setLineJoin,
+  setLineWidth,
+  setStrokingRgbColor,
   setTextMatrix,
   setTextRenderingMode,
   setTextRise,
@@ -31,7 +35,7 @@ import { pageFonts, readPageContent, type ContentElement } from "./content.ts";
 import { editCover, refreshPatchFace } from "./contentEdit.ts";
 import { stripPageText, type StripResult } from "./contentStream.ts";
 import { fontUnicodeMap } from "./fontFix.ts";
-import { blockWidth, measureWidth, paintRun, placeRuns, type PlacedRun } from "./textLayout.ts";
+import { blockWidth, decorationLine, measureWidth, paintRun, placeRuns, runDecoration, type PlacedRun } from "./textLayout.ts";
 import { type3FaceBytes } from "./type3Font.ts";
 import { emojiSrc } from "./emojis.ts";
 import { rotatePoint } from "./geometry.ts";
@@ -185,12 +189,14 @@ function drawTextBlock(
       color,
       rotate: degrees(angle),
     });
-    if (annotation.underline && line.length > 0) {
-      const underlineY = baselineY + annotation.fontSize * 0.16;
-      const underlineStart = rotatePoint(annotation.x + offset, underlineY, centerX, centerY, rotation);
-      const underlineEnd = rotatePoint(annotation.x + offset + textWidth, underlineY, centerX, centerY, rotation);
-      const start = map(annotation.page, underlineStart.x, underlineStart.y);
-      const end = map(annotation.page, underlineEnd.x, underlineEnd.y);
+    const rules: number[] = [];
+    if (annotation.underline && line.length > 0) rules.push(baselineY + annotation.fontSize * 0.16);
+    if (annotation.strike && line.length > 0) rules.push(baselineY - annotation.fontSize * 0.3);
+    for (const ruleY of rules) {
+      const ruleStart = rotatePoint(annotation.x + offset, ruleY, centerX, centerY, rotation);
+      const ruleEnd = rotatePoint(annotation.x + offset + textWidth, ruleY, centerX, centerY, rotation);
+      const start = map(annotation.page, ruleStart.x, ruleStart.y);
+      const end = map(annotation.page, ruleEnd.x, ruleEnd.y);
       page.drawLine({
         start,
         end,
@@ -368,27 +374,42 @@ async function drawPatchText(
   }
   const operators: PDFOperator[] = [
     pushGraphicsState(),
+    setLineJoin(LineJoinStyle.Round),
     beginText(),
     setCharacterSqueeze(100),
     setWordSpacing(0),
     setTextRise(0),
     setTextRenderingMode(TextRenderingMode.Fill),
   ];
+  // Lines under or through runs, drawn once the text is written.
+  const rules: { box: { x: number; y: number; w: number; h: number }; color: ReturnType<typeof inkColor> }[] = [];
   for (const run of runs) {
     const face = faces.get(nameOf(run));
     const first = run.words[0];
     if (!face || !first) continue;
     const color = inkColor(run.color || patch.color);
+    const size = run.face.fontSize;
+    // The page's faces are registered regular whatever their design, so a heavier weight on a run
+    // is emboldening on top of the face (the page stroked it, or the user asked for bold the page
+    // has no cut for): the glyphs are stroked as well as filled, as generators embolden. A slant
+    // the face lacks skews the text matrix.
+    const embolden = run.face.fontWeight >= 600;
+    const slant = run.face.fontStyle === "italic" ? Math.tan((12 * Math.PI) / 180) : 0;
     // The text matrix maps the editor's page coordinates onto the page: the baseline direction
     // and the up direction at the run's start, which also carry any page rotation.
     const origin = map(patch.page, first.x, run.baseline);
     const along = map(patch.page, first.x + 1, run.baseline);
     const up = map(patch.page, first.x, run.baseline - 1);
+    const alongX = along.x - origin.x;
+    const alongY = along.y - origin.y;
     operators.push(
-      setFontAndSize(pageFontKey(page, face.font), run.face.fontSize),
+      setFontAndSize(pageFontKey(page, face.font), size),
       setCharacterSpacing(run.face.letterSpacing ?? 0),
       setFillingRgbColor(color.red, color.green, color.blue),
-      setTextMatrix(along.x - origin.x, along.y - origin.y, up.x - origin.x, up.y - origin.y, origin.x, origin.y),
+      setStrokingRgbColor(color.red, color.green, color.blue),
+      setLineWidth(size * 0.03),
+      setTextRenderingMode(embolden ? TextRenderingMode.FillAndOutline : TextRenderingMode.Fill),
+      setTextMatrix(alongX, alongY, up.x - origin.x + slant * alongX, up.y - origin.y + slant * alongY, origin.x, origin.y),
     );
     // One TJ per run: each word's glyphs, and before every word but the first a kern that lands it
     // where the editor put it (in thousandths of the font size, rightward negative). The spaces
@@ -396,14 +417,21 @@ async function drawPatchText(
     const items: (PDFHexString | PDFNumber)[] = [];
     let cursor = first.x;
     for (const word of run.words) {
-      if (items.length > 0) items.push(PDFNumber.of(Math.round((((cursor - word.x) * 1000) / run.face.fontSize) * 100) / 100));
+      if (items.length > 0) items.push(PDFNumber.of(Math.round((((cursor - word.x) * 1000) / size) * 100) / 100));
       items.push(face.font.encodeText(word.text));
       cursor = word.x + measureWidth(word.text, run.face);
     }
     operators.push(PDFOperator.of(PDFOperatorNames.ShowTextAdjusted, [document.context.obj(items)]));
+    const decoration = runDecoration(run.span, patch);
+    for (const kind of ["underline", "strike"] as const) {
+      if (!decoration[kind]) continue;
+      const rule = decorationLine(size, kind);
+      rules.push({ box: { x: first.x, y: run.baseline + rule.offset, w: cursor - first.x, h: rule.thickness }, color });
+    }
   }
   operators.push(endText(), popGraphicsState());
   if (runs.length > 0) page.pushOperators(...operators);
+  for (const rule of rules) drawMappedRect(page, map, patch.page, rule.box, undefined, rule.color);
   if (patch.underlineOffset >= 0) {
     drawMappedRect(
       page,
@@ -493,11 +521,14 @@ async function refreshPatchFaces(annotations: Annotation[], pages: PDFPageProxy[
     annotations.filter((annotation) => annotation.kind === "patch" && annotation.role === "text").map((annotation) => annotation.page),
   );
   const faces = new Map<string, ContentElement>();
+  const byPage = new Map<number, ContentElement[]>();
   for (const index of indices) {
     const page = pages[index];
     if (!page) continue;
     try {
-      for (const element of await readPageContent(page, index)) faces.set(element.id, element);
+      const elements = await readPageContent(page, index);
+      byPage.set(index, elements);
+      for (const element of elements) faces.set(element.id, element);
     } catch {
       // The patch keeps the face it was created with.
     }
@@ -506,7 +537,7 @@ async function refreshPatchFaces(annotations: Annotation[], pages: PDFPageProxy[
     if (annotation.kind !== "patch" || annotation.role !== "text") return annotation;
     const live = faces.get(annotation.sourceId);
     if (!live?.fontFamily) return annotation;
-    const refreshed = refreshPatchFace(annotation, live);
+    const refreshed = refreshPatchFace(annotation, live, byPage.get(annotation.page) ?? []);
     // A patch saved before patches named their font takes the name from the element it edits.
     return refreshed.pdfFont || !live.pdfFont ? refreshed : { ...refreshed, pdfFont: live.pdfFont };
   });

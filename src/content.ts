@@ -237,7 +237,33 @@ export type PageFont = {
   type3: boolean;
   // The family of the face rebuilt from a Type3 font, whose latest bytes `type3FaceBytes` gives.
   family?: string;
+  // The name the PDF gives the font (its BaseFont, subset prefix included); empty for a Type3 font.
+  name: string;
 };
+
+// What a font's name says about it: the typeface it belongs to (the name without its subset
+// prefix and its weight, slant and foundry words) and whether it is a bold or an italic cut.
+export type FaceTraits = { stem: string; bold: boolean; italic: boolean };
+
+const STYLE_WORDS = /bold|black|heavy|italic|oblique|slanted|kursiv|regular|roman|book|medium|light|semi|demi|normal/gi;
+
+export function traitsOfName(name: string): FaceTraits {
+  const bare = name.replace(/^[A-Z]{6}\+/, "");
+  const stem = bare
+    .replace(STYLE_WORDS, "")
+    .replace(/[^a-z0-9]/gi, "")
+    .replace(/(psmt|mt|ps)$/i, "")
+    .toLowerCase();
+  return { stem, bold: BOLD_NAME.test(bare), italic: ITALIC_NAME.test(bare) };
+}
+
+// The traits of a font of a page that has been read, by pdf.js font name; null for a Type3 font
+// (its name says nothing about its look) or a font the page was not read with.
+export function faceTraits(page: PDFPageProxy | undefined, pdfFont: string): FaceTraits | null {
+  const info = page ? fontCache.get(page)?.get(pdfFont) : undefined;
+  if (!info?.name) return null;
+  return traitsOfName(info.name);
+}
 
 // The scan of a document's Type3 fonts in progress, which the reader waits a moment for before
 // it builds a page's faces, so the first page's faces already hold the letters the other pages
@@ -440,7 +466,7 @@ async function resolveFaces(
       }
       const family = await editableFamily(name, font?.data, glyphUse.get(name));
       faces.set(name, await faceFor(name, font, styles[name], family));
-      fonts.set(name, { data: font?.data ?? null, fixed: family ? familyBytes(family) : null, type3: false });
+      fonts.set(name, { data: font?.data ?? null, fixed: family ? familyBytes(family) : null, type3: false, name: font?.name ?? "" });
     }),
   );
   // A Type3 font is a set of drawings: a real face is rebuilt from them, so the text is set in
@@ -459,7 +485,7 @@ async function resolveFaces(
       const bytes = family ? type3FaceBytes(family) : null;
       if (family && bytes) rememberCoverage(member.name, bytes, glyphUse.get(member.name));
       faces.set(member.name, await faceFor(member.name, member.font, styles[member.name], family));
-      fonts.set(member.name, { data: null, fixed: bytes, type3: true, family: family ?? undefined });
+      fonts.set(member.name, { data: null, fixed: bytes, type3: true, family: family ?? undefined, name: "" });
     }
   }
   fontCache.set(page, fonts);
