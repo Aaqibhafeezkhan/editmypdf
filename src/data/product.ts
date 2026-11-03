@@ -1,16 +1,16 @@
 // Facts about the product that the site repeats in many places. Change them here.
 
 export const PRODUCT = {
-  // The npm package and the repository are called "pdf-editor".
+  // The npm package is called "pdf-editor"; the repository is vr-patel/editmypdf.
   name: "Edit My PDF",
   nameIsProvisional: false,
   tagline: "Edit the text in a PDF without disturbing the page.",
   description:
     "Edit My PDF is a free PDF editor that runs entirely in your browser. Click any heading, line or paragraph and retype it in the page's own font, size, colour and spacing. Nothing is uploaded, and no account is needed.",
   shortDescription: "Free browser PDF editor that edits the page's own text in its own font. No uploads, no account.",
-  repository: "https://github.com/vr-patel/pdf-editor",
-  issues: "https://github.com/vr-patel/pdf-editor/issues",
-  licenseUrl: "https://github.com/vr-patel/pdf-editor/blob/main/LICENSE",
+  repository: "https://github.com/vr-patel/editmypdf",
+  issues: "https://github.com/vr-patel/editmypdf/issues",
+  licenseUrl: "https://github.com/vr-patel/editmypdf/blob/main/LICENSE",
   // The stack the privacy claims rest on. Verified against the source: pdf.js parses and renders in
   // a web worker, pdf-lib writes the file, IndexedDB and localStorage hold the sessions, and the
   // download is a blob URL. The only fetch() in the app loads its own emoji images.
