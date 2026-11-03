@@ -43,49 +43,137 @@ import { LogoMark } from "./Logo.tsx";
 // A faithful mock of the editor window, drawn with HTML so it is crisp in both themes. It follows
 // the editor's own chrome (src/chrome.css): the app bar with its menus and the document's name, the
 // labelled tool rail, the page on the canvas with its status bar, and the objects and properties
-// sidebar. It replays one edit: a figure in the first paragraph is retyped and the paragraph
-// reflows around it.
-const BEFORE = "nine per cent";
-const AFTER = "eleven per cent";
+// sidebar. It replays a sequence of edits, one field at a time: last year's letter is brought up to
+// date, from the year in the kicker down to a figure in the segment table, each stretch deleted and
+// retyped while its field alone carries the selection. Then the document is restored and the
+// sequence starts again.
 
-type Phase = "idle" | "deleting" | "typing" | "done";
+interface Step {
+  /** The stretch of text that is deleted and retyped, and what it becomes. */
+  before: string;
+  after: string;
+  /** The field's whole text, as its entry in the Your edits list shows it. */
+  line: (text: string) => string;
+  /** The field's original text, as the properties pane quotes it. */
+  quote: string;
+  /** The field's type size in points, as the properties pane shows it. */
+  size: number;
+}
+
+const REVENUE_QUOTE =
+  "Revenue. Full-year revenue grew nine per cent to $4.2 billion, with growth in every region. " +
+  "Subscription revenue now makes up two thirds of the total, up from half two years ago, and renewal " +
+  "rates held above ninety per cent for the fourth consecutive year.";
+
+const STEPS: readonly Step[] = [
+  { before: "2026", after: "2027", line: (text) => `Annual letter · ${text}`, quote: "Annual letter · 2026", size: 8 },
+  {
+    before: "shareholders",
+    after: "our shareholders",
+    line: (text) => `Letter to ${text}`,
+    quote: "Letter to shareholders",
+    size: 18,
+  },
+  {
+    before: "14 March 2026",
+    after: "12 March 2027",
+    line: (text) => `From the chief executive · ${text}`,
+    quote: "From the chief executive · 14 March 2026",
+    size: 9,
+  },
+  {
+    before: "nine per cent",
+    after: "eleven per cent",
+    line: (text) => `Revenue. Full-year revenue grew ${text} to $4.2 billion`,
+    quote: REVENUE_QUOTE,
+    size: 10,
+  },
+  { before: "18%", after: "20%", line: (text) => text, quote: "18%", size: 9 },
+];
+const KICKER = 0;
+const TITLE = 1;
+const BYLINE = 2;
+const REVENUE = 3;
+const MARGIN = 4;
+
+// Pauses in milliseconds: with the original document before the first step, with a field selected
+// before its text changes, per character deleted and typed, between deleting and typing, and holding
+// a finished edit before moving on.
+const PAUSE = { idle: 1400, selected: 2000, delete: 50, gap: 300, type: 80, hold: 3200 } as const;
+
+type Phase = "idle" | "selected" | "deleting" | "typing";
+
+interface Replay {
+  /** The step being played. While idle, 0 shows the original document and STEPS.length the finished one. */
+  step: number;
+  phase: Phase;
+  /** The current text of the step's stretch. */
+  text: string;
+}
+
+const ORIGINAL: Replay = { step: 0, phase: "idle", text: "" };
+const FINISHED: Replay = { step: STEPS.length, phase: "idle", text: "" };
+
+function select(step: number): Replay {
+  return { step, phase: "selected", text: STEPS[step].before };
+}
+
+// What follows a moment of the replay, and after how long.
+function following(replay: Replay): [delay: number, next: Replay] {
+  const { step, phase, text } = replay;
+  if (phase === "idle") return [PAUSE.idle, select(0)];
+  if (phase === "selected") return [PAUSE.selected, { ...replay, phase: "deleting" }];
+  if (phase === "deleting") {
+    if (text.length > 0) return [PAUSE.delete, { ...replay, text: text.slice(0, -1) }];
+    return [PAUSE.gap, { ...replay, phase: "typing" }];
+  }
+  const { after } = STEPS[step];
+  if (text.length < after.length) return [PAUSE.type, { ...replay, text: after.slice(0, text.length + 1) }];
+  return [PAUSE.hold, step + 1 < STEPS.length ? select(step + 1) : ORIGINAL];
+}
 
 function reducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export function useTypedEdit(before = BEFORE, after = AFTER): { text: string; editing: boolean } {
-  // The replay always starts from the original text, so prerendered markup matches the first render
-  // in every browser; a viewer who prefers reduced motion is shown the finished edit straight away.
-  const [text, setText] = useState(before);
-  const [phase, setPhase] = useState<Phase>("idle");
+// The replay always starts from the original document with no field being edited, so prerendered
+// markup matches the first render in every browser, and one timer at a time carries it from step to
+// step. A viewer who prefers reduced motion is shown the finished edits straight away.
+function useReplay(): { values: string[]; active: number; editing: boolean } {
+  const [replay, setReplay] = useState<Replay>(ORIGINAL);
 
   useEffect(() => {
     if (reducedMotion()) {
-      setText(after);
+      setReplay(FINISHED);
       return;
     }
-    let timer = 0;
-    const schedule = (ms: number, next: () => void) => {
-      timer = window.setTimeout(next, ms);
-    };
-    if (phase === "idle") schedule(2600, () => setPhase("deleting"));
-    else if (phase === "deleting") {
-      if (text.length > 0) schedule(50, () => setText((value) => value.slice(0, -1)));
-      else schedule(300, () => setPhase("typing"));
-    } else if (phase === "typing") {
-      if (text.length < after.length) schedule(80, () => setText(after.slice(0, text.length + 1)));
-      else schedule(4200, () => setPhase("done"));
-    } else if (phase === "done") {
-      schedule(0, () => {
-        setText(before);
-        setPhase("idle");
-      });
-    }
+    const [delay, next] = following(replay);
+    const timer = window.setTimeout(() => setReplay(next), delay);
     return () => window.clearTimeout(timer);
-  }, [phase, text, before, after]);
+  }, [replay]);
 
-  return { text, editing: phase === "deleting" || phase === "typing" };
+  const { step, phase, text } = replay;
+  const active = phase === "idle" ? -1 : step;
+  return {
+    values: STEPS.map((field, index) => (index < step ? field.after : index === active ? text : field.before)),
+    active,
+    editing: phase === "deleting" || phase === "typing",
+  };
+}
+
+// The selection's number badge and its move and resize grips.
+function Handles() {
+  return (
+    <>
+      <span className="ew-badge">1</span>
+      <span className="ew-grip">
+        <GripVertical />
+      </span>
+      <span className="ew-grip resize">
+        <ChevronsLeftRight />
+      </span>
+    </>
+  );
 }
 
 function Tool({ active, label, children }: { active?: boolean; label: string; children: React.ReactNode }) {
@@ -115,7 +203,21 @@ function PropRow({ label, children }: { label: string; children: React.ReactNode
 }
 
 export function EditorWindow() {
-  const { text, editing } = useTypedEdit();
+  const { values, active, editing } = useReplay();
+  // The sidebar follows the field being edited, and the Revenue paragraph while none is; that
+  // paragraph also keeps the selection between cycles, as the prerendered page shows it.
+  const shown = active === -1 ? REVENUE : active;
+  const field = (index: number, base: string) => {
+    const selected = index === shown;
+    const live = selected && editing;
+    const className = `${base}ew-edit${selected ? " selected" : ""}${live ? " editing" : ""}`;
+    return { className, selected, live };
+  };
+  const kicker = field(KICKER, "ew-page-kicker ");
+  const title = field(TITLE, "");
+  const byline = field(BYLINE, "ew-byline ");
+  const revenue = field(REVENUE, "ew-block ");
+  const margin = field(MARGIN, "");
   return (
     <div className="ew" aria-hidden="true">
       <div className="ew-bar">
@@ -207,20 +309,26 @@ export function EditorWindow() {
             <div className="ew-page">
               <div className="ew-page-head">
                 <span className="ew-page-rule" />
-                <span className="ew-page-kicker">Annual letter · 2026</span>
+                <span className={kicker.className}>
+                  {kicker.selected && <Handles />}
+                  Annual letter · {values[KICKER]}
+                  {kicker.live && <span className="ew-caret" />}
+                </span>
               </div>
-              <h4>Letter to shareholders</h4>
-              <p className="ew-byline">From the chief executive · 14 March 2026</p>
-              <p className={editing ? "ew-block selected editing" : "ew-block selected"}>
-                <span className="ew-badge">1</span>
-                <span className="ew-grip">
-                  <GripVertical />
-                </span>
-                <span className="ew-grip resize">
-                  <ChevronsLeftRight />
-                </span>
-                <strong>Revenue.</strong> Full-year revenue grew {text}
-                <span className="ew-caret" /> to $4.2 billion, with growth in every region. Subscription
+              <h4 className={title.className}>
+                {title.selected && <Handles />}
+                Letter to {values[TITLE]}
+                {title.live && <span className="ew-caret" />}
+              </h4>
+              <p className={byline.className}>
+                {byline.selected && <Handles />}
+                From the chief executive · {values[BYLINE]}
+                {byline.live && <span className="ew-caret" />}
+              </p>
+              <p className={revenue.className}>
+                {revenue.selected && <Handles />}
+                <strong>Revenue.</strong> Full-year revenue grew {values[REVENUE]}
+                {revenue.live && <span className="ew-caret" />} to $4.2 billion, with growth in every region. Subscription
                 revenue now makes up two thirds of the total, up from half two years ago, and renewal
                 rates held above ninety per cent for the fourth consecutive year.
               </p>
@@ -249,7 +357,13 @@ export function EditorWindow() {
                     <td>Services</td>
                     <td>$1.4bn</td>
                     <td>+6%</td>
-                    <td>18%</td>
+                    <td>
+                      <span className={margin.className}>
+                        {margin.selected && <Handles />}
+                        {values[MARGIN]}
+                        {margin.live && <span className="ew-caret" />}
+                      </span>
+                    </td>
                   </tr>
                   <tr>
                     <td>Total</td>
@@ -321,7 +435,7 @@ export function EditorWindow() {
             <div className="ew-pane-head">
               <span className="ew-pane-text">
                 <strong className="ew-pane-title">
-                  Objects
+                  Your edits
                   <span className="ew-count">3</span>
                 </strong>
                 <span className="ew-pane-detail">On 2 pages, in the order added</span>
@@ -338,7 +452,7 @@ export function EditorWindow() {
                 </span>
                 <span className="ew-object-text">
                   <span className="ew-object-title">Edited text</span>
-                  <span className="ew-object-detail">Revenue. Full-year revenue grew {text} to $4.2 billion</span>
+                  <span className="ew-object-detail">{STEPS[shown].line(values[shown])}</span>
                 </span>
                 <span className="ew-object-page">p.1</span>
               </li>
@@ -384,7 +498,8 @@ export function EditorWindow() {
                 <PropRow label="Size">
                   <span className="ew-number-slider">
                     <span className="ew-field">
-                      10<i>pt</i>
+                      {STEPS[shown].size}
+                      <i>pt</i>
                     </span>
                     <span className="ew-slider">
                       <span className="ew-slider-range" />
@@ -433,11 +548,7 @@ export function EditorWindow() {
               </section>
               <section className="ew-section">
                 <h5 className="ew-eyebrow">On the page</h5>
-                <p className="ew-quote">
-                  Revenue. Full-year revenue grew nine per cent to $4.2 billion, with growth in every region.
-                  Subscription revenue now makes up two thirds of the total, up from half two years ago, and
-                  renewal rates held above ninety per cent for the fourth consecutive year.
-                </p>
+                <p className="ew-quote">{STEPS[shown].quote}</p>
               </section>
             </div>
             <div className="ew-pane-foot">

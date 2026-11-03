@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BookOpen,
   CircleHelp,
+  ExternalLink,
   FileText,
   LayoutGrid,
   Menu,
@@ -176,6 +177,25 @@ function useReveal(pathname: string) {
   }, [pathname]);
 }
 
+// The one header link that leaves the site: GitHub's mark, the name and an arrow that says the
+// page opens elsewhere. It follows "Open the editor" in both layouts: at the end of the header row
+// on a wide screen, at the foot of the menu on a narrow one.
+function GitHubLink({ className }: { className: string }) {
+  return (
+    <a
+      href={PRODUCT.repository}
+      className={className}
+      rel="noopener noreferrer"
+      target="_blank"
+      title="Source code on GitHub, in a new tab"
+    >
+      <GitHubMark />
+      GitHub
+      <ExternalLink className="site-link-out" aria-hidden="true" />
+    </a>
+  );
+}
+
 export function SiteLayout() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
@@ -218,25 +238,17 @@ export function SiteLayout() {
                 </NavLink>
               ),
             )}
-            <a
-              href={PRODUCT.repository}
-              className="site-nav-link site-nav-github"
-              rel="noopener noreferrer"
-              target="_blank"
-              title="Source code on GitHub"
-            >
-              <GitHubMark />
-              GitHub
-            </a>
             <Link to={ROUTES.app} className="btn btn-primary site-nav-cta">
               Open the editor <ArrowRight aria-hidden="true" />
             </Link>
+            <GitHubLink className="site-nav-link site-nav-github" />
           </nav>
           <div className="site-header-actions">
             <ThemeSelect />
             <Link to={ROUTES.app} className="btn btn-primary btn-sm site-header-cta">
               Open the editor <ArrowRight aria-hidden="true" />
             </Link>
+            <GitHubLink className="site-nav-link site-header-github" />
             <button
               type="button"
               className="site-menu-button"

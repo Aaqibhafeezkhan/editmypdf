@@ -153,7 +153,7 @@ export function ObjectList({
   }
 
   return (
-    <ul ref={listRef} className="object-list" aria-label="Inserted objects">
+    <ul ref={listRef} className="object-list" aria-label="Edits, in the order added">
       {objects.map((row) => {
         const selected = row.id === selectedId;
         const hot = row.id === hotId;

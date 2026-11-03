@@ -50,8 +50,10 @@ function loadGtag(id: string): void {
   if (loaded) return;
   loaded = true;
   window.dataLayer = window.dataLayer ?? [];
-  window.gtag = function gtag(...args: unknown[]) {
-    window.dataLayer?.push(args);
+  // Google's tag only recognises commands pushed as an `arguments` object, exactly as its own
+  // snippet does: a plain array is ignored and nothing is ever sent.
+  window.gtag = function gtag() {
+    window.dataLayer?.push(arguments);
   };
   window.gtag("js", new Date());
   // Page views are sent by hand below, once per route change.

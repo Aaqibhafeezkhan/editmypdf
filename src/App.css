@@ -190,6 +190,15 @@
   cursor: cell;
 }
 
+/* The pointer is over a mark that a press would move: the body itself is the handle. */
+.hit-layer.can-move {
+  cursor: grab;
+}
+
+.page-frame.moving .hit-layer {
+  cursor: grabbing;
+}
+
 /* On-paper overlays keep fixed colours: the paper is white in both themes. */
 
 .content-cover,
@@ -458,6 +467,15 @@
 .shape-box .edge-s { cursor: ns-resize; }
 .shape-box .edge-e,
 .shape-box .edge-w { cursor: ew-resize; }
+
+/* The grip beside a selected emoji or signature: a handle to move it by, for fingers as much
+   as for pointers. */
+.shape-box .content-grip {
+  top: 50%;
+  left: -22px;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
 
 @container (max-height: 22px) {
   .handle.n,

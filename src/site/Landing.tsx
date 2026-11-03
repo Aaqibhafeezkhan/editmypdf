@@ -183,8 +183,8 @@ function Showcase({
 export function Landing() {
   const questions = FAQ.slice(0, 4);
   useMeta({
-    title: `${PRODUCT.name} — ${PRODUCT.tagline}`,
-    titleSuffix: false,
+    // Keyword first for the results page, with the name as the usual suffix; the H1 keeps the tagline.
+    title: "Edit text in a PDF online: free PDF text editor",
     description: PRODUCT.description,
     keywords: [
       "edit PDF text",
@@ -228,7 +228,7 @@ export function Landing() {
         <div className="hero-bg" aria-hidden="true" />
         <div className="container hero-copy">
           <p className="eyebrow">
-            <FileText aria-hidden="true" /> Free browser PDF editor
+            <FileText aria-hidden="true" /> Free online PDF text editor
           </p>
           <h1 className="display display-xl">
             Edit the text in a PDF <em>without disturbing the page.</em>

@@ -752,6 +752,37 @@
   color: var(--warn);
 }
 
+/* Every missing character has a supplement: nothing to warn about, only to say. */
+.panel-note.calm {
+  background: var(--accent-soft);
+}
+
+.panel-note.calm svg {
+  color: var(--accent);
+}
+
+.panel-note-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.panel-note-action:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.panel-note-error {
+  display: block;
+  margin-top: 4px;
+  color: var(--warn);
+}
+
 .content-quote {
   margin: 0;
   padding: 8px 12px;

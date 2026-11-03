@@ -96,6 +96,49 @@ export function Duel({ tool }: { tool: Tool }) {
   );
 }
 
+// The same three facts as a small table for the comparison page's verdict card: one row per fact,
+// the tool's column then PDF Edit's, in the order of the glance table below it.
+export function Scorecard({ tool }: { tool: Tool }) {
+  const columns: { tool: Tool; us: boolean }[] = [
+    { tool, us: false },
+    { tool: OURS, us: true },
+  ];
+  return (
+    <table className="scorecard">
+      <caption className="sr-only">
+        {tool.name} and {PRODUCT.name} on three facts
+      </caption>
+      <thead>
+        <tr>
+          <td />
+          {columns.map((column) => (
+            <th key={column.tool.slug} scope="col" className={column.us ? "us" : undefined}>
+              {column.us ? <LogoMark size={22} /> : <ToolMark brand={column.tool.brand} size={22} />}
+              <span className="sr-only">{column.tool.name}</span>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {FACTS.map((fact) => (
+          <tr key={fact.key}>
+            <th scope="row">{fact.label}</th>
+            {columns.map((column) => {
+              const value = fact.value(column.tool);
+              return (
+                <td key={column.tool.slug} className={column.us ? "us" : undefined}>
+                  <span className={`duel-dot ${value}`} title={TRI_LABEL[value]} aria-hidden="true" />
+                  <span className="sr-only">{TRI_LABEL[value]}</span>
+                </td>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 // One comparison as a card: the thumbnail, vendor and starting price, title, summary.
 export function CompareCard({ tool }: { tool: Competitor }) {
   return (

@@ -465,6 +465,9 @@ export function PageStage({
     return () => document.fonts.removeEventListener("loadingdone", onDone);
   }, []);
   const [hoverContent, setHoverContent] = useState<string | null>(null);
+  // The tool the pointer was last found under over a mark that a press would start moving: the
+  // hit layer shows a grab cursor while that tool is still the one in hand.
+  const [grabTool, setGrabTool] = useState<Tool | null>(null);
   const contentRef = useRef<ContentElement[]>([]);
   // The alignment guides the mark being moved is snapped to; none once the drag ends.
   const [guides, setGuides] = useState<Guide[]>([]);
@@ -716,7 +719,7 @@ export function PageStage({
 
   const finishDrag = (event: ReactPointerEvent<HTMLElement>) => {
     const frame = frameRef.current;
-    requestAnimationFrame(() => frame?.classList.remove("interacting"));
+    requestAnimationFrame(() => frame?.classList.remove("interacting", "moving"));
     // An editor armed before the pointer went up gets its focus now. Only that one: a text field
     // this release creates arms itself afterwards and must not lose its focus to the previous
     // field, and an arm already consumed by the editor's own focus handler is left alone.
@@ -813,13 +816,41 @@ export function PageStage({
     }
   };
 
+  // A graphic patch that still sits exactly where its element was: a selection, nothing more.
+  const untouchedGraphic = (annotation: Annotation): annotation is PatchAnnotation =>
+    annotation.kind === "patch" &&
+    annotation.role === "graphic" &&
+    Math.abs(annotation.x - annotation.originX) < 0.01 &&
+    Math.abs(annotation.y - annotation.originY) < 0.01 &&
+    Math.abs(annotation.w - annotation.originW) < 0.01 &&
+    Math.abs(annotation.h - annotation.originH) < 0.01 &&
+    !annotation.rotation;
+
+  // Whether a press at this point would start moving the mark, as onPointerDown decides it: a
+  // text field takes the focus, edited text places the caret, and a label under an untouched
+  // graphic selection opens that label instead.
+  const pressWouldMove = (mark: Annotation | null, point: Point) => {
+    if (!mark || mark.kind === "text") return false;
+    if (mark.kind === "patch" && mark.role === "text") return false;
+    if (untouchedGraphic(mark)) {
+      const element = contentAt(contentRef.current, point);
+      if (element && isTextContent(element.kind)) return false;
+    }
+    return true;
+  };
+
   const hoverContentAt = (point: Point) => {
     if (tool !== "select") {
       onHover(null);
+      // The Emoji and Signature tools move whatever mark a press lands on.
+      const movesMark =
+        (tool === "emoji" || tool === "signature") && hitTest(getAnnotations(), pageIndex, point, textBox) !== null;
+      setGrabTool(movesMark ? tool : null);
       return;
     }
     const mark = hitTest(getAnnotations(), pageIndex, point, textBox);
     onHover(mark?.id ?? null);
+    setGrabTool(pressWouldMove(mark, point) ? tool : null);
     const next = mark ? null : (contentAt(contentRef.current, point)?.id ?? null);
     setHoverContent((current) => (current === next ? current : next));
   };
@@ -1094,16 +1125,6 @@ export function PageStage({
     onSelectContent(element);
   };
 
-  // A graphic patch that still sits exactly where its element was: a selection, nothing more.
-  const untouchedGraphic = (annotation: Annotation): annotation is PatchAnnotation =>
-    annotation.kind === "patch" &&
-    annotation.role === "graphic" &&
-    Math.abs(annotation.x - annotation.originX) < 0.01 &&
-    Math.abs(annotation.y - annotation.originY) < 0.01 &&
-    Math.abs(annotation.w - annotation.originW) < 0.01 &&
-    Math.abs(annotation.h - annotation.originH) < 0.01 &&
-    !annotation.rotation;
-
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -1156,6 +1177,7 @@ export function PageStage({
           onRequestFocus(hit.id);
           return;
         }
+        frameRef.current?.classList.add("moving");
         dragRef.current = { type: "move", origin: current, id: hit.id, start: point, moved: false };
         return;
       }
@@ -1203,6 +1225,7 @@ export function PageStage({
       const hit = hitTest(current, pageIndex, point, textBox);
       onSelect(hit?.id ?? null);
       if (!hit) return;
+      frameRef.current?.classList.add("moving");
       dragRef.current = { type: "move", origin: current, id: hit.id, start: point, moved: false };
       return;
     }
@@ -1647,7 +1670,7 @@ export function PageStage({
           );
         })}
         <div
-          className={`hit-layer tool-${tool}`}
+          className={`hit-layer tool-${tool}${grabTool === tool ? " can-move" : ""}`}
           role="application"
           aria-label="Drawing surface"
           onMouseDown={(event) => event.preventDefault()}
@@ -1657,6 +1680,7 @@ export function PageStage({
           onPointerCancel={finishDrag}
           onPointerLeave={() => {
             setHoverContent(null);
+            setGrabTool(null);
             onHover(null);
           }}
         />
@@ -1859,13 +1883,9 @@ export function PageStage({
               breakLine(event.currentTarget);
               return;
             }
-            // Alt+Shift+Left/Right narrows or widens the box from the keyboard, four points a step.
-            if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && event.altKey && event.shiftKey) {
-              event.preventDefault();
-              event.stopPropagation();
-              setWidth(currentWidth + (event.key === "ArrowRight" ? 4 : -4));
-              return;
-            }
+            // Every other key the browser moves or selects text with (arrows with Shift, Option, Command
+            // or Control, Home and End) is left alone: the editor behaves like any native text field.
+            // The width is changed from the keyboard on the resize handle, a Tab away.
             if (event.key === "Escape") {
               event.preventDefault();
               event.currentTarget.blur();
@@ -2078,11 +2098,11 @@ export function PageStage({
                 <div
                   className="content-grip resize"
                   role="slider"
-                  tabIndex={-1}
+                  tabIndex={0}
                   aria-label="Width of the text box"
                   aria-valuenow={Math.round(currentWidth)}
                   aria-valuemin={Math.round(Math.max(12, patch.fontSize * 3))}
-                  title="Drag to change the width the text wraps in"
+                  title="Drag to change the width the text wraps in, or press Tab and use the arrow keys"
                   style={{
                     left: (patch.x - slackShift + (patch.wrap ? blockWidth(patch) : Math.max(patch.w, 1))) * scale + 4,
                     top: (patch.y + patch.fontSize * 0.5) * scale - 8,
@@ -2179,6 +2199,21 @@ export function PageStage({
               box,
             };
           };
+          // Emoji and signatures get the grip edited text has: a handle to move them by, beside
+          // the body that moves too.
+          const grip = annotation.kind === "emoji" || annotation.kind === "signature";
+          const startMove = (event: ReactPointerEvent<HTMLElement>) => {
+            if (event.button !== 0) return;
+            event.stopPropagation();
+            event.preventDefault();
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              // A very fast click can release the pointer before capture.
+            }
+            frameRef.current?.classList.add("interacting");
+            dragRef.current = { type: "move", origin: getAnnotations(), id: annotation.id, start: toPoint(event), moved: false };
+          };
           return (
             <div
               key={`${annotation.id}-handles`}
@@ -2213,6 +2248,20 @@ export function PageStage({
                   onPointerUp={finishDrag}
                 />
               ))}
+              {grip && (
+                <div
+                  className="content-grip"
+                  role="button"
+                  aria-label={annotation.kind === "emoji" ? "Move emoji" : "Move signature"}
+                  title={annotation.kind === "emoji" ? "Drag to move the emoji" : "Drag to move the signature"}
+                  onPointerDown={startMove}
+                  onPointerMove={moveDrag}
+                  onPointerUp={finishDrag}
+                  onPointerCancel={finishDrag}
+                >
+                  <GripVertical size={11} strokeWidth={2.25} aria-hidden="true" />
+                </div>
+              )}
             </div>
           );
         })}

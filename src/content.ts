@@ -1,5 +1,7 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
 import { collectGlyphUse, editableFamily, familyBytes, missingGlyphs, rememberCoverage, type GlyphUse } from "./fontFix.ts";
+import { bareName, traitsOfName, weightOfName, type FaceKind, type FaceTraits } from "./fontNames.ts";
+import { fontOffer, supplementFamilies, supplementOf, type FontOffer, type Relation } from "./supplementFonts.ts";
 import { measureWidth } from "./textLayout.ts";
 import { loadPdf, type LoadedPdf } from "./pdf.ts";
 import {
@@ -241,21 +243,8 @@ export type PageFont = {
   name: string;
 };
 
-// What a font's name says about it: the typeface it belongs to (the name without its subset
-// prefix and its weight, slant and foundry words) and whether it is a bold or an italic cut.
-export type FaceTraits = { stem: string; bold: boolean; italic: boolean };
-
-const STYLE_WORDS = /bold|black|heavy|italic|oblique|slanted|kursiv|regular|roman|book|medium|light|semi|demi|normal/gi;
-
-export function traitsOfName(name: string): FaceTraits {
-  const bare = name.replace(/^[A-Z]{6}\+/, "");
-  const stem = bare
-    .replace(STYLE_WORDS, "")
-    .replace(/[^a-z0-9]/gi, "")
-    .replace(/(psmt|mt|ps)$/i, "")
-    .toLowerCase();
-  return { stem, bold: BOLD_NAME.test(bare), italic: ITALIC_NAME.test(bare) };
-}
+export { traitsOfName };
+export type { FaceTraits };
 
 // The traits of a font of a page that has been read, by pdf.js font name; null for a Type3 font
 // (its name says nothing about its look) or a font the page was not read with.
@@ -709,7 +698,7 @@ function fontObject(page: PDFPageProxy, name: string): Promise<PdfFontObject | n
 }
 
 async function faceFor(name: string, font: PdfFontObject | null, style: PdfFontStyle | undefined, fixed: string | null): Promise<Face> {
-  const fallback = await fallbackFamily(font, style);
+  const fallback = await fallbackFamily(name, font, style);
   const weight = font?.black ? 900 : font?.bold ? 700 : 400;
   const slant: Face["style"] = font?.italic ? "italic" : "normal";
   const matrix = font?.fontMatrix?.[0];
@@ -722,8 +711,6 @@ async function faceFor(name: string, font: PdfFontObject | null, style: PdfFontS
   }
   return { family: fallback, weight, style: slant, unitScale };
 }
-
-type FaceKind = "serif" | "sans" | "mono";
 
 // Faces most systems have, by the name a PDF font goes by, so a character the embedded face lacks
 // comes from the real font when it is installed.
@@ -766,11 +753,6 @@ const SANS_HINT =
   /gothic|arial|arimo|helvetica|verdana|tahoma|calibri|carlito|segoe|roboto|lato\b|\binter\b|myriad|frutiger|univers|futura|avenir|gill|optima|trebuchet|cmss\d|sfss\d|lmsans|heros|adventor|nimbussan|geist|montserrat|poppins|raleway|ubuntu|cantarell|nunito|oswald|franklin|akzidenz|\bdin\b|avant|gotham|proxima|aptos/i;
 const ROMAN_HINT = /roman/i;
 
-// Words in a font's name that say it is bold or italic. pdf.js sets its own bold and italic flags
-// only for fonts it had to substitute; an embedded face says so in its name alone.
-const BOLD_NAME = /bold|black|heavy|cm(?:bx|b|ssbx|bxti|bxsl)\d|sfbx\d/i;
-const ITALIC_NAME = /italic|oblique|slanted|kursiv|cm(?:ti|bxti|sl|bxsl|mi)\d|sfti\d/i;
-
 const GENERIC: Record<FaceKind, { faces: string[]; generic: string }> = {
   serif: { faces: ["Georgia", "Times New Roman"], generic: "serif" },
   sans: { faces: ["Helvetica", "Arial"], generic: "sans-serif" },
@@ -778,20 +760,31 @@ const GENERIC: Record<FaceKind, { faces: string[]; generic: string }> = {
 };
 
 // The families a character the face lacks is drawn in, in the order the browser tries them: the
-// bold or italic of the faces below when the font is one, the font the PDF names when most
-// systems have it, faces of the same kind that most systems have, then the generic family.
-// pdf.js picks its generic from the PDF's font flags, which many generators set wrongly (a text
-// serif flagged plain, so a missing letter came out sans-serif); the font's own name is trusted
-// first, and the flags only when the name says nothing.
-async function fallbackFamily(font: PdfFontObject | null, style: PdfFontStyle | undefined): Promise<string> {
-  const name = (font?.name ?? "").replace(/^[A-Z]{6}\+/, "");
+// font's supplement (a font the user added for the face, then the bundled open font of the same
+// design, in the font's own cut; see supplementFonts.ts), the bold or italic of the faces below
+// when the font is one, the font the PDF names when most systems have it, faces of the same kind
+// that most systems have, then the generic family. pdf.js picks its generic from the PDF's font
+// flags, which many generators set wrongly (a text serif flagged plain, so a missing letter came
+// out sans-serif); the font's own name is trusted first, and the flags only when the name says
+// nothing. `loadedName` is the pdf.js font name the supplement is recorded under.
+async function fallbackFamily(loadedName: string, font: PdfFontObject | null, style: PdfFontStyle | undefined): Promise<string> {
+  const raw = font?.name ?? "";
+  const name = bareName(raw);
   const known = KNOWN_FAMILIES.find(([pattern]) => pattern.test(name));
   const kind = known?.[2] ?? kindOf(name, font, style);
   const faces = [...new Set([...(known ? [known[1]] : []), ...GENERIC[kind].faces])];
-  const bold = font?.bold || font?.black || (font?.bold == null && BOLD_NAME.test(name));
-  const italic = font?.italic ?? ITALIC_NAME.test(name);
-  const styled = await styledAlias(faces, !!bold, italic);
-  return [...(styled ? [`"${styled}"`] : []), ...faces.map((face) => `"${face}"`), GENERIC[kind].generic].join(", ");
+  // pdf.js sets its bold and italic flags only for fonts it substituted, and since pdf.js 6 the
+  // flags reach the page as false, not as nothing, for every other font: an embedded face is bold
+  // or italic when its name says so (in a word, or in the weight axis a generator appended).
+  const traits = traitsOfName(raw);
+  const bold = !!(font?.bold || font?.black || traits.bold);
+  const italic = !!(font?.italic || traits.italic);
+  const weight = font?.black ? 900 : weightOfName(raw, bold);
+  const [supplement, styled] = await Promise.all([
+    font?.systemFontInfo?.css ? Promise.resolve([]) : supplementFamilies(loadedName, { name, bold, italic, weight, kind }),
+    styledAlias(faces, bold, italic),
+  ]);
+  return [...supplement, ...(styled ? [styled] : []), ...faces].map((face) => `"${face}"`).concat(GENERIC[kind].generic).join(", ");
 }
 
 function kindOf(name: string, font: PdfFontObject | null, style: PdfFontStyle | undefined): FaceKind {
@@ -853,6 +846,46 @@ export function patchMissingGlyphs(patch: Pick<PatchAnnotation, "text" | "pdfFon
     for (const char of missingGlyphs(span.pdfFont, span.text)) if (!missing.includes(char)) missing.push(char);
   }
   return missing;
+}
+
+// Where the characters a text patch's faces lack come from: by supplement, the characters it
+// supplies (so the inspector can say "3, 4 and 5 are set in Tinos Bold"), the characters no
+// supplement has (shown in a substitute face; the export paints the patch), and the font file
+// the user could add for the first face that has no supplement of its own design.
+export type GlyphReport = {
+  supplied: { label: string; relation: Relation; chars: string[] }[];
+  unsupplied: string[];
+  offer: FontOffer | null;
+};
+
+export function patchGlyphReport(patch: Pick<PatchAnnotation, "text" | "pdfFont" | "spans">): GlyphReport {
+  const spans =
+    patch.spans.length > 0 && patch.spans.map((span) => span.text).join("") === patch.text
+      ? patch.spans
+      : [{ text: patch.text, pdfFont: patch.pdfFont }];
+  const supplied = new Map<string, GlyphReport["supplied"][number]>();
+  const unsupplied: string[] = [];
+  let offer: FontOffer | null = null;
+  for (const span of spans) {
+    const missing = missingGlyphs(span.pdfFont, span.text);
+    if (missing.length === 0) continue;
+    const supplement = supplementOf(span.pdfFont);
+    offer ??= fontOffer(span.pdfFont);
+    for (const char of missing) {
+      const code = char.codePointAt(0) ?? -1;
+      if (supplement?.covers(code)) {
+        let group = supplied.get(supplement.label);
+        if (!group) {
+          group = { label: supplement.label, relation: supplement.relation, chars: [] };
+          supplied.set(supplement.label, group);
+        }
+        if (!group.chars.includes(char)) group.chars.push(char);
+      } else if (!unsupplied.includes(char)) {
+        unsupplied.push(char);
+      }
+    }
+  }
+  return { supplied: [...supplied.values()], unsupplied, offer };
 }
 
 function fontRegistered(family: string): boolean {

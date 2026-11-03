@@ -457,7 +457,11 @@ a.tool-cell:hover span {
   height: 64px;
 }
 
+/* A flex box, not an inline one, so the row centres the mark and the wordmark themselves rather
+   than a line box they sit at the top of; they then share the nav links' centre line. */
 .site-logo {
+  display: inline-flex;
+  align-items: center;
   color: inherit;
   text-decoration: none;
   flex: none;
@@ -505,9 +509,18 @@ a.tool-cell:hover span {
   color: var(--accent-ink);
 }
 
-/* The GitHub link is the one nav item that leaves the site; a little space sets it apart. */
+/* The GitHub link is the one that leaves the site: a small arrow after its name says so. On a
+   wide screen it ends the header row, after "Open the editor"; the copy in the menu is for narrow
+   screens, where it follows the menu's own "Open the editor". */
+.site-nav-link .site-link-out {
+  width: 12px;
+  height: 12px;
+  margin-left: -2px;
+  color: var(--ink-2);
+}
+
 .site-nav-github {
-  margin-left: var(--sp-1);
+  display: none;
 }
 
 .site-nav-cta {
@@ -575,7 +588,13 @@ a.tool-cell:hover span {
     margin-top: var(--sp-3);
   }
 
-  .site-header-cta {
+  .site-nav-github {
+    display: inline-flex;
+    margin-top: var(--sp-1);
+  }
+
+  .site-header-cta,
+  .site-header-github {
     display: none;
   }
 
@@ -1141,44 +1160,6 @@ a.card:hover {
     margin: var(--sp-1) var(--sp-3) 0;
     border-radius: var(--round-md);
   }
-}
-
-/* ---- Comparison page ----------------------------------------------------- */
-
-.cmp-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: var(--sp-10);
-  align-items: end;
-}
-
-@media (max-width: 860px) {
-  .cmp-head {
-    grid-template-columns: 1fr;
-  }
-}
-
-.cmp-verdict {
-  padding: var(--sp-5);
-  border-radius: var(--round-lg);
-  background: var(--paper-1);
-  border: 1px solid var(--rule);
-}
-
-.cmp-verdict h2 {
-  margin: 0 0 var(--sp-2);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-
-.cmp-verdict p {
-  margin: 0;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-relaxed);
-  color: var(--ink-1);
 }
 
 .two-col {
