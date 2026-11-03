@@ -351,6 +351,7 @@ export function PageStage({
   textStyle,
   selectedId,
   hoverId,
+  listHoverId,
   objectNumbers,
   onHover,
   focusId,
@@ -381,6 +382,9 @@ export function PageStage({
   selectedId: string | null;
   // The mark hovered in the object list or on a page, outlined here with its list number.
   hoverId: string | null;
+  // The mark whose row in the object list is under the pointer; a changed text patch shows the
+  // yellow under its changed words only then, and looks like the rest of the page otherwise.
+  listHoverId: string | null;
   objectNumbers: ReadonlyMap<string, number>;
   onHover: (id: string | null) => void;
   focusId: string | null;
@@ -1824,11 +1828,13 @@ export function PageStage({
             }
             event.stopPropagation();
           };
-          // The runs the user changed, lit up under the glyphs; a patch only moved, resized or
-          // restyled, or a graphic one, gets a light tint over its whole box instead.
-          const marks = changed && patch.role === "text" ? changedBoxes(patch) : [];
+          // The runs the user changed, lit up under the glyphs while the patch's row in the object
+          // list is under the pointer; a patch only moved, resized or restyled, or a graphic one,
+          // gets a light tint over its whole box instead. Off the row, an edit looks like the page.
+          const lit = changed && patch.id === listHoverId;
+          const marks = lit && patch.role === "text" ? changedBoxes(patch) : [];
           const tint =
-            changed && marks.length === 0
+            lit && marks.length === 0
               ? patch.role === "text"
                 ? { x: patch.x - slackShift, y: patch.y, w: editorWidth, h: Math.max(patch.h, patch.fontSize) }
                 : { x: patch.x, y: patch.y, w: Math.max(patch.w, 1), h: Math.max(patch.h, 1) }

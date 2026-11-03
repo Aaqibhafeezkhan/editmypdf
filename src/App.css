@@ -1113,7 +1113,9 @@ body.resizing-rows {
   user-select: none;
 }
 
-/* ---- What the user changed: yellow under the changed words, a tint over a moved box ----------- */
+/* ---- What the user changed: yellow under the changed words, a tint over a moved box; drawn only
+   while the mark's row in the object list is under the pointer, so an edit otherwise looks like
+   the rest of the page -------------------------------------------------------------------------- */
 
 /* The paper is white in both themes, so the yellow is pinned rather than themed. */
 .page-frame {
