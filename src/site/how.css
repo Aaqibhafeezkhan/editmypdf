@@ -80,9 +80,11 @@
 }
 
 .how-overview a:hover {
+  position: relative;
+  z-index: 1;
   border-color: var(--rule-strong);
   box-shadow: var(--elev-2);
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.02);
 }
 
 /* The step on screen. */
@@ -233,6 +235,19 @@
   border-radius: var(--round-xl);
   background: var(--paper-1);
   box-shadow: var(--elev-1);
+  transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out), transform var(--duration) var(--ease-out);
+}
+
+.how-step-card:hover {
+  border-color: var(--rule-strong);
+  box-shadow: var(--elev-2);
+  transform: scale(1.01);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .how-step-card:hover {
+    transform: none;
+  }
 }
 
 .how-step-n {
