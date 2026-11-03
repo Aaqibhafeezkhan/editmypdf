@@ -4,7 +4,7 @@ import { ChevronsLeftRight, GripVertical, RotateCw } from "lucide-react";
 import { changedRanges, hasUserStyle, patchChanged, type TextRange } from "./changes.ts";
 import { contentAt, contentLabel, faceTraits, isTextContent, readPageContent, type ContentElement } from "./content.ts";
 import {
-  cropGraphic,
+  compositeGraphic,
   editCover,
   editSpans,
   graphicPatch,
@@ -1067,15 +1067,28 @@ export function PageStage({
       focusContentText(patch, point, element);
       return;
     }
-    const image = cropGraphic(canvas, element, baseWidth, baseHeight);
+    // The block's picture is the page as it looks now: its pixels with the edited lines inside it
+    // painted over them, so a list or table that holds an edited line pictures the edit rather
+    // than the original words under it. The picture is composed each time the block is selected
+    // and never refreshed afterwards: a block that is only a selection is dropped by the next
+    // click elsewhere, and a click on a line inside it opens that line instead, so a line can only
+    // be edited while no selection holds a picture of it, and the next selection composes a fresh
+    // one; once the block is moved or resized its picture is final, like the edit's own cover.
+    const edits = current.filter(
+      (item): item is PatchAnnotation => item.kind === "patch" && item.role === "text" && item.page === pageIndex,
+    );
+    const image = await compositeGraphic(canvas, element, baseWidth, baseHeight, edits);
     if (!image) {
       onSelectContent(element);
       return;
     }
+    // Composing the picture waited on fonts and paints; another click may have come in meanwhile.
+    const latest = getAnnotations();
+    if (latest.some((item) => item.kind === "patch" && item.sourceId === element.id && item.page === pageIndex)) return;
     // The patch is only a selection until it is moved or resized; an untouched one is dropped
     // again when something else is clicked, and moving it is what enters the history.
     const patch = graphicPatch(element, image);
-    onReplace([...current, patch]);
+    onReplace([...latest, patch]);
     onSelect(patch.id);
     onSelectContent(element);
   };
@@ -1958,6 +1971,10 @@ export function PageStage({
                     top: patch.y * scale,
                     width: Math.max(patch.w, 1) * scale,
                     height: Math.max(patch.h, 1) * scale,
+                    // A block that is only a selection sits under the edits inside it, so their
+                    // live covers and words stay on top of its picture; once moved or resized it
+                    // carries the picture above the page. Its cover draws the selection outline.
+                    zIndex: untouchedGraphic(patch) ? 1 : undefined,
                   }}
                 />
               ) : patch.spans.length > 0 || patch.wrap ? (
