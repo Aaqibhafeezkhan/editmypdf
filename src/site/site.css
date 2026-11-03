@@ -392,7 +392,7 @@ a.tool-cell:hover span {
   .btn:hover .btn-arrow,
   .btn:hover .btn-lead,
   .link-arrow:hover svg,
-  a.card:hover,
+  .card:hover,
   a.usecase:hover {
     transform: none;
   }
@@ -1091,10 +1091,12 @@ a.tool-cell:hover span {
   transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out), transform var(--duration) var(--ease-out);
 }
 
-a.card:hover {
+.card:hover {
+  position: relative;
+  z-index: 1;
   border-color: var(--rule-strong);
   box-shadow: var(--elev-2);
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.02);
 }
 
 .card h3 {

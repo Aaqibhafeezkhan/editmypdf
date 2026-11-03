@@ -36,10 +36,15 @@
   transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out), transform var(--duration) var(--ease-out);
 }
 
+/* Hovered cards lift and grow a touch; z-index keeps the grown card and its shadow over its
+   neighbours in a grid. Every card of the site does the same (site.css, compare.css, landing.css,
+   how.css). */
 .post-card:hover {
+  position: relative;
+  z-index: 1;
   border-color: var(--rule-strong);
   box-shadow: var(--elev-2);
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.02);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -339,4 +344,627 @@
     display: block;
     padding: 0;
   }
+}
+
+/* ---- Post body: callouts, card grids, steps, pairs ------------------------
+   The blocks markdown.ts renders from ::: directives, and the inline emoji and icons. Each
+   callout kind sets --co (its colour) and --co-ink (the colour for its icon and title). */
+
+.bp-emoji {
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  margin: 0 0.05em;
+  vertical-align: -0.22em;
+}
+
+.bp-icon {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  vertical-align: -0.2em;
+}
+
+.prose .bp-callout,
+.prose .bp-cards,
+.prose .bp-steps,
+.prose .bp-pair {
+  margin: 0 0 1.5em;
+}
+
+.prose .bp-callout-body > :last-child,
+.prose .bp-mcard-text > :last-child,
+.prose .bp-step-text > :last-child,
+.prose .bp-pair-col > :last-child {
+  margin-bottom: 0;
+}
+
+.bp-callout {
+  --co: var(--ink-2);
+  --co-ink: var(--ink-1);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid color-mix(in oklab, var(--co) 30%, var(--rule));
+  border-radius: var(--round-lg);
+  background: color-mix(in oklab, var(--co) 6%, var(--paper-1));
+}
+
+.bp-callout-plain {
+  --co: var(--accent);
+  --co-ink: var(--accent-ink);
+}
+
+.bp-callout-tip {
+  --co: var(--teal);
+  --co-ink: var(--teal-ink);
+}
+
+.bp-callout-warn {
+  --co: var(--warn);
+  --co-ink: var(--warn);
+}
+
+.bp-callout-story {
+  --co: var(--violet);
+  --co-ink: var(--violet-ink);
+}
+
+.bp-callout-good {
+  --co: var(--good);
+  --co-ink: var(--good);
+}
+
+.bp-callout-bad {
+  --co: var(--bad);
+  --co-ink: var(--bad);
+}
+
+.prose .bp-callout-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  color: var(--co-ink);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+}
+
+.bp-callout-title .bp-icon,
+.bp-callout-title .bp-emoji {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.bp-callout-body {
+  font-size: var(--fs-md);
+}
+
+.prose .bp-callout-body p,
+.prose .bp-callout-body ul,
+.prose .bp-callout-body ol {
+  margin-bottom: 0.8em;
+}
+
+/* A grid of small cards: an icon tile, a title and a sentence or two each. */
+.bp-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
+@media (max-width: 640px) {
+  .bp-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bp-mcard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-5);
+  border: 1px solid var(--rule);
+  border-radius: var(--round-lg);
+  background: var(--paper-1);
+  transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out), transform var(--duration) var(--ease-out);
+}
+
+.bp-mcard:hover {
+  border-color: var(--rule-strong);
+  box-shadow: var(--elev-1);
+  transform: translateY(-1px);
+}
+
+.bp-mcard-tile {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--tone-soft);
+  color: var(--tone-ink);
+}
+
+.bp-mcard-tile .bp-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.bp-mcard-tile .bp-emoji {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+}
+
+.prose .bp-mcard-title {
+  margin: 0 0 var(--sp-1);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+}
+
+.prose .bp-mcard-text p,
+.prose .bp-mcard-text li {
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.prose .bp-mcard-text p {
+  margin-bottom: 0.6em;
+}
+
+/* Numbered steps with a dashed thread between them. */
+.prose ol.bp-steps {
+  list-style: none;
+  padding: 0;
+}
+
+.prose .bp-steps li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: var(--sp-4);
+  margin: 0;
+  padding-bottom: var(--sp-5);
+}
+
+.prose .bp-steps li:last-child {
+  padding-bottom: 0;
+}
+
+.prose .bp-steps li:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 38px;
+  bottom: 2px;
+  border-left: 2px dashed color-mix(in oklab, var(--tone) 45%, var(--rule));
+}
+
+.bp-step-n {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--tone);
+  color: #fff;
+  font-family: var(--ff-mono);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.bp-step-n .bp-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.bp-step-n .bp-emoji {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.prose .bp-step-title {
+  margin: 5px 0 var(--sp-1);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+}
+
+.prose .bp-step-text p {
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+  margin-bottom: 0.6em;
+}
+
+/* Two columns, labelled. */
+.bp-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
+@media (max-width: 640px) {
+  .bp-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bp-pair-col {
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--rule);
+  border-radius: var(--round-lg);
+  background: var(--paper-1);
+  font-size: var(--fs-sm);
+}
+
+.prose .bp-pair-label {
+  margin: 0 0 var(--sp-2);
+  color: var(--tone-ink);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+
+/* ---- Post body: drawn figures --------------------------------------------
+   Small diagrams written as HTML in the posts: miniature pages, a content stream with its
+   edits marked, a glyph grid, a line of kerned words, a flow of tiles. */
+
+.bp-dg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-5);
+}
+
+.bp-dg-arrow {
+  color: var(--ink-2);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.bp-pg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: 180px;
+}
+
+.bp-dg-label {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+  text-align: center;
+}
+
+.bp-mini-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 150px;
+  padding: 16px 14px 26px;
+  border: 1px solid #d3d0c8;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: var(--elev-1);
+}
+
+.bp-mini-page.bp-wide {
+  width: 240px;
+}
+
+.bp-ln {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: #c9c6be;
+}
+
+.bp-ln.bp-head {
+  height: 7px;
+  background: #8a877e;
+}
+
+.bp-ln.bp-edit {
+  background: var(--tone);
+}
+
+.bp-ln.bp-ghost {
+  background: repeating-linear-gradient(90deg, #a8a59c 0 4px, transparent 4px 7px);
+}
+
+.bp-w3 { width: 30%; }
+.bp-w4 { width: 40%; }
+.bp-w5 { width: 50%; }
+.bp-w6 { width: 60%; }
+.bp-w7 { width: 70%; }
+.bp-w8 { width: 80%; }
+.bp-w9 { width: 90%; }
+
+/* A painted patch over a line: dashed red in the "before" page, a tinted opaque fill in the
+   covered-text page. The label sits in its top-right corner. */
+.bp-patch,
+.bp-paint {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: -4px -4px;
+  padding: 8px 4px 6px;
+  border-radius: 3px;
+}
+
+.bp-patch {
+  border: 1px dashed var(--bad);
+  background: #fff;
+}
+
+.bp-paint {
+  border: 1px solid var(--tone);
+  background: var(--tone-soft);
+}
+
+.bp-patch::after,
+.bp-paint::after {
+  content: attr(data-label);
+  position: absolute;
+  top: -7px;
+  right: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #fff;
+  font: 700 8px/12px var(--ff-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bp-patch::after {
+  color: var(--bad);
+}
+
+.bp-paint::after {
+  color: var(--tone-ink);
+}
+
+.bp-patch .bp-ln.bp-edit {
+  filter: blur(0.6px);
+}
+
+.bp-dg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2) var(--sp-4);
+  width: 100%;
+  margin-top: var(--sp-2);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+}
+
+.bp-dg-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 3px;
+  background: var(--sw);
+  vertical-align: 1px;
+}
+
+/* A content stream with the operands an edit removes (del) and inserts (ins). */
+.prose pre.bp-stream {
+  margin: 0;
+  font-size: var(--fs-xs);
+}
+
+.bp-stream .bp-c {
+  color: var(--ink-2);
+  font-style: italic;
+}
+
+.bp-stream del {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bad-soft);
+  color: var(--bad);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.bp-stream ins {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--good-soft);
+  color: var(--good);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* A font's glyphs as a grid of cells; the ones an edit uses are lit. */
+.bp-glyph-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 18px);
+  gap: 3px;
+}
+
+.bp-glyph-grid.bp-small {
+  grid-template-columns: repeat(3, 18px);
+}
+
+.bp-glyph-grid b {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  font: 400 10px/1 "Times New Roman", Times, serif;
+}
+
+.bp-glyph-grid b.bp-on {
+  border-color: var(--tone);
+  background: var(--tone-soft);
+  color: var(--tone-ink);
+  font-weight: 700;
+}
+
+/* Words with the kern between each pair, as a TJ array places them. */
+.bp-kern-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  row-gap: var(--sp-3);
+  font-family: "Times New Roman", Times, serif;
+  font-size: 1.3rem;
+  line-height: 1.2;
+}
+
+.bp-kern-line .bp-kw {
+  padding: 2px 5px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: var(--paper-0);
+  color: var(--ink-0);
+}
+
+.bp-kern-line .bp-kg {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 46px;
+  color: var(--tone-ink);
+  font: 700 10px/1 var(--ff-mono);
+}
+
+.bp-kern-line .bp-kg::before {
+  content: "";
+  width: 100%;
+  margin-bottom: 4px;
+  border-top: 2px dashed var(--tone);
+}
+
+/* Tiles joined by arrows: what happens where. */
+.bp-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--sp-3);
+}
+
+.bp-flow-tile {
+  display: flex;
+  flex: 1 1 120px;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: 170px;
+  padding: var(--sp-4) var(--sp-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--round-md);
+  background: var(--paper-0);
+  color: var(--ink-1);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+  text-align: center;
+}
+
+.bp-flow-tile .bp-icon {
+  width: 26px;
+  height: 26px;
+  color: var(--tone-ink);
+}
+
+.bp-flow-tile b {
+  display: block;
+  color: var(--ink-0);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.bp-flow-tile.bp-off {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.bp-flow-tile.bp-off .bp-icon {
+  color: var(--bad);
+}
+
+.bp-flow-arrow {
+  align-self: center;
+  color: var(--ink-2);
+  font-size: 22px;
+}
+
+@media (max-width: 560px) {
+  .bp-flow-arrow,
+  .bp-dg-arrow {
+    display: none;
+  }
+}
+
+/* Tracked small caps as pdf.js reports them: a phantom space after every letter. */
+.prose .bp-phantom {
+  margin: 0;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 1.4rem;
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+
+.bp-phantom i {
+  margin: 0 1px;
+  color: var(--bad);
+  font: 600 0.6em/1 var(--ff-mono);
+  text-decoration: line-through;
+  vertical-align: 0.25em;
+}
+
+/* The page frame drawn two ways: a CSS border that shrinks the canvas, and a ring outside it. */
+.bp-frame {
+  position: relative;
+  width: 120px;
+  height: 90px;
+  background: #fff;
+}
+
+.bp-frame.bp-bordered {
+  border: 3px solid var(--coral);
+}
+
+.bp-frame.bp-ring {
+  box-shadow: 0 0 0 3px var(--teal);
+}
+
+.bp-frame .bp-canvas {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, #e8e6df 0 6px, #fff 6px 14px);
+}
+
+.bp-frame .bp-overlay {
+  position: absolute;
+  inset: -3px;
+  border: 1px dashed var(--ink-1);
+}
+
+.bp-frame.bp-ring .bp-overlay {
+  inset: 0;
+}
+
+.prose .bp-mcard-text strong,
+.prose .bp-step-text strong {
+  color: var(--ink-0);
 }
