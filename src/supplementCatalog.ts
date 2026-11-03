@@ -8,12 +8,12 @@
 // own embedded font's coverage.
 
 const FILES = import.meta.glob(
-  "/node_modules/@fontsource/{tinos,arimo,cousine,carlito,caladea,gelasio,roboto,open-sans,lato,noto-serif,noto-sans,noto-sans-mono}/files/*-{latin,latin-ext,cyrillic,cyrillic-ext,greek,greek-ext,vietnamese}-{300,400,500,600,700,900}-{normal,italic}.woff",
+  "/node_modules/@fontsource/{tinos,arimo,cousine,carlito,caladea,gelasio,inter,roboto,open-sans,lato,noto-serif,noto-sans,noto-sans-mono}/files/*-{latin,latin-ext,cyrillic,cyrillic-ext,greek,greek-ext,vietnamese}-{300,400,500,600,700,900}-{normal,italic}.woff",
   { query: "?url", import: "default", eager: true },
 ) as Record<string, string>;
 
 const RANGES = import.meta.glob(
-  "/node_modules/@fontsource/{tinos,arimo,cousine,carlito,caladea,gelasio,roboto,open-sans,lato,noto-serif,noto-sans,noto-sans-mono}/unicode.json",
+  "/node_modules/@fontsource/{tinos,arimo,cousine,carlito,caladea,gelasio,inter,roboto,open-sans,lato,noto-serif,noto-sans,noto-sans-mono}/unicode.json",
   { import: "default", eager: true },
 ) as Record<string, Record<string, string>>;
 

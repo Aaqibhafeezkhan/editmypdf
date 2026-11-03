@@ -1,5 +1,5 @@
 import { fontUnicodeMap } from "./fontFix.ts";
-import { cutLabel, stemOf, traitKey, userFamilyName, weightOfName, type FaceKind, type FaceStyle, type FaceTraits } from "./fontNames.ts";
+import { cutLabel, stemOf, traitKey, userFamilyName, type FaceKind, type FaceStyle, type FaceTraits } from "./fontNames.ts";
 import type { Catalog, CatalogFile } from "./supplementCatalog.ts";
 import { loadUserFonts, userFontFor, type UserFont } from "./userFonts.ts";
 
@@ -31,8 +31,9 @@ export type Supplement = {
 };
 
 // What `fallbackFamily` knows about a page font when it asks for the font's supplement: the name
-// without its subset prefix, what the name and pdf.js say about its cut, and its kind.
-export type FontAsk = { name: string; bold: boolean; italic: boolean; kind: FaceKind };
+// without its subset prefix, what the name and pdf.js say about its cut (`weight` as
+// `weightOfName` reads it), and its kind.
+export type FontAsk = { name: string; bold: boolean; italic: boolean; weight: number; kind: FaceKind };
 
 // A font the user can supply for a page font: the font's PostScript name as the PDF gives it,
 // without the subset prefix, and the key the font is kept under.
@@ -42,16 +43,25 @@ type Bundled = { id: string; label: string; kind: FaceKind; names: RegExp; same:
 
 // The bundled families, by the names of the fonts they stand in for. Tinos, Arimo and Cousine are
 // the designs the Liberation fonts are built from, with the metrics of Times New Roman, Arial and
-// Courier New; Carlito, Caladea and Gelasio match Calibri, Cambria and Georgia. The Noto faces take
-// whatever matches nothing by name, by kind.
+// Courier New; Carlito, Caladea and Gelasio match Calibri, Cambria and Georgia; Inter is the
+// nearest open design to San Francisco, the macOS system font (".SFNS-Regular", ".SFUIText",
+// "SFPro"), which every document printed from a Mac app is set in. The Noto faces take whatever
+// matches nothing by name, by kind.
 const BUNDLED: Bundled[] = [
   { id: "tinos", label: "Tinos", kind: "serif", names: /times|nimbus\s*rom|thorndale|liberation\s*serif|tinos/i, same: /liberation\s*serif|tinos/i },
   {
     id: "arimo",
     label: "Arimo",
     kind: "sans",
-    names: /arial(?!\s*(?:narrow|black|rounded|unicode))|helvetica(?!\s*neue)|nimbus\s*san|albany|liberation\s*sans|arimo/i,
+    names: /arial(?!\s*(?:narrow|black|rounded|unicode))|helvetica|nimbus\s*san|albany|liberation\s*sans|arimo/i,
     same: /liberation\s*sans|arimo/i,
+  },
+  {
+    id: "inter",
+    label: "Inter",
+    kind: "sans",
+    names: /(?:^|[^a-z])sf(?:ns|pro|ui)(?!\s*(?:mono|rounded|compact))|san\s*francisco|applesystemuifont|(?:^|[^a-z])inter(?![a-z])/i,
+    same: /(?:^|[^a-z])inter(?![a-z])/i,
   },
   { id: "cousine", label: "Cousine", kind: "mono", names: /courier|nimbus\s*mon|cumberland|liberation\s*mono|cousine/i, same: /liberation\s*mono|cousine/i },
   { id: "carlito", label: "Carlito", kind: "sans", names: /calibri|carlito/i, same: /carlito/i },
@@ -114,7 +124,7 @@ function chooseBundled(catalog: Catalog, ask: FontAsk): BundledCut | null {
   const font = named ?? BUNDLED.find((item) => item.id === BY_KIND[ask.kind]);
   if (!font) return null;
   const relation = named ? (named.same.test(ask.name) ? "same" : "close") : "kind";
-  const cut = nearestCut(catalog, font.id, weightOfName(ask.name, ask.bold), ask.italic ? "italic" : "normal");
+  const cut = nearestCut(catalog, font.id, ask.weight, ask.italic ? "italic" : "normal");
   if (!cut) return null;
   return { font, relation, weight: cut.weight, style: cut.style, family: `stet-supp-${font.id}-${cut.weight}-${cut.style}` };
 }

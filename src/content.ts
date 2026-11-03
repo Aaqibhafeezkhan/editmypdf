@@ -1,6 +1,6 @@
 import { AnnotationMode, OPS, Util, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
 import { collectGlyphUse, editableFamily, familyBytes, missingGlyphs, rememberCoverage, type GlyphUse } from "./fontFix.ts";
-import { BOLD_NAME, ITALIC_NAME, bareName, traitsOfName, type FaceKind, type FaceTraits } from "./fontNames.ts";
+import { bareName, traitsOfName, weightOfName, type FaceKind, type FaceTraits } from "./fontNames.ts";
 import { fontOffer, supplementFamilies, supplementOf, type FontOffer, type Relation } from "./supplementFonts.ts";
 import { measureWidth } from "./textLayout.ts";
 import { loadPdf, type LoadedPdf } from "./pdf.ts";
@@ -768,17 +768,20 @@ const GENERIC: Record<FaceKind, { faces: string[]; generic: string }> = {
 // out sans-serif); the font's own name is trusted first, and the flags only when the name says
 // nothing. `loadedName` is the pdf.js font name the supplement is recorded under.
 async function fallbackFamily(loadedName: string, font: PdfFontObject | null, style: PdfFontStyle | undefined): Promise<string> {
-  const name = bareName(font?.name ?? "");
+  const raw = font?.name ?? "";
+  const name = bareName(raw);
   const known = KNOWN_FAMILIES.find(([pattern]) => pattern.test(name));
   const kind = known?.[2] ?? kindOf(name, font, style);
   const faces = [...new Set([...(known ? [known[1]] : []), ...GENERIC[kind].faces])];
   // pdf.js sets its bold and italic flags only for fonts it substituted, and since pdf.js 6 the
   // flags reach the page as false, not as nothing, for every other font: an embedded face is bold
-  // or italic when its name says so.
-  const bold = !!(font?.bold || font?.black || BOLD_NAME.test(name));
-  const italic = !!(font?.italic || ITALIC_NAME.test(name));
+  // or italic when its name says so (in a word, or in the weight axis a generator appended).
+  const traits = traitsOfName(raw);
+  const bold = !!(font?.bold || font?.black || traits.bold);
+  const italic = !!(font?.italic || traits.italic);
+  const weight = font?.black ? 900 : weightOfName(raw, bold);
   const [supplement, styled] = await Promise.all([
-    font?.systemFontInfo?.css ? Promise.resolve([]) : supplementFamilies(loadedName, { name, bold, italic, kind }),
+    font?.systemFontInfo?.css ? Promise.resolve([]) : supplementFamilies(loadedName, { name, bold, italic, weight, kind }),
     styledAlias(faces, bold, italic),
   ]);
   return [...supplement, ...(styled ? [styled] : []), ...faces].map((face) => `"${face}"`).concat(GENERIC[kind].generic).join(", ");

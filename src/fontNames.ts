@@ -16,9 +16,31 @@ const STYLE_WORDS = /bold|black|heavy|italic|oblique|slanted|kursiv|regular|roma
 export const BOLD_NAME = /bold|black|heavy|cm(?:bx|b|ssbx|bxti|bxsl)\d|sfbx\d/i;
 export const ITALIC_NAME = /italic|oblique|slanted|kursiv|cm(?:ti|bxti|sl|bxsl|mi)\d|sfti\d/i;
 
-// The name without the subset prefix a PDF puts in front of an embedded font's name.
+// Apple's PDF generator names an instance of a variable font by its axis values behind the
+// PostScript name: ".SFNS-Regular_wdth_opsz180000_GRAD_wght2BC0000" is the system font at
+// optical size 24 and weight 700 (each value hexadecimal, 16.16 fixed point; a tag without a value
+// is the axis at its default). The values say the cut; the name alone says "Regular".
+const AXIS_SUFFIX = /(?:_(?:[a-z]{4}|[A-Z]{4})[0-9A-F]*)+$/;
+
+// The name without the subset prefix a PDF puts in front of an embedded font's name, and without
+// the variation axes a generator may append to it.
 export function bareName(name: string): string {
-  return name.replace(/^[A-Z]{6}\+/, "");
+  return name.replace(/^[A-Z]{6}\+/, "").replace(AXIS_SUFFIX, "");
+}
+
+// The variation axes a font's name carries, by tag ("wght", "opsz"), each with the value it is set
+// to; an axis named without a value (at its default) is left out, as is a plainly named font.
+export function axisValues(name: string): Map<string, number> {
+  const axes = new Map<string, number>();
+  const suffix = AXIS_SUFFIX.exec(name.replace(/^[A-Z]{6}\+/, ""))?.[0] ?? "";
+  for (const match of suffix.matchAll(/_([a-zA-Z]{4})([0-9A-F]*)/g)) {
+    const tag = match[1];
+    const hex = match[2];
+    if (!tag || !hex) continue;
+    const value = Number.parseInt(hex, 16) / 65536;
+    if (Number.isFinite(value)) axes.set(tag, value);
+  }
+  return axes;
 }
 
 export function stemOf(name: string): string {
@@ -31,7 +53,12 @@ export function stemOf(name: string): string {
 
 export function traitsOfName(name: string): FaceTraits {
   const bare = bareName(name);
-  return { stem: stemOf(bare), bold: BOLD_NAME.test(bare), italic: ITALIC_NAME.test(bare) };
+  const axes = axisValues(name);
+  return {
+    stem: stemOf(bare),
+    bold: BOLD_NAME.test(bare) || (axes.get("wght") ?? 0) >= 600,
+    italic: ITALIC_NAME.test(bare) || (axes.get("ital") ?? 0) >= 0.5,
+  };
 }
 
 // One short token for a typeface and cut, the same for every name of the same face, usable in a
@@ -41,8 +68,11 @@ export function traitKey(traits: FaceTraits): string {
 }
 
 // The CSS weight a font's name asks for, finer than bold or not: a heading set in a Medium or a
-// Light cut should get the same cut of its supplement. Nimbus names its bold "Medi".
+// Light cut should get the same cut of its supplement. A weight axis in the name is exact; Nimbus
+// names its bold "Medi".
 export function weightOfName(name: string, bold: boolean): number {
+  const wght = axisValues(name).get("wght");
+  if (wght) return Math.min(900, Math.max(100, Math.round(wght / 100) * 100));
   const bare = bareName(name);
   if (/black|heavy/i.test(bare)) return 900;
   if (/extra\s*bold|ultra\s*bold|xbold/i.test(bare)) return 800;

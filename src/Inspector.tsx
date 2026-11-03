@@ -3,7 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { ColorControl } from "./ColorControl.tsx";
 import { keepFocus } from "./keepFocus.ts";
 import { contentDetail, contentLabel, patchGlyphReport, type ContentElement, type ContentKind } from "./content.ts";
-import { localFontsSupported, useLocalFont } from "./localFonts.ts";
+import { localFontsSupported, adoptLocalFont } from "./localFonts.ts";
 import type { FontOffer, Relation } from "./supplementFonts.ts";
 import { addUserFont, subscribeUserFonts, userFontsVersion } from "./userFonts.ts";
 import {
@@ -303,7 +303,7 @@ function GlyphNote({ patch, kind }: { patch: PatchAnnotation; kind: ContentKind 
   };
   const pick = (file: File, key: string) => supply("file", () => addUserFont(file, key));
   // The browser asks for the permission inside the click, so nothing may be awaited before it.
-  const lookUp = (offer: FontOffer) => supply("local", () => useLocalFont(offer));
+  const lookUp = (offer: FontOffer) => supply("local", () => adoptLocalFont(offer));
   return (
     <p role="status" className={`panel-note${report.unsupplied.length === 0 ? " calm" : ""}`}>
       <Info aria-hidden="true" />
