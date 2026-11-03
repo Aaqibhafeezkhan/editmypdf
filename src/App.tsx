@@ -1149,7 +1149,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
             else chooseTool(dockKind);
           },
         },
-        { kind: "check", label: "Objects and properties", checked: sidebarOpen, onSelect: () => setSidebarOpen((open) => !open) },
+        { kind: "check", label: "Edits and properties", checked: sidebarOpen, onSelect: () => setSidebarOpen((open) => !open) },
         { kind: "separator" },
         {
           kind: "sub",
@@ -1273,7 +1273,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
         <div className="bar-group panels">
           <ThemeSelect />
           <IconTip
-            label={sidebarOpen ? "Hide objects and properties" : "Show objects and properties"}
+            label={sidebarOpen ? "Hide edits and properties" : "Show edits and properties"}
             pressed={sidebarOpen}
             onClick={() => setSidebarOpen((open) => !open)}
           >
