@@ -231,8 +231,24 @@ function toAnchor(rect: DOMRect): Anchor {
   return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
 }
 
+// The box the formatting bar keeps out of: the editor and the cover beside it that draws the
+// selected outline, whichever reaches further.
+function boxAnchor(editor: HTMLElement): Anchor {
+  const box = toAnchor(editor.getBoundingClientRect());
+  const cover = editor.parentElement?.querySelector<HTMLElement>(":scope > .content-cover");
+  if (!cover) return box;
+  const rect = cover.getBoundingClientRect();
+  return {
+    left: Math.min(box.left, rect.left),
+    top: Math.min(box.top, rect.top),
+    right: Math.max(box.right, rect.right),
+    bottom: Math.max(box.bottom, rect.bottom),
+  };
+}
+
 // Tracks the selection inside the selected text patch's editor, shows the floating formatting
-// bar over it and hands the rest of the editor (the attributes pane) the same state and actions.
+// bar while it spans text and hands the rest of the editor (the attributes pane) the same state
+// and actions.
 // The range it last saw stays in force while the focus visits a control, so a size typed in the
 // bar or the pane still applies to the words that were selected.
 function PatchFormat({
@@ -287,8 +303,23 @@ function PatchFormat({
       }
       rangeRef.current = next;
       setRange((current) => (current?.start === next?.start && current?.end === next?.end ? current : next));
-      const at = (focused ? selectionAnchor(editor) : null) ?? toAnchor(editor.getBoundingClientRect());
-      setAnchor((current) => (sameAnchor(current, at) ? current : at));
+      // The bar shows while some text is selected, not for a bare caret (the attributes pane
+      // formats the whole run), and stays outside the box: above it, or below when there is no
+      // room, with its left end at the selection's. While the focus visits the bar's size field
+      // the selection has no box of its own, so the bar keeps the place it had.
+      const selecting = next !== null && next.end > next.start;
+      const box = selecting ? boxAnchor(editor) : null;
+      const where = selecting && focused ? selectionAnchor(editor) : null;
+      setAnchor((current) => {
+        if (!box) return null;
+        const at = {
+          left: where?.left ?? current?.left ?? box.left,
+          right: where?.right ?? current?.right ?? box.right,
+          top: box.top,
+          bottom: box.bottom,
+        };
+        return sameAnchor(current, at) ? current : at;
+      });
       const scroller = editor.closest<HTMLElement>(".pages");
       const area = scroller ? toAnchor(scroller.getBoundingClientRect()) : null;
       setBounds((current) => (sameAnchor(current, area) ? current : area));
