@@ -359,6 +359,8 @@
 }
 
 .ew-page h4 {
+  width: fit-content;
+  max-width: 100%;
   margin: 0 0 3px;
   font-size: 19px;
   font-weight: 700;
@@ -366,6 +368,8 @@
 }
 
 .ew-byline {
+  width: fit-content;
+  max-width: 100%;
   margin: 0 0 12px;
   font-size: 9.5px;
   font-style: italic;
@@ -378,26 +382,40 @@
   text-align: justify;
 }
 
-/* The paragraph being edited: the editor's outline, its number badge and its move and resize grips. */
-.ew-block {
+/* A field the replay can select: the editor's outline with its number badge and its move and resize
+   grips. The outline sits --ew-pad outside the field's box, and the box carries 4px of side padding
+   that a negative margin cancels, so the grips centred on the outline end at the text's edge and
+   selecting a field moves nothing around it. */
+.ew-page .ew-edit {
+  --ew-pad: 3px;
   position: relative;
-  display: block;
-  margin: 0 -4px 9px;
-  padding: 2px 4px;
-  outline: 1.5px solid var(--ew-blue);
-  outline-offset: 0;
-  transition: background-color 300ms var(--ease-out);
+  margin-inline: -4px;
+  padding-inline: 4px;
+  transition:
+    background-color 300ms var(--ease-out),
+    box-shadow 300ms var(--ease-out);
 }
 
-.ew-block.editing {
+.ew-edit.selected {
+  outline: 1.5px solid var(--ew-blue);
+  outline-offset: var(--ew-pad);
+}
+
+.ew-edit.editing {
   background: rgb(29 78 216 / 0.05);
+  box-shadow: 0 0 0 var(--ew-pad) rgb(29 78 216 / 0.05);
+}
+
+.ew-table .ew-edit {
+  --ew-pad: 2px;
+  display: inline-block;
 }
 
 .ew-badge {
   position: absolute;
   z-index: 2;
-  top: 0;
-  left: 0;
+  top: calc(-1 * var(--ew-pad));
+  left: calc(-1 * var(--ew-pad));
   transform: translate(-50%, -50%);
   display: grid;
   place-items: center;
@@ -417,7 +435,7 @@
   position: absolute;
   z-index: 1;
   top: 50%;
-  left: -7px;
+  left: calc(-7px - var(--ew-pad));
   display: grid;
   place-items: center;
   width: 14px;
@@ -433,7 +451,7 @@
 
 .ew-grip.resize {
   left: auto;
-  right: -7px;
+  right: calc(-7px - var(--ew-pad));
 }
 
 .ew-grip svg {
@@ -441,13 +459,15 @@
   height: 11px;
 }
 
+/* The caret takes no room of its own, so it can come and go without the text shifting; it is drawn
+   in the field's colour and at its size. */
 .ew-caret {
   display: inline-block;
   width: 1px;
   height: 1em;
-  margin-left: 0.5px;
+  margin: 0 -1.5px 0 0.5px;
   vertical-align: -0.15em;
-  background: #1a1a1a;
+  background: currentColor;
   animation: ew-blink 1s step-end infinite;
 }
 
