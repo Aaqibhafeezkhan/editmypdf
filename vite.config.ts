@@ -5,7 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import { POSTS } from "./src/data/posts.ts";
-import { PUBLIC_ROUTES } from "./src/data/routes.ts";
+import { canonicalPath, PUBLIC_ROUTES } from "./src/data/routes.ts";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 
@@ -17,9 +17,9 @@ function escapeXml(value: string): string {
 function feed(origin: string): string {
   const items = POSTS.map(
     (post) =>
-      `  <item>\n    <title>${escapeXml(post.title)}</title>\n    <link>${origin}/blog/${post.slug}</link>\n    <guid isPermaLink="true">${origin}/blog/${post.slug}</guid>\n    <pubDate>${new Date(`${post.date}T09:00:00Z`).toUTCString()}</pubDate>\n    <description>${escapeXml(post.description)}</description>\n  </item>`,
+      `  <item>\n    <title>${escapeXml(post.title)}</title>\n    <link>${origin}${canonicalPath(`/blog/${post.slug}`)}</link>\n    <guid isPermaLink="true">${origin}${canonicalPath(`/blog/${post.slug}`)}</guid>\n    <pubDate>${new Date(`${post.date}T09:00:00Z`).toUTCString()}</pubDate>\n    <description>${escapeXml(post.description)}</description>\n  </item>`,
   );
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n<channel>\n  <title>Edit My PDF blog</title>\n  <link>${origin}/blog</link>\n  <description>Engineering notes on editing PDF text in the browser.</description>\n  <language>en</language>\n${items.join("\n")}\n</channel>\n</rss>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n<channel>\n  <title>Edit My PDF blog</title>\n  <link>${origin}${canonicalPath("/blog")}</link>\n  <description>Engineering notes on editing PDF text in the browser.</description>\n  <language>en</language>\n${items.join("\n")}\n</channel>\n</rss>\n`;
 }
 
 // Crawlers' files: sitemap.xml, feed.xml and robots.txt, served in development and written into the
@@ -34,7 +34,7 @@ function siteFiles(siteUrl: string): Plugin {
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${PUBLIC_ROUTES
       .map(
         (route) =>
-          `  <url><loc>${origin}${route.path}</loc>${route.lastmod ? `<lastmod>${route.lastmod}</lastmod>` : ""}</url>`,
+          `  <url><loc>${origin}${canonicalPath(route.path)}</loc>${route.lastmod ? `<lastmod>${route.lastmod}</lastmod>` : ""}</url>`,
       )
       .join("\n")}\n</urlset>\n`;
   // Editor documents exist only in one browser, so /edit/ is kept out of search results.

@@ -15,6 +15,17 @@ export type PublicRoute = {
 export const PAGES_UPDATED = "2026-11-02";
 export const COMPARISONS_UPDATED = "2026-11-02";
 
+// The address the site advertises for a page: its route with a trailing slash. Each page is
+// prerendered to <route>/index.html, and GitHub Pages answers the address without the slash with a
+// 301 to the one with it, so canonical links, og:url, JSON-LD, the sitemap and the feed use the
+// slashed form to point at the page itself rather than at a redirect. Files (an extension in the
+// last segment), hashes and queries are left alone.
+export function canonicalPath(path: string): string {
+  if (/[?#]/.test(path) || path.endsWith("/")) return path;
+  const last = path.slice(path.lastIndexOf("/") + 1);
+  return last.includes(".") ? path : `${path}/`;
+}
+
 // Every public route of the site, in sitemap order. Editor documents (/edit/<id>) exist only in one
 // browser and are left out. The sitemap, the RSS feed and scripts/prerender.mjs all read this list,
 // so a new page or post appears everywhere at once.

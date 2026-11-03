@@ -108,7 +108,8 @@ turndown.addRule("links", {
     const text = content.trim();
     if (!text) return "";
     const href = node.getAttribute("href");
-    return `[${text}](${absolute(href)})`;
+    // A link to one of the site's pages takes the slashed address the page is served at.
+    return `[${text}](${absolute(href.startsWith("/") ? canonicalPath(href) : href)})`;
   },
 });
 // Definition lists (stats) as "term: description" lines.
@@ -125,7 +126,7 @@ turndown.addRule("dd", {
 // this script has run, that file holds the landing page, and the untouched copy at 200.html serves.
 const template = await readTemplate();
 
-const { render, PUBLIC_ROUTES, PRODUCT } = await bundleServerEntry();
+const { render, canonicalPath, PUBLIC_ROUTES, PRODUCT } = await bundleServerEntry();
 // The site's address for absolute links in the Markdown files: VITE_SITE_URL when the build has
 // it, otherwise the base path alone (root-relative), the same rule as siteOrigin() in product.ts.
 const env = loadEnv("production", root, "VITE_");
