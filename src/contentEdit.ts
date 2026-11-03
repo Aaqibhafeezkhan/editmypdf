@@ -1,5 +1,6 @@
+import { patchChanged } from "./changes.ts";
 import type { ContentElement } from "./content.ts";
-import { flowWidth, lineShift, spansText, wrapText } from "./textLayout.ts";
+import { blockWidth, flowWidth, lineShift, paintRun, spansText, wrapText } from "./textLayout.ts";
 import type { EditCapture } from "./pageInk.ts";
 import { uid, type PatchAnnotation, type PatchTail, type TextSpan } from "./types.ts";
 
@@ -460,8 +461,16 @@ export function sampleColor(canvas: HTMLCanvasElement, box: Box, pageWidth: numb
   return `#${channel((pixel) => pixel.r)}${channel((pixel) => pixel.g)}${channel((pixel) => pixel.b)}`;
 }
 
-export function cropGraphic(canvas: HTMLCanvasElement, box: Box, pageWidth: number, pageHeight: number): string {
-  if (canvas.width < 2 || pageWidth < 1 || pageHeight < 1) return "";
+type Crop = {
+  canvas: HTMLCanvasElement;
+  context: CanvasRenderingContext2D;
+  // A box in page units as a box in the crop's own pixels.
+  map: (box: Box) => Box;
+};
+
+// Copies the page's pixels under `box` into a canvas of their own, no longer than 1600px an edge.
+function cropPage(canvas: HTMLCanvasElement, box: Box, pageWidth: number, pageHeight: number): Crop | null {
+  if (canvas.width < 2 || pageWidth < 1 || pageHeight < 1) return null;
   const region = pixelBox(canvas, box, pageWidth, pageHeight);
   const maxEdge = 1600;
   const scale = Math.min(1, maxEdge / Math.max(region.w, region.h));
@@ -471,7 +480,66 @@ export function cropGraphic(canvas: HTMLCanvasElement, box: Box, pageWidth: numb
   copy.width = width;
   copy.height = height;
   const context = copy.getContext("2d");
-  if (!context) return "";
+  if (!context) return null;
   context.drawImage(canvas, region.x, region.y, region.w, region.h, 0, 0, width, height);
-  return copy.toDataURL("image/png");
+  const sx = (canvas.width / pageWidth) * scale;
+  const sy = (canvas.height / pageHeight) * scale;
+  const map = (inner: Box): Box => ({
+    x: inner.x * sx - region.x * scale,
+    y: inner.y * sy - region.y * scale,
+    w: inner.w * sx,
+    h: inner.h * sy,
+  });
+  return { canvas: copy, context, map };
+}
+
+function loadImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+function meets(a: Box, b: Box): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// The picture of a block as the page shows it now: its pixels from the rendered page, with every
+// edited line inside it painted over them the way the export paints one (its backdrop, the tails
+// that moved with it, then its current words), so a list or table that holds an edited line
+// pictures the edit rather than the original words under it. Lines whose patch still matches the
+// page are left to the page's own rendering. A PNG data URL, like the tails.
+export async function compositeGraphic(
+  canvas: HTMLCanvasElement,
+  box: Box,
+  pageWidth: number,
+  pageHeight: number,
+  patches: PatchAnnotation[],
+): Promise<string> {
+  const crop = cropPage(canvas, box, pageWidth, pageHeight);
+  if (!crop) return "";
+  const { context, map } = crop;
+  const paint = (image: HTMLImageElement, at: Box) => context.drawImage(image, at.x, at.y, at.w, at.h);
+  for (const patch of patches) {
+    if (patch.role !== "text" || !patchChanged(patch)) continue;
+    const cover = editCover(patch);
+    if (!meets(cover, box)) continue;
+    const backdrop = map(cover);
+    context.fillStyle = patch.backdrop || "#ffffff";
+    context.fillRect(backdrop.x, backdrop.y, backdrop.w, backdrop.h);
+    const delta = patch.w - patch.originW;
+    if (!patch.wrap && Math.abs(delta) >= 0.4) {
+      for (const tail of patch.tails ?? []) {
+        const image = await loadImage(tail.image);
+        if (image) paint(image, map(shiftedTail(tail, delta)));
+      }
+    }
+    const run = await paintRun(patch);
+    const image = run ? await loadImage(run) : null;
+    // The painted run is as wide as the editor's box, slack included, like the export draws it.
+    if (image) paint(image, map({ x: patch.x, y: patch.y, w: Math.max(blockWidth(patch), 1), h: Math.max(patch.h, patch.fontSize, 1) }));
+  }
+  return crop.canvas.toDataURL("image/png");
 }
