@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent as ReactDragEvent, ReactNode } from "react";
 import { scanType3Fonts, type ContentElement } from "./content.ts";
 import { exportAnnotatedPdf } from "./exportPdf.ts";
@@ -6,6 +6,8 @@ import { clamp } from "./geometry.ts";
 import { useHistory } from "./history.ts";
 import { Inspector } from "./Inspector.tsx";
 import { PageStage } from "./PageStage.tsx";
+import { describeObjects, type ObjectHover } from "./objects.ts";
+import { prefersReducedMotion, revealIn } from "./reveal.ts";
 import { loadPdf, type LoadedPdf } from "./pdf.ts";
 import { navigate, plainClick } from "./router.ts";
 import { createSession, listSessions, persistAnnotations, readSession, readySessions, type SessionInfo } from "./session.ts";
@@ -296,6 +298,8 @@ export function Editor({ sessionId }: { sessionId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [contentSelection, setContentSelection] = useState<ContentElement | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  // The mark under the pointer, on a page or in the object list; the other side mirrors it.
+  const [hover, setHover] = useState<ObjectHover | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [missing, setMissing] = useState(false);
@@ -402,6 +406,21 @@ export function Editor({ sessionId }: { sessionId: string }) {
   const consumeFocus = useCallback(() => setFocusId(null), []);
   const requestFocus = useCallback((id: string) => setFocusId(id), []);
 
+  // Each side only clears a hover it set itself, so a row's mouseleave never wipes out the
+  // page hover that follows it (and the other way round).
+  const hoverFromPage = useCallback((id: string | null) => {
+    setHover((current) => {
+      if (id) return current?.id === id && current.from === "page" ? current : { id, from: "page" };
+      return current?.from === "page" ? null : current;
+    });
+  }, []);
+  const hoverFromList = useCallback((id: string | null) => {
+    setHover((current) => {
+      if (id) return current?.id === id && current.from === "list" ? current : { id, from: "list" };
+      return current?.from === "list" ? null : current;
+    });
+  }, []);
+
   const chooseTool = useCallback((next: Tool) => {
     if (next === "pencil" || next === "shape" || next === "emoji" || next === "signature") {
       if (toolRef.current === next) {
@@ -429,6 +448,20 @@ export function Editor({ sessionId }: { sessionId: string }) {
       if (history.commit(next)) bump();
     },
     [history.commit, bump],
+  );
+
+  // Removing a mark, whether with Delete, from the attributes pane or from the object list, is one
+  // undo step.
+  const removeObject = useCallback(
+    (id: string) => {
+      const current = getAnnotations();
+      const removed = current.find((item) => item.id === id);
+      if (!removed) return;
+      save(current.filter((item) => item.id !== id));
+      if (selectedRef.current === id) setSelectedId(null);
+      if (removed.kind === "patch") setContentSelection(null);
+    },
+    [getAnnotations, save],
   );
 
   useEffect(() => {
@@ -544,6 +577,16 @@ export function Editor({ sessionId }: { sessionId: string }) {
       setSelectedId(null);
     }
   }, [history.value, selectedId]);
+
+  // Hovering a row scrolls the document to its mark when that is off screen (the highlight is
+  // drawn by the page, so it is already in the DOM here); hovering the page never moves the view.
+  useEffect(() => {
+    if (!hover || hover.from !== "list") return;
+    const pages = pagesRef.current;
+    if (!pages) return;
+    const target = pages.querySelector<HTMLElement>(`[data-object-id="${CSS.escape(hover.id)}"]`);
+    if (target) revealIn(pages, target, "center", !prefersReducedMotion());
+  }, [hover]);
 
   const openFiles = useCallback(async (files: File[]) => {
     const pdfs = files.filter(
@@ -675,16 +718,12 @@ export function Editor({ sessionId }: { sessionId: string }) {
       }
       if ((event.key === "Delete" || event.key === "Backspace") && selectedRef.current) {
         event.preventDefault();
-        const id = selectedRef.current;
-        const removed = history.valueRef.current.find((item) => item.id === id);
-        save(history.valueRef.current.filter((item) => item.id !== id));
-        setSelectedId(null);
-        if (removed?.kind === "patch") setContentSelection(null);
+        removeObject(selectedRef.current);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [history.redo, history.undo, history.valueRef, bump, save, chooseTool]);
+  }, [history.redo, history.undo, bump, removeObject, chooseTool]);
 
   const placeEmoji = (emojiId: string) => {
     const document = loadedRef.current;
@@ -756,6 +795,11 @@ export function Editor({ sessionId }: { sessionId: string }) {
   };
 
   const matchedPreset = ZOOM_PRESETS.find((preset) => Math.abs(preset - scale) < 0.008);
+
+  const objects = useMemo(() => describeObjects(history.value), [history.value]);
+  const objectNumbers = useMemo(() => new Map(objects.map((row) => [row.id, row.number])), [objects]);
+  // A hover outlives the mark it points at (removed under the pointer); it just stops showing.
+  const liveHover = hover && objectNumbers.has(hover.id) ? hover : null;
 
   const selected = history.value.find((item) => item.id === selectedId) ?? null;
   const selectedShape =
@@ -1019,6 +1063,9 @@ export function Editor({ sessionId }: { sessionId: string }) {
                   stroke={strokeStyle}
                   textStyle={textStyle}
                   selectedId={selectedId}
+                  hoverId={liveHover?.id ?? null}
+                  objectNumbers={objectNumbers}
+                  onHover={hoverFromPage}
                   focusId={focusId}
                   getAnnotations={getAnnotations}
                   getEpoch={getEpoch}
@@ -1139,11 +1186,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
           showInk={showInk}
           canDelete={selected !== null}
           onDelete={() => {
-            if (!selectedId) return;
-            const removed = history.valueRef.current.find((item) => item.id === selectedId);
-            save(history.valueRef.current.filter((item) => item.id !== selectedId));
-            setSelectedId(null);
-            if (removed?.kind === "patch") setContentSelection(null);
+            if (selectedId) removeObject(selectedId);
           }}
           onAdjustStart={beginAdjust}
           onAdjustEnd={endAdjust}
@@ -1169,6 +1212,12 @@ export function Editor({ sessionId }: { sessionId: string }) {
           }
           content={selected && selected.kind !== "patch" ? null : contentSelection}
           patch={selected?.kind === "patch" ? selected : null}
+          objects={objects}
+          selectedId={selectedId}
+          hover={liveHover}
+          onHoverObject={hoverFromList}
+          onSelectObject={setSelectedId}
+          onRemoveObject={removeObject}
         />
       </div>
     </div>
