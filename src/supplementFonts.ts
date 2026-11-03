@@ -210,14 +210,16 @@ function userSupplement(user: UserFont, key: string): Supplement {
 }
 
 // Whether a font the user supplies (an installed one, or a file) would stand in for a page font:
-// when nothing bundled matches the font by name (its characters come from a Noto face of its kind,
-// or from nothing) and the user has not supplied one already.
+// when nothing bundled is the page's own typeface (its characters come from a design with the
+// same metrics, from a Noto face of its kind, or from nothing) and the user has not supplied one
+// already. The font itself beats the nearest open design: a reader with Times New Roman installed
+// gets its digits, not Tinos's.
 export function fontOffer(loadedName: string): FontOffer | null {
   const choice = choices.get(loadedName);
   if (!choice) return null;
   const key = traitKey(choice.traits);
   if (userFontFor(key)) return null;
-  if (choice.bundled && choice.bundled.relation !== "kind") return null;
+  if (choice.bundled?.relation === "same") return null;
   return { pdfFont: loadedName, name: choice.ask.name, key };
 }
 

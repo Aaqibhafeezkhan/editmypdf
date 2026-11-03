@@ -298,17 +298,20 @@ type Embedder = {
 
 // Embeds the fonts pdf.js converted for the document, once each by pdf.js font name: the copy
 // with the corrected cmap the editor types with when there is one, else the converted font. The
-// supplements are embedded once each by file, subset to the glyphs the edits use.
+// supplements are embedded once each by file, subset to the glyphs the edits use. Each is named
+// in the output as the PDF or the font file names it (pdf-lib would add a random number, which
+// the name's reader would then take for part of the name): the page's face keeps the name the
+// page gave it, and a supplement goes by its PostScript name behind a subset tag.
 function faceEmbedder(document: PDFDocument, pages: PDFPageProxy[]): Embedder {
   const faces = new Map<string, Promise<EmbeddedFace | null>>();
   const supplements = new Map<string, Promise<EmbeddedFace | null>>();
   // The whole font is the fallback when pdf-lib cannot subset this one.
-  const embedBytes = async (bytes: Uint8Array, subset: boolean): Promise<PDFFont | null> => {
+  const embedBytes = async (bytes: Uint8Array, subset: boolean, customName?: string): Promise<PDFFont | null> => {
     try {
-      return await document.embedFont(bytes, { subset });
+      return await document.embedFont(bytes, { subset, customName });
     } catch {
       try {
-        return await document.embedFont(bytes);
+        return await document.embedFont(bytes, { customName });
       } catch {
         return null;
       }
@@ -331,7 +334,8 @@ function faceEmbedder(document: PDFDocument, pages: PDFPageProxy[]): Embedder {
         // edits use are written. A face rebuilt from a Type3 font holds only the glyphs the page
         // drew, and is written whole: its CFF outlines trip fontkit's subsetter, which runs when
         // the file is saved, too late for anything to catch.
-        const font = await embedBytes(bytes, !info.type3);
+        const subset = !info.type3;
+        const font = await embedBytes(bytes, subset, info.name ? (subset ? subsetName(info.name, pdfFont) : info.name) : undefined);
         return font ? { font, cmap } : null;
       })();
       faces.set(pdfFont, pending);
@@ -345,7 +349,8 @@ function faceEmbedder(document: PDFDocument, pages: PDFPageProxy[]): Embedder {
         pending = (async () => {
           const cmap = fontUnicodeMap(source.bytes);
           if (cmap.size === 0) return null;
-          const font = await embedBytes(source.bytes, true);
+          const name = postScriptName(source.bytes);
+          const font = await embedBytes(source.bytes, true, name ? subsetName(name, source.key) : undefined);
           return font ? { font, cmap } : null;
         })();
         supplements.set(source.key, pending);
@@ -354,6 +359,32 @@ function faceEmbedder(document: PDFDocument, pages: PDFPageProxy[]): Embedder {
       return face?.cmap.has(code) ? face : null;
     },
   };
+}
+
+// The PostScript name a font file gives itself, as a PDF name can carry it; "" when fontkit
+// cannot read the file.
+function postScriptName(bytes: Uint8Array): string {
+  try {
+    const font = fontkit.create(bytes) as { postscriptName?: string | null };
+    return (font.postscriptName ?? "").replace(/\s+/g, "");
+  } catch {
+    return "";
+  }
+}
+
+// A subset font's name, which by convention carries a six-letter tag in front of the font's
+// ("ABCDEF+TimesNewRomanPS-BoldMT"); a name that has one keeps it, else one is made from `key`,
+// the same for the same source.
+function subsetName(name: string, key: string): string {
+  if (/^[A-Z]{6}\+/.test(name)) return name;
+  let hash = 2166136261;
+  for (let index = 0; index < key.length; index += 1) hash = Math.imul(hash ^ key.charCodeAt(index), 16777619) >>> 0;
+  let tag = "";
+  for (let index = 0; index < 6; index += 1) {
+    tag += String.fromCharCode(65 + (hash % 26));
+    hash = Math.floor(hash / 26);
+  }
+  return `${tag}+${name}`;
 }
 
 const fontKeys = new WeakMap<PDFPage, Map<PDFFont, PDFName>>();

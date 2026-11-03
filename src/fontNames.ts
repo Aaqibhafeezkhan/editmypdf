@@ -22,17 +22,28 @@ export const ITALIC_NAME = /italic|oblique|slanted|kursiv|cm(?:ti|bxti|sl|bxsl|m
 // is the axis at its default). The values say the cut; the name alone says "Regular".
 const AXIS_SUFFIX = /(?:_(?:[a-z]{4}|[A-Z]{4})[0-9A-F]*)+$/;
 
+// pdf-lib names every font it embeds by the font's PostScript name and a random number
+// ("TimesNewRomanPS-BoldMT-2000"), unless the generator names the font itself; many web tools
+// write with it, and this editor's export did until it named its fonts.
+const RANDOM_SUFFIX = /-\d{1,4}$/;
+
 // The name without the subset prefix a PDF puts in front of an embedded font's name, and without
-// the variation axes a generator may append to it.
+// pdf-lib's number behind it.
+function plainName(name: string): string {
+  return name.replace(/^[A-Z]{6}\+/, "").replace(RANDOM_SUFFIX, "");
+}
+
+// The name without the subset prefix, pdf-lib's number, and the variation axes a generator may
+// append to it.
 export function bareName(name: string): string {
-  return name.replace(/^[A-Z]{6}\+/, "").replace(AXIS_SUFFIX, "");
+  return plainName(name).replace(AXIS_SUFFIX, "");
 }
 
 // The variation axes a font's name carries, by tag ("wght", "opsz"), each with the value it is set
 // to; an axis named without a value (at its default) is left out, as is a plainly named font.
 export function axisValues(name: string): Map<string, number> {
   const axes = new Map<string, number>();
-  const suffix = AXIS_SUFFIX.exec(name.replace(/^[A-Z]{6}\+/, ""))?.[0] ?? "";
+  const suffix = AXIS_SUFFIX.exec(plainName(name))?.[0] ?? "";
   for (const match of suffix.matchAll(/_([a-zA-Z]{4})([0-9A-F]*)/g)) {
     const tag = match[1];
     const hex = match[2];
