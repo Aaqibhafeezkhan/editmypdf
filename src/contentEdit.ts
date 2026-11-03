@@ -3,7 +3,6 @@ import type { ContentElement } from "./content.ts";
 import { blockWidth, flowWidth, lineShift, paintRun, spansText, wrapText } from "./textLayout.ts";
 import type { EditCapture } from "./pageInk.ts";
 import { uid, type PatchAnnotation, type PatchTail, type TextSpan } from "./types.ts";
-import { patchChanged } from "./changes.ts";
 
 type Box = { x: number; y: number; w: number; h: number };
 
