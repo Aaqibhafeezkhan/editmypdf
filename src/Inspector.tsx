@@ -15,6 +15,7 @@ import {
   MousePointer2,
   PanelRightClose,
   PanelRightOpen,
+  RotateCcw,
   SlidersHorizontal,
   Strikethrough,
   Trash2,
@@ -37,7 +38,7 @@ import {
   type InspectorLayout,
 } from "./inspectorLayout.ts";
 import { ObjectList } from "./ObjectList.tsx";
-import type { ObjectHover, ObjectRow } from "./objects.ts";
+import { removalFor, type ObjectHover, type ObjectRow } from "./objects.ts";
 import { PanelEmpty, PanelHead, PanelSection, PropRow } from "./PanelChrome.tsx";
 import { shortcut } from "./shortcuts.ts";
 import type { FormatChange, FormatState } from "./textFormat.ts";
@@ -472,6 +473,9 @@ export function Inspector({
   onFormatEnd: () => void;
 }) {
   const view = panelFor(tool, selectedKind, shape, selectedShape, content);
+  // Taking an edit of the page's own content off the page restores the original; the footer's
+  // button says which of the two it will do.
+  const removal = removalFor(patch ?? (selectedKind ? { kind: selectedKind } : null));
   const { layout, setWidth, setSplit } = useInspectorLayout();
   const [dragging, setDragging] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -891,11 +895,23 @@ export function Inspector({
           </ScrollArea>
           {canDelete && (
             <div className="panel-footer">
-              <Button type="button" variant="outline" className="delete-button" onClick={onDelete}>
-                <Trash2 />
-                Delete selection
-                <kbd className="button-kbd">{shortcut("backspace")}</kbd>
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={removal.restores ? "restore-button" : "delete-button"}
+                    onClick={onDelete}
+                  >
+                    {removal.restores ? <RotateCcw /> : <Trash2 />}
+                    {removal.label}
+                    <kbd className="button-kbd">{shortcut("backspace")}</kbd>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="start" sideOffset={6}>
+                  {removal.hint}
+                </TooltipContent>
+              </Tooltip>
             </div>
           )}
         </section>
