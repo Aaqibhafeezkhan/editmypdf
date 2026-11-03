@@ -4,9 +4,10 @@ import { keepUserFont, type UserFont } from "./userFonts.ts";
 
 // The fonts installed on the user's machine, through the Local Font Access API (Chromium only):
 // the third source of the characters an embedded subset lacks, between the bundled open fonts and
-// a file the user picks. A page font that matches nothing bundled by name is most often a font the
-// document's author had installed, and the reader of the same document often has it too; one
-// click finds it, and its bytes serve the display and the export exactly like an added file. The
+// a file the user picks. A page font is most often one the document's author had installed, and
+// the reader of the same document often has it too; one click finds it, and its bytes serve the
+// display and the export exactly like an added file, so the characters come from the font itself
+// rather than from the nearest open design (Tinos for Times New Roman, Noto for the rest). The
 // API needs a user gesture and the `local-fonts` permission, so it is only ever called from a
 // button, and a browser without it (Safari, Firefox) never shows the button.
 
