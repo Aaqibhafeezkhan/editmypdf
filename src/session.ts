@@ -84,6 +84,16 @@ function idbPut(key: string, value: unknown): Promise<void> {
   );
 }
 
+// Small records that belong to the browser rather than to any document (the saved signatures),
+// read and written whole under their own prefix so they never collide with a session's key.
+export function readStored<T>(key: string): Promise<T | undefined> {
+  return idbGet<T>(`app:${key}`);
+}
+
+export function writeStored(key: string, value: unknown): Promise<void> {
+  return idbPut(`app:${key}`, value);
+}
+
 function idbDelete(key: string): Promise<void> {
   return openDb().then(
     (db) =>
