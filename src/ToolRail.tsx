@@ -1,18 +1,9 @@
 import type { ReactNode } from "react";
 import { Eraser, MousePointer2, Pencil, Signature, Smile, Type } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ShapeGlyph } from "./ShapeGlyph.tsx";
 import type { ShapeId } from "./shapes.ts";
 import type { Tool } from "./types.ts";
-
-const TOOLS: { id: Exclude<Tool, "shape">; label: string; shortcut: string; icon: typeof Pencil }[] = [
-  { id: "select", label: "Select", shortcut: "V", icon: MousePointer2 },
-  { id: "pencil", label: "Pencil", shortcut: "P", icon: Pencil },
-  { id: "text", label: "Text", shortcut: "T", icon: Type },
-  { id: "eraser", label: "Eraser", shortcut: "E", icon: Eraser },
-];
 
 function ToolButton({
   label,
@@ -32,26 +23,33 @@ function ToolButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
+        <button
           type="button"
-          variant={active ? "default" : "ghost"}
-          size="icon"
+          className="rail-button"
           aria-pressed={active}
           aria-expanded={expanded}
           aria-label={label}
+          aria-keyshortcuts={shortcut}
           onClick={onClick}
         >
-          {children}
-        </Button>
+          <span className="rail-icon" aria-hidden="true">
+            {children}
+          </span>
+          <span className="rail-label" aria-hidden="true">
+            {label}
+          </span>
+        </button>
       </TooltipTrigger>
-      <TooltipContent side="right" sideOffset={8}>
+      <TooltipContent side="right" sideOffset={10}>
         {label}
-        <kbd className="rounded bg-background/20 px-1 font-sans text-[10px]">{shortcut}</kbd>
+        <kbd className="tip-kbd">{shortcut}</kbd>
       </TooltipContent>
     </Tooltip>
   );
 }
 
+// The tools down the left edge, in three groups: selecting, inserting, removing. The inserting
+// tools with options (pencil, shapes, emoji, signature) open the options panel beside the rail.
 export function ToolRail({
   tool,
   shape,
@@ -63,72 +61,59 @@ export function ToolRail({
   panelOpen: boolean;
   onTool: (tool: Tool) => void;
 }) {
-  const before = TOOLS.filter((item) => item.id === "select" || item.id === "pencil");
-  const after = TOOLS.filter((item) => item.id === "text" || item.id === "eraser");
-
+  const expanded = (id: Tool) => (tool === id && panelOpen ? true : false);
   return (
     <nav className="tool-rail" aria-label="Tools">
-      <div className="flex flex-col items-center gap-1">
-        {before.map((item) => {
-          const Icon = item.icon;
-          return (
-            <ToolButton
-              key={item.id}
-              label={item.label}
-              shortcut={item.shortcut}
-              active={tool === item.id}
-              expanded={item.id === "pencil" ? tool === "pencil" && panelOpen : undefined}
-              onClick={() => onTool(item.id)}
-            >
-              <Icon />
-            </ToolButton>
-          );
-        })}
+      <div className="rail-group" role="group" aria-label="Select">
+        <ToolButton label="Select" shortcut="V" active={tool === "select"} onClick={() => onTool("select")}>
+          <MousePointer2 />
+        </ToolButton>
       </div>
-      <Separator className="my-1 w-6" />
-      <ToolButton
-        label="Shapes"
-        shortcut="S"
-        active={tool === "shape"}
-        expanded={tool === "shape" && panelOpen}
-        onClick={() => onTool("shape")}
-      >
-        <ShapeGlyph id={shape} />
-      </ToolButton>
-      <ToolButton
-        label="Emojis"
-        shortcut="M"
-        active={tool === "emoji"}
-        expanded={tool === "emoji" && panelOpen}
-        onClick={() => onTool("emoji")}
-      >
-        <Smile />
-      </ToolButton>
-      <ToolButton
-        label="Signature"
-        shortcut="G"
-        active={tool === "signature"}
-        expanded={tool === "signature" && panelOpen}
-        onClick={() => onTool("signature")}
-      >
-        <Signature />
-      </ToolButton>
-      <Separator className="my-1 w-6" />
-      <div className="flex flex-col items-center gap-1">
-        {after.map((item) => {
-          const Icon = item.icon;
-          return (
-            <ToolButton
-              key={item.id}
-              label={item.label}
-              shortcut={item.shortcut}
-              active={tool === item.id}
-              onClick={() => onTool(item.id)}
-            >
-              <Icon />
-            </ToolButton>
-          );
-        })}
+      <div className="rail-group" role="group" aria-label="Insert">
+        <ToolButton label="Text" shortcut="T" active={tool === "text"} onClick={() => onTool("text")}>
+          <Type />
+        </ToolButton>
+        <ToolButton
+          label="Pencil"
+          shortcut="P"
+          active={tool === "pencil"}
+          expanded={expanded("pencil")}
+          onClick={() => onTool("pencil")}
+        >
+          <Pencil />
+        </ToolButton>
+        <ToolButton
+          label="Shapes"
+          shortcut="S"
+          active={tool === "shape"}
+          expanded={expanded("shape")}
+          onClick={() => onTool("shape")}
+        >
+          <ShapeGlyph id={shape} className="size-[18px]" />
+        </ToolButton>
+        <ToolButton
+          label="Emoji"
+          shortcut="M"
+          active={tool === "emoji"}
+          expanded={expanded("emoji")}
+          onClick={() => onTool("emoji")}
+        >
+          <Smile />
+        </ToolButton>
+        <ToolButton
+          label="Sign"
+          shortcut="G"
+          active={tool === "signature"}
+          expanded={expanded("signature")}
+          onClick={() => onTool("signature")}
+        >
+          <Signature />
+        </ToolButton>
+      </div>
+      <div className="rail-group" role="group" aria-label="Remove">
+        <ToolButton label="Eraser" shortcut="E" active={tool === "eraser"} onClick={() => onTool("eraser")}>
+          <Eraser />
+        </ToolButton>
       </div>
     </nav>
   );

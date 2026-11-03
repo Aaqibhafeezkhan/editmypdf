@@ -1,5 +1,8 @@
-import { useEffect, useRef } from "react";
-import { Image as ImageIcon, Pencil, Signature, TextCursorInput, Trash2, Type } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Image as ImageIcon, Layers, Pencil, Signature, TextCursorInput, Trash2, TriangleAlert, Type } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { PanelEmpty } from "./PanelChrome.tsx";
 import { revealIn } from "./reveal.ts";
 import { ShapeGlyph } from "./ShapeGlyph.tsx";
 import type { ObjectHover, ObjectIcon, ObjectRow } from "./objects.ts";
@@ -30,6 +33,60 @@ function revealRow(list: HTMLElement | null, id: string) {
   if (viewport && row) revealIn(viewport, row, "nearest", false);
 }
 
+// The remove button of a row, which asks first in a small panel anchored to it.
+function RemoveButton({
+  name,
+  open,
+  onOpenChange,
+  onRemove,
+}: {
+  name: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRemove: () => void;
+}) {
+  const titleId = useId();
+  const keepRef = useRef<HTMLButtonElement>(null);
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <button type="button" className="object-remove" aria-label={`Remove ${name}`} title="Remove">
+          <Trash2 />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="confirm-pop"
+        role="alertdialog"
+        aria-labelledby={titleId}
+        side="left"
+        align="center"
+        sideOffset={8}
+        collisionPadding={12}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          keepRef.current?.focus({ preventScroll: true });
+        }}
+      >
+        <div className="confirm-pop-body">
+          <span className="confirm-pop-icon" aria-hidden="true">
+            <TriangleAlert />
+          </span>
+          <strong id={titleId}>Remove this object?</strong>
+        </div>
+        <div className="confirm-pop-actions">
+          <Button ref={keepRef} type="button" size="sm" variant="ghost" onClick={() => onOpenChange(false)}>
+            Keep
+          </Button>
+          <Button type="button" size="sm" variant="destructive" className="confirm-pop-yes" onClick={onRemove}>
+            <Trash2 />
+            Remove
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function ObjectList({
   objects,
   selectedId,
@@ -46,6 +103,8 @@ export function ObjectList({
   onRemove: (id: string) => void;
 }) {
   const listRef = useRef<HTMLUListElement>(null);
+  // The row whose Remove is asking for confirmation; one at a time.
+  const [confirming, setConfirming] = useState<string | null>(null);
   const hotId = hover?.id ?? null;
   const hotFrom = hover?.from ?? null;
 
@@ -59,10 +118,9 @@ export function ObjectList({
 
   if (objects.length === 0) {
     return (
-      <p className="object-empty">
-        Nothing inserted yet. Text, shapes, emojis, signatures and pencil strokes you add to the pages are
-        listed here.
-      </p>
+      <PanelEmpty icon={<Layers />} title="Nothing added yet">
+        Text, shapes, emoji, signatures and pencil strokes you add appear here, in order.
+      </PanelEmpty>
     );
   }
 
@@ -76,7 +134,7 @@ export function ObjectList({
           <li
             key={row.id}
             data-object-id={row.id}
-            className={`object-row${selected ? " selected" : ""}${hot ? " hot" : ""}${row.changed ? " changed" : ""}`}
+            className={`object-row${selected ? " selected" : ""}${hot ? " hot" : ""}${row.changed ? " changed" : ""}${confirming === row.id ? " confirming" : ""}`}
             onMouseEnter={() => onHover(row.id)}
             onMouseLeave={() => onHover(null)}
           >
@@ -103,18 +161,18 @@ export function ObjectList({
                 {row.detail && <span className="object-detail">{row.detail}</span>}
               </span>
               <span className="object-page" aria-hidden="true">
-                p. {row.page + 1}
+                p.{row.page + 1}
               </span>
             </button>
-            <button
-              type="button"
-              className="object-remove"
-              aria-label={`Remove ${name}`}
-              title="Remove"
-              onClick={() => onRemove(row.id)}
-            >
-              <Trash2 />
-            </button>
+            <RemoveButton
+              name={name}
+              open={confirming === row.id}
+              onOpenChange={(open) => setConfirming(open ? row.id : null)}
+              onRemove={() => {
+                setConfirming(null);
+                onRemove(row.id);
+              }}
+            />
           </li>
         );
       })}

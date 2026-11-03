@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { DragEvent as ReactDragEvent, ReactNode } from "react";
 import { scanType3Fonts, type ContentElement } from "./content.ts";
 import { exportAnnotatedPdf } from "./exportPdf.ts";
@@ -9,28 +9,61 @@ import { PageStage } from "./PageStage.tsx";
 import { describeObjects, type ObjectHover } from "./objects.ts";
 import { prefersReducedMotion, revealIn } from "./reveal.ts";
 import { loadPdf, type LoadedPdf } from "./pdf.ts";
-import { navigate, plainClick } from "./router.ts";
+import { navigate } from "./router.ts";
 import { createSession, listSessions, persistAnnotations, readSession, readySessions, type SessionInfo } from "./session.ts";
 import type { Brush } from "./brushes.ts";
 import { isBoxShape, isLinearShape, isOpenShape, SHAPE_LABEL, shapeFromLine, type ShapeId } from "./shapes.ts";
 import type { FormatApi, FormatChange, FormatState } from "./textFormat.ts";
 import { measureTextWidth } from "./textMeasure.ts";
-import { ChevronDown, Download, Minus, Plus, Redo2, RotateCw, Undo2, UnfoldHorizontal, UnfoldVertical } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  Eraser,
+  FileQuestion,
+  FileText,
+  FolderOpen,
+  LayoutGrid,
+  Monitor,
+  Moon,
+  MousePointer2,
+  PanelRight,
+  Pencil,
+  Redo2,
+  RotateCw,
+  Shapes,
+  Signature,
+  Smile,
+  Sun,
+  SunMoon,
+  Trash2,
+  TriangleAlert,
+  Type,
+  Undo2,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AppBar } from "./AppBar.tsx";
+import type { MenuDef } from "./menus.tsx";
+import { PagesPanel } from "./PagesPanel.tsx";
+import { shortcut } from "./shortcuts.ts";
+import { StatusBar, type FitMode } from "./StatusBar.tsx";
+import { isThemeChoice, readTheme, storeTheme, subscribeTheme, type ThemeChoice } from "./theme.ts";
 import { ThemeSelect } from "./ThemeSelect.tsx";
 import { LogoMark } from "./site/Logo.tsx";
-import { PRODUCT, routeHref, ROUTES } from "./data/product.ts";
+import { PRODUCT, ROUTES } from "./data/product.ts";
 import { ToolDock } from "./ToolDock.tsx";
 import { ToolRail } from "./ToolRail.tsx";
 import {
@@ -47,6 +80,7 @@ import {
   type Tool,
   uid,
 } from "./types.ts";
+import "./chrome.css";
 import "./App.css";
 
 const MIN_ZOOM = 0.25;
@@ -123,10 +157,6 @@ function mergeText(item: TextAnnotation, partial: Partial<TextStyle>): TextAnnot
   return next;
 }
 
-function zoomLabel(scale: number): string {
-  return `${Math.round(scale * 100)}%`;
-}
-
 type PageReadout = {
   index: number;
   tipTop: number;
@@ -171,12 +201,16 @@ function readPageScroll(node: HTMLElement): PageReadout {
 
 function IconTip({
   label,
+  keys,
   disabled = false,
+  pressed,
   onClick,
   children,
 }: {
   label: string;
+  keys?: string;
   disabled?: boolean;
+  pressed?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -189,7 +223,8 @@ function IconTip({
           size="icon"
           aria-label={label}
           aria-disabled={disabled}
-          className={disabled ? "opacity-50" : undefined}
+          aria-pressed={pressed}
+          className={disabled ? "bar-icon disabled" : "bar-icon"}
           onClick={() => {
             if (!disabled) onClick();
           }}
@@ -199,29 +234,7 @@ function IconTip({
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={8}>
         {label}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function ArrangeButton({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label={label} onClick={onClick}>
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={8}>
-        {label}
+        {keys && <kbd className="tip-kbd">{keys}</kbd>}
       </TooltipContent>
     </Tooltip>
   );
@@ -248,6 +261,12 @@ function chromeKey(sessionId: string): string {
 }
 
 const ZOOM_KEY = "pdf-editor:zoom";
+const SIDEBAR_KEY = "pdf-editor:inspector";
+const PAGES_PANEL_KEY = "pdf-editor:pages-panel";
+
+// Windows narrower than this open with the side panels closed; they would cover the page.
+const WIDE_WINDOW = 1100;
+const THUMBNAIL_WINDOW = 1280;
 
 function readZoom(): number {
   try {
@@ -257,6 +276,25 @@ function readZoom(): number {
     return clamp(value, MIN_ZOOM, MAX_ZOOM);
   } catch {
     return 1;
+  }
+}
+
+function readPanel(key: string, fallback: boolean): boolean {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored === "open") return true;
+    if (stored === "closed") return false;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writePanel(key: string, open: boolean): void {
+  try {
+    localStorage.setItem(key, open ? "open" : "closed");
+  } catch {
+    // Storage can be blocked in private browsing.
   }
 }
 
@@ -276,6 +314,14 @@ function readChrome(sessionId: string): { tool: Tool; shape: ShapeId; rotation: 
   }
 }
 
+const THEME_OPTIONS: { value: ThemeChoice; label: string; icon: ReactNode }[] = [
+  { value: "system", label: "System", icon: <Monitor /> },
+  { value: "light", label: "Light", icon: <Sun /> },
+  { value: "dark", label: "Dark", icon: <Moon /> },
+];
+
+const serverTheme = (): ThemeChoice => "system";
+
 export function Editor({ sessionId }: { sessionId: string }) {
   const history = useHistory<Annotation[]>([]);
   const [loaded, setLoaded] = useState<LoadedPdf | null>(null);
@@ -291,6 +337,11 @@ export function Editor({ sessionId }: { sessionId: string }) {
     const initial = readChrome(sessionId).tool;
     return initial === "pencil" || initial === "shape" || initial === "emoji" || initial === "signature";
   });
+  // The two side panels: objects and properties on the right, page thumbnails on the left.
+  const [sidebarOpen, setSidebarOpen] = useState(() => readPanel(SIDEBAR_KEY, true) && window.innerWidth >= WIDE_WINDOW);
+  const [pagesPanelOpen, setPagesPanelOpen] = useState(() =>
+    readPanel(PAGES_PANEL_KEY, window.innerWidth >= THUMBNAIL_WINDOW) && window.innerWidth >= WIDE_WINDOW,
+  );
   const [pageRotation, setPageRotation] = useState<PageRotation>(() => readChrome(sessionId).rotation);
   const [spin, setSpin] = useState<number>(() => readChrome(sessionId).rotation);
   const [viewReady, setViewReady] = useState(false);
@@ -323,6 +374,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
   });
   const [scrollTip, setScrollTip] = useState(false);
   const [barHover, setBarHover] = useState(false);
+  const theme = useSyncExternalStore(subscribeTheme, readTheme, serverTheme);
   const fileRef = useRef<HTMLInputElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const scrollTipTimer = useRef(0);
@@ -409,6 +461,9 @@ export function Editor({ sessionId }: { sessionId: string }) {
     };
   }, [sessionId, loaded?.name]);
 
+  useEffect(() => writePanel(SIDEBAR_KEY, sidebarOpen), [sidebarOpen]);
+  useEffect(() => writePanel(PAGES_PANEL_KEY, pagesPanelOpen), [pagesPanelOpen]);
+
   const bump = useCallback(() => {
     epochRef.current += 1;
   }, []);
@@ -446,6 +501,14 @@ export function Editor({ sessionId }: { sessionId: string }) {
     }
     setTool(next);
     setDockOpen(false);
+  }, []);
+
+  // Picks a shape for the shape tool and opens the shape options.
+  const pickShape = useCallback((id: ShapeId) => {
+    setShape(id);
+    setDockKind("shape");
+    setTool("shape");
+    setDockOpen(true);
   }, []);
 
   const remember = useCallback(
@@ -665,6 +728,17 @@ export function Editor({ sessionId }: { sessionId: string }) {
     void download();
   };
 
+  // Scrolls the viewer so the page with this index (from 0) starts at the top.
+  const goToPage = useCallback((index: number) => {
+    const node = pagesRef.current;
+    if (!node) return;
+    const wraps = node.querySelectorAll<HTMLElement>(".page-wrap");
+    const wrap = wraps[clamp(index, 0, wraps.length - 1)];
+    if (!wrap) return;
+    const top = wrap.getBoundingClientRect().top - node.getBoundingClientRect().top + node.scrollTop - 24;
+    node.scrollTo({ top: Math.max(0, top), behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target;
@@ -686,6 +760,11 @@ export function Editor({ sessionId }: { sessionId: string }) {
         downloadRef.current();
         return;
       }
+      if (meta && event.key.toLowerCase() === "o" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        fileRef.current?.click();
+        return;
+      }
       if (meta && (event.key === "=" || event.key === "+")) {
         event.preventDefault();
         setScale((value) => clamp(value + 0.25, MIN_ZOOM, MAX_ZOOM));
@@ -694,6 +773,11 @@ export function Editor({ sessionId }: { sessionId: string }) {
       if (meta && event.key === "-") {
         event.preventDefault();
         setScale((value) => clamp(value - 0.25, MIN_ZOOM, MAX_ZOOM));
+        return;
+      }
+      if (meta && event.key === "0") {
+        event.preventDefault();
+        setScale(1);
         return;
       }
       if (typing || meta || event.altKey) return;
@@ -709,10 +793,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
         return;
       }
       if (pickedShape) {
-        setShape(pickedShape);
-        setDockKind("shape");
-        setTool("shape");
-        setDockOpen(true);
+        pickShape(pickedShape);
         return;
       }
       const shortcuts: Record<string, Tool> = {
@@ -735,7 +816,7 @@ export function Editor({ sessionId }: { sessionId: string }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [history.redo, history.undo, bump, removeObject, chooseTool]);
+  }, [history.redo, history.undo, bump, removeObject, chooseTool, pickShape]);
 
   const placeEmoji = (emojiId: string) => {
     const document = loadedRef.current;
@@ -792,21 +873,33 @@ export function Editor({ sessionId }: { sessionId: string }) {
     setSelectedId(annotation.id);
   };
 
-  const fitZoom = (mode: "page" | "width" | "height") => {
+  const fitZoom = (mode: FitMode) => {
     const node = pagesRef.current;
     const viewport = loadedRef.current?.viewports[0];
     if (!node || !viewport || viewport.width === 0 || viewport.height === 0) return;
     const sideways = pageRotation === 90 || pageRotation === 270;
     const pageWidth = sideways ? viewport.height : viewport.width;
     const pageHeight = sideways ? viewport.width : viewport.height;
-    const widthScale = (node.clientWidth - 48) / pageWidth;
-    const heightScale = (node.clientHeight - 88) / pageHeight;
+    const widthScale = (node.clientWidth - 64) / pageWidth;
+    const heightScale = (node.clientHeight - 80) / pageHeight;
     const next =
       mode === "width" ? widthScale : mode === "height" ? heightScale : Math.min(widthScale, heightScale);
     setScale(clamp(next, MIN_ZOOM, MAX_ZOOM));
   };
 
-  const matchedPreset = ZOOM_PRESETS.find((preset) => Math.abs(preset - scale) < 0.008);
+  const rotate = () => {
+    setPageRotation((current) => ((current + 90) % 360) as PageRotation);
+    setSpin((current) => current + 90);
+  };
+
+  const undo = () => {
+    history.undo();
+    bump();
+  };
+  const redo = () => {
+    history.redo();
+    bump();
+  };
 
   const objects = useMemo(() => describeObjects(history.value), [history.value]);
   const objectNumbers = useMemo(() => new Map(objects.map((row) => [row.id, row.number])), [objects]);
@@ -903,14 +996,210 @@ export function Editor({ sessionId }: { sessionId: string }) {
   const pageTotal = loaded?.pages.length ?? 0;
   const pageNumber = pageTotal === 0 ? 1 : Math.min(readout.index, pageTotal - 1) + 1;
   const showScrollTip = readout.canScroll && (scrollTip || barHover);
+  const documentName = loaded?.name ?? "Opening…";
+
+  const menus: MenuDef[] = [
+    {
+      id: "file",
+      label: "File",
+      entries: [
+        { kind: "item", label: "Open PDF…", icon: <FolderOpen />, shortcut: shortcut("mod", "o"), onSelect: () => fileRef.current?.click() },
+        ...(sessions.length > 1
+          ? [
+              {
+                kind: "sub" as const,
+                label: "Switch document",
+                icon: <FileText />,
+                entries: [
+                  {
+                    kind: "radio" as const,
+                    value: sessionId,
+                    options: sessions.map((session) => ({ value: session.id, label: session.name })),
+                    onChange: (id: string) => navigate(`/edit/${id}`),
+                  },
+                ],
+              },
+            ]
+          : []),
+        { kind: "separator" },
+        {
+          kind: "item",
+          label: "Download PDF",
+          icon: <Download />,
+          shortcut: shortcut("mod", "s"),
+          disabled: !loaded || exporting,
+          onSelect: () => void download(),
+        },
+        { kind: "separator" },
+        { kind: "item", label: "All documents", icon: <LayoutGrid />, onSelect: () => navigate(ROUTES.app) },
+      ],
+    },
+    {
+      id: "edit",
+      label: "Edit",
+      entries: [
+        { kind: "item", label: "Undo", icon: <Undo2 />, shortcut: shortcut("mod", "z"), disabled: !history.canUndo, onSelect: undo },
+        {
+          kind: "item",
+          label: "Redo",
+          icon: <Redo2 />,
+          shortcut: shortcut("shift", "mod", "z"),
+          disabled: !history.canRedo,
+          onSelect: redo,
+        },
+        { kind: "separator" },
+        {
+          kind: "item",
+          label: "Delete selection",
+          icon: <Trash2 />,
+          shortcut: shortcut("backspace"),
+          disabled: selected === null,
+          destructive: true,
+          onSelect: () => {
+            if (selectedId) removeObject(selectedId);
+          },
+        },
+        { kind: "separator" },
+        { kind: "item", label: "Select", icon: <MousePointer2 />, shortcut: "V", onSelect: () => chooseTool("select") },
+        { kind: "item", label: "Eraser", icon: <Eraser />, shortcut: "E", onSelect: () => chooseTool("eraser") },
+      ],
+    },
+    {
+      id: "view",
+      label: "View",
+      entries: [
+        {
+          kind: "item",
+          label: "Zoom in",
+          icon: <ZoomIn />,
+          shortcut: shortcut("mod", "plus"),
+          onSelect: () => setScale((value) => clamp(value + 0.25, MIN_ZOOM, MAX_ZOOM)),
+        },
+        {
+          kind: "item",
+          label: "Zoom out",
+          icon: <ZoomOut />,
+          shortcut: shortcut("mod", "minus"),
+          onSelect: () => setScale((value) => clamp(value - 0.25, MIN_ZOOM, MAX_ZOOM)),
+        },
+        { kind: "item", label: "Actual size", shortcut: shortcut("mod", "0"), onSelect: () => setScale(1) },
+        { kind: "item", label: "Fit page", onSelect: () => fitZoom("page") },
+        { kind: "item", label: "Fit width", onSelect: () => fitZoom("width") },
+        { kind: "item", label: "Fit height", onSelect: () => fitZoom("height") },
+        { kind: "separator" },
+        { kind: "item", label: "Rotate pages", icon: <RotateCw />, onSelect: rotate },
+        { kind: "separator" },
+        { kind: "check", label: "Page thumbnails", checked: pagesPanelOpen, onSelect: () => setPagesPanelOpen((open) => !open) },
+        {
+          kind: "check",
+          label: "Tool options",
+          checked: dockOpen,
+          onSelect: () => {
+            if (dockOpen) setDockOpen(false);
+            else chooseTool(dockKind);
+          },
+        },
+        { kind: "check", label: "Objects and properties", checked: sidebarOpen, onSelect: () => setSidebarOpen((open) => !open) },
+        { kind: "separator" },
+        {
+          kind: "sub",
+          label: "Theme",
+          icon: <SunMoon />,
+          entries: [
+            {
+              kind: "radio",
+              value: theme,
+              options: THEME_OPTIONS,
+              onChange: (value) => {
+                if (isThemeChoice(value)) storeTheme(value);
+              },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "insert",
+      label: "Insert",
+      entries: [
+        { kind: "item", label: "Text", icon: <Type />, shortcut: "T", onSelect: () => chooseTool("text") },
+        { kind: "item", label: "Pencil", icon: <Pencil />, shortcut: "P", onSelect: () => chooseTool("pencil") },
+        {
+          kind: "sub",
+          label: "Shape",
+          icon: <Shapes />,
+          entries: [
+            { kind: "item", label: "Rectangle", shortcut: "R", onSelect: () => pickShape("rect") },
+            { kind: "item", label: "Ellipse", shortcut: "O", onSelect: () => pickShape("ellipse") },
+            { kind: "item", label: "Line", shortcut: "L", onSelect: () => pickShape("line") },
+            { kind: "separator" },
+            { kind: "item", label: "All shapes…", shortcut: "S", onSelect: () => chooseTool("shape") },
+          ],
+        },
+        { kind: "item", label: "Emoji", icon: <Smile />, shortcut: "M", onSelect: () => chooseTool("emoji") },
+        { kind: "item", label: "Signature", icon: <Signature />, shortcut: "G", onSelect: () => chooseTool("signature") },
+      ],
+    },
+  ];
+
+  const titleCenter = (
+    <div className="doc-title">
+      {sessions.length > 1 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className="doc-title-button" aria-label={`${documentName}. Switch document`}>
+              <FileText aria-hidden="true" />
+              <span className="doc-title-name">{documentName}</span>
+              <ChevronDown className="doc-title-chevron" aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" className="w-72!">
+            <DropdownMenuLabel>Documents in this browser</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={sessionId} onValueChange={(id) => navigate(`/edit/${id}`)}>
+              {sessions.map((session) => (
+                <DropdownMenuRadioItem key={session.id} value={session.id}>
+                  <span className="truncate">{session.name}</span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => navigate(ROUTES.app)}>
+              <LayoutGrid />
+              All documents
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <span className="doc-title-static" title={documentName}>
+          <FileText aria-hidden="true" />
+          <span className="doc-title-name">{documentName}</span>
+        </span>
+      )}
+      {pageTotal > 0 && (
+        <span className="doc-title-meta">
+          {pageTotal} {pageTotal === 1 ? "page" : "pages"}
+        </span>
+      )}
+    </div>
+  );
 
   if (missing) {
     return (
-      <div className="app missing">
-        <p>This document is not saved in this browser.</p>
-        <a href={routeHref(ROUTES.app)} onClick={(event) => { if (plainClick(event)) { event.preventDefault(); navigate(ROUTES.app); } }}>
-          Back to documents
-        </a>
+      <div className="app">
+        <AppBar>
+          <ThemeSelect />
+        </AppBar>
+        <div className="app-missing" role="status">
+          <span className="app-missing-icon" aria-hidden="true">
+            <FileQuestion />
+          </span>
+          <h1>This document is not saved in this browser</h1>
+          <p>Documents stay on the device they were opened on. Open the file again to keep editing it.</p>
+          <Button type="button" onClick={() => navigate(ROUTES.app)}>
+            <LayoutGrid />
+            Back to documents
+          </Button>
+        </div>
       </div>
     );
   }
@@ -921,97 +1210,57 @@ export function Editor({ sessionId }: { sessionId: string }) {
       onDragOver={(event) => event.preventDefault()}
       onDrop={onDrop}
     >
-      <header className="topbar">
-        <div className="brand">
-          <a
-            className="home-link"
-            href={ROUTES.app}
-            aria-label="Documents"
-            onClick={(event) => {
-              if (!plainClick(event)) return;
-              event.preventDefault();
-              navigate(ROUTES.app);
-            }}
-          >
-            <LogoMark size={26} />
-            <strong>{PRODUCT.name}</strong>
-          </a>
-          <div className="doc-switch">
-            <span className="file-name" title={loaded?.name ?? undefined}>
-              {loaded?.name ?? "Opening…"}
-            </span>
-            {sessions.length > 1 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Switch document"
-                  >
-                    <ChevronDown />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-72">
-                  <DropdownMenuRadioGroup
-                    value={sessionId}
-                    onValueChange={(id) => navigate(`/edit/${id}`)}
-                  >
-                    {sessions.map((session) => (
-                      <DropdownMenuRadioItem key={session.id} value={session.id}>
-                        <span className="truncate">{session.name}</span>
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        </div>
-        <div className="top-actions">
-          <IconTip
-            label="Undo"
-            disabled={!history.canUndo}
-            onClick={() => {
-              history.undo();
-              bump();
-            }}
-          >
+      <AppBar menus={menus} center={titleCenter}>
+        <div className="bar-group history">
+          <IconTip label="Undo" keys={shortcut("mod", "z")} disabled={!history.canUndo} onClick={undo}>
             <Undo2 />
           </IconTip>
-          <IconTip
-            label="Redo"
-            disabled={!history.canRedo}
-            onClick={() => {
-              history.redo();
-              bump();
-            }}
-          >
+          <IconTip label="Redo" keys={shortcut("shift", "mod", "z")} disabled={!history.canRedo} onClick={redo}>
             <Redo2 />
           </IconTip>
-          <ThemeSelect />
-          <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>
-            Edit another PDF
-          </Button>
-          <Button type="button" disabled={!loaded || exporting} onClick={() => void download()}>
-            <Download />
-            {exporting ? "Saving…" : "Download"}
-          </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf,.pdf"
-            multiple
-            hidden
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])];
-              event.target.value = "";
-              if (files.length > 0) void openFiles(files);
-            }}
-          />
         </div>
-      </header>
-      {error && <p className="error">{error}</p>}
+        <span className="bar-sep" />
+        <div className="bar-group panels">
+          <ThemeSelect />
+          <IconTip
+            label={sidebarOpen ? "Hide objects and properties" : "Show objects and properties"}
+            pressed={sidebarOpen}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            <PanelRight />
+          </IconTip>
+        </div>
+        <span className="bar-sep" />
+        <Button type="button" variant="outline" className="bar-open" onClick={() => fileRef.current?.click()}>
+          <FolderOpen />
+          <span className="bar-open-label">Open</span>
+        </Button>
+        <Button type="button" className="bar-download" disabled={!loaded || exporting} onClick={() => void download()}>
+          <Download />
+          <span className="bar-download-label">{exporting ? "Saving…" : "Download"}</span>
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          multiple
+          hidden
+          onChange={(event) => {
+            const files = [...(event.target.files ?? [])];
+            event.target.value = "";
+            if (files.length > 0) void openFiles(files);
+          }}
+        />
+      </AppBar>
+      {error && (
+        <div className="app-notice" role="alert">
+          <TriangleAlert aria-hidden="true" />
+          <span>{error}</span>
+          <button type="button" className="app-notice-close" aria-label="Dismiss" onClick={() => setError(null)}>
+            <X />
+          </button>
+        </div>
+      )}
       <div className="body">
         <ToolRail tool={tool} shape={shape} panelOpen={dockOpen} onTool={chooseTool} />
         <div className={dockOpen ? "tool-dock-slot open" : "tool-dock-slot"} inert={!dockOpen}>
@@ -1047,151 +1296,103 @@ export function Editor({ sessionId }: { sessionId: string }) {
             onSignature={placeSignature}
             onAdjustStart={beginAdjust}
             onAdjustEnd={endAdjust}
+            onClose={() => setDockOpen(false)}
           />
         </div>
-        <main className="workspace">
-          {loaded ? (
-            <div
-              className={viewReady ? "pages view-ready" : "pages"}
-              key={sessionId}
-              ref={pagesRef}
-              onScroll={revealScrollTip}
-            >
-              {loaded.name === "Untitled.pdf" && history.value.length === 0 && (
-                <p className="blank-hint">Open a PDF, or draw and type on this blank page.</p>
-              )}
-              {loaded.pages.map((page, index) => (
-                <PageStage
-                  key={`${sessionId}-${index}`}
-                  page={page}
-                  pageIndex={index}
-                  scale={scale}
-                  baseWidth={loaded.viewports[index]?.width ?? 612}
-                  baseHeight={loaded.viewports[index]?.height ?? 792}
-                  rotation={pageRotation}
-                  spin={spin}
-                  annotations={history.value}
-                  tool={tool}
-                  shape={shape}
-                  stroke={strokeStyle}
-                  textStyle={textStyle}
-                  selectedId={selectedId}
-                  hoverId={liveHover?.id ?? null}
-                  listHoverId={liveHover?.from === "list" ? liveHover.id : null}
-                  objectNumbers={objectNumbers}
-                  onHover={hoverFromPage}
-                  focusId={focusId}
-                  getAnnotations={getAnnotations}
-                  getEpoch={getEpoch}
-                  onReplace={history.replace}
-                  onPushBaseline={remember}
-                  onSelect={setSelectedId}
-                  selectedContent={contentSelection}
-                  onSelectContent={setContentSelection}
-                  onRequestFocus={requestFocus}
-                  onConsumeFocus={consumeFocus}
-                  onFormatState={setFormatState}
-                  registerFormat={registerFormat}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="blank-hint">Opening a blank page…</p>
-          )}
-          {loaded && readout.canScroll && (
-            <div
-              className={showScrollTip ? "page-scroll-tip visible" : "page-scroll-tip"}
-              style={{ top: readout.tipTop, right: readout.tipRight }}
-              aria-hidden="true"
-            >
-              Page {pageNumber}
-            </div>
-          )}
-          {pageTotal > 0 && (
-            <div
-              className="page-count"
-              aria-live="polite"
-              aria-atomic="true"
-              aria-label={`Page ${pageNumber} of ${pageTotal}`}
-            >
-              {pageNumber} / {pageTotal}
-            </div>
-          )}
-          <div className="editor-footer">
-          <div className="zoom-dock">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Zoom out"
-              onClick={() => setScale((value) => clamp(value / 1.1, MIN_ZOOM, MAX_ZOOM))}
-            >
-              <Minus />
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" className="zoom-label" aria-label="Zoom options">
-                  {zoomLabel(scale)}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="center" className="w-44!">
-                <DropdownMenuItem onSelect={() => setScale(1)}>Set to 100%</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => fitZoom("page")}>Set to fit</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => fitZoom("width")}>Set to width</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => fitZoom("height")}>Set to height</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuRadioGroup
-                  value={matchedPreset === undefined ? "" : String(matchedPreset)}
-                  onValueChange={(value) => setScale(Number(value))}
-                >
-                  {ZOOM_PRESETS.map((preset) => (
-                    <DropdownMenuRadioItem key={preset} value={String(preset)}>
-                      {Math.round(preset * 100)}%
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Zoom in"
-              onClick={() => setScale((value) => clamp(value * 1.1, MIN_ZOOM, MAX_ZOOM))}
-            >
-              <Plus />
-            </Button>
-            <Slider
-              className="w-28"
-              aria-label="Zoom"
-              min={MIN_ZOOM}
-              max={MAX_ZOOM}
-              step={0.05}
-              value={[scale]}
-              onValueChange={(next) => setScale(clamp(next[0] ?? scale, MIN_ZOOM, MAX_ZOOM))}
+        <div className={pagesPanelOpen && loaded ? "pages-panel-slot open" : "pages-panel-slot"} inert={!pagesPanelOpen || !loaded}>
+          {loaded && (
+            <PagesPanel
+              pages={loaded.pages}
+              viewports={loaded.viewports}
+              rotation={pageRotation}
+              current={pageNumber - 1}
+              onGo={goToPage}
             />
+          )}
+        </div>
+        <main className="workspace">
+          <div className="viewer">
+            {loaded ? (
+              <div
+                className={viewReady ? "pages view-ready" : "pages"}
+                key={sessionId}
+                ref={pagesRef}
+                onScroll={revealScrollTip}
+              >
+                {loaded.name === "Untitled.pdf" && history.value.length === 0 && (
+                  <p className="blank-hint">Open a PDF, or draw and type on this blank page.</p>
+                )}
+                {loaded.pages.map((page, index) => (
+                  <PageStage
+                    key={`${sessionId}-${index}`}
+                    page={page}
+                    pageIndex={index}
+                    scale={scale}
+                    baseWidth={loaded.viewports[index]?.width ?? 612}
+                    baseHeight={loaded.viewports[index]?.height ?? 792}
+                    rotation={pageRotation}
+                    spin={spin}
+                    annotations={history.value}
+                    tool={tool}
+                    shape={shape}
+                    stroke={strokeStyle}
+                    textStyle={textStyle}
+                    selectedId={selectedId}
+                    hoverId={liveHover?.id ?? null}
+                    listHoverId={liveHover?.from === "list" ? liveHover.id : null}
+                    objectNumbers={objectNumbers}
+                    onHover={hoverFromPage}
+                    focusId={focusId}
+                    getAnnotations={getAnnotations}
+                    getEpoch={getEpoch}
+                    onReplace={history.replace}
+                    onPushBaseline={remember}
+                    onSelect={setSelectedId}
+                    selectedContent={contentSelection}
+                    onSelectContent={setContentSelection}
+                    onRequestFocus={requestFocus}
+                    onConsumeFocus={consumeFocus}
+                    onFormatState={setFormatState}
+                    registerFormat={registerFormat}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="viewer-loading" role="status" aria-live="polite">
+                <LogoMark size={32} />
+                <span>Opening…</span>
+              </div>
+            )}
+            {loaded && readout.canScroll && (
+              <div
+                className={showScrollTip ? "page-scroll-tip visible" : "page-scroll-tip"}
+                style={{ top: readout.tipTop, right: readout.tipRight }}
+                aria-hidden="true"
+              >
+                Page {pageNumber}
+              </div>
+            )}
           </div>
-          <div className="arrange-dock">
-            <ArrangeButton label="Fit to height" onClick={() => fitZoom("height")}>
-              <UnfoldVertical />
-            </ArrangeButton>
-            <ArrangeButton label="Fit to width" onClick={() => fitZoom("width")}>
-              <UnfoldHorizontal />
-            </ArrangeButton>
-            <span className="arrange-dock-gap" />
-            <ArrangeButton
-              label="Rotate"
-              onClick={() => {
-                setPageRotation((current) => ((current + 90) % 360) as PageRotation);
-                setSpin((current) => current + 90);
-              }}
-            >
-              <RotateCw />
-            </ArrangeButton>
-          </div>
-          </div>
+          {pageTotal > 0 && (
+            <StatusBar
+              pageNumber={pageNumber}
+              pageTotal={pageTotal}
+              onGoToPage={(page) => goToPage(page - 1)}
+              scale={scale}
+              minZoom={MIN_ZOOM}
+              maxZoom={MAX_ZOOM}
+              presets={ZOOM_PRESETS}
+              onScale={(next) => setScale(clamp(next, MIN_ZOOM, MAX_ZOOM))}
+              onFit={fitZoom}
+              onRotate={rotate}
+              pagesPanelOpen={pagesPanelOpen}
+              onTogglePagesPanel={() => setPagesPanelOpen((open) => !open)}
+            />
+          )}
         </main>
         <Inspector
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
           tool={tool}
           shape={shape}
           selectedShape={selectedShape}

@@ -1,15 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
-
-const INSPECTOR_KEY = "pdf-editor:inspector";
-
-function readInspectorOpen(): boolean {
-  try {
-    return localStorage.getItem(INSPECTOR_KEY) !== "closed";
-  } catch {
-    return true;
-  }
-}
 import { ColorControl } from "./ColorControl.tsx";
 import { keepFocus } from "./keepFocus.ts";
 import { contentDetail, contentLabel, patchMissingGlyphs, type ContentElement, type ContentKind } from "./content.ts";
@@ -21,16 +11,19 @@ import {
   Bold,
   Info,
   Italic,
+  Layers,
+  MousePointer2,
   PanelRightClose,
   PanelRightOpen,
+  SlidersHorizontal,
   Strikethrough,
   Trash2,
   Underline,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   clampInspectorWidth,
   clampPaneSplit,
@@ -45,6 +38,8 @@ import {
 } from "./inspectorLayout.ts";
 import { ObjectList } from "./ObjectList.tsx";
 import type { ObjectHover, ObjectRow } from "./objects.ts";
+import { PanelEmpty, PanelHead, PanelSection, PropRow } from "./PanelChrome.tsx";
+import { shortcut } from "./shortcuts.ts";
 import type { FormatChange, FormatState } from "./textFormat.ts";
 import {
   Select,
@@ -197,7 +192,7 @@ function StyleToggles({ state, onToggle }: { state: Record<StyleKey, boolean>; o
     ["strike", "Strikethrough", <Strikethrough key="s" />],
   ];
   return (
-    <>
+    <div className="segmented toggle-set" role="group" aria-label="Text style">
       {items.map(([key, label, icon]) => (
         <Toggle
           key={key}
@@ -212,7 +207,7 @@ function StyleToggles({ state, onToggle }: { state: Record<StyleKey, boolean>; o
           {icon}
         </Toggle>
       ))}
-    </>
+    </div>
   );
 }
 
@@ -222,24 +217,25 @@ function AlignToggles({ value, justify, onAlign }: { value: TextAlign; justify: 
       type="single"
       variant="outline"
       size="sm"
-      spacing={1}
+      spacing={0}
+      className="segmented"
       value={value}
       onValueChange={(next) => {
         if (next === "left" || next === "center" || next === "right" || (justify && next === "justify")) onAlign(next);
       }}
       aria-label="Alignment"
     >
-      <ToggleGroupItem value="left" aria-label="Align left" onMouseDown={keepFocus}>
+      <ToggleGroupItem value="left" aria-label="Align left" title="Align left" onMouseDown={keepFocus}>
         <AlignLeft />
       </ToggleGroupItem>
-      <ToggleGroupItem value="center" aria-label="Align center" onMouseDown={keepFocus}>
+      <ToggleGroupItem value="center" aria-label="Align center" title="Align center" onMouseDown={keepFocus}>
         <AlignCenter />
       </ToggleGroupItem>
-      <ToggleGroupItem value="right" aria-label="Align right" onMouseDown={keepFocus}>
+      <ToggleGroupItem value="right" aria-label="Align right" title="Align right" onMouseDown={keepFocus}>
         <AlignRight />
       </ToggleGroupItem>
       {justify && (
-        <ToggleGroupItem value="justify" aria-label="Justify" onMouseDown={keepFocus}>
+        <ToggleGroupItem value="justify" aria-label="Justify" title="Justify" onMouseDown={keepFocus}>
           <AlignJustify />
         </ToggleGroupItem>
       )}
@@ -250,7 +246,7 @@ function AlignToggles({ value, justify, onAlign }: { value: TextAlign; justify: 
 // Tells the user that typed characters the page's font lacks are shown in a substitute face and
 // make the edit an image on download.
 function missingGlyphNote(missing: string[], kind: ContentKind | undefined): string {
-  const shown = missing.slice(0, 6).map((char) => `\u201c${char}\u201d`);
+  const shown = missing.slice(0, 6).map((char) => `“${char}”`);
   const rest = missing.length - shown.length;
   const list =
     rest > 0
@@ -314,14 +310,16 @@ function panelFor(
   if (tool === "eraser") {
     return { panel: "empty" as const, title: "Eraser", detail: "Click a mark to remove it" };
   }
-  return { panel: "empty" as const, title: "Properties", detail: "Select a mark to edit it" };
+  return { panel: "empty" as const, title: "Nothing selected", detail: "Select a mark on the page to edit it" };
 }
 
+// A number field beside a slider, as one property row.
 function NumberSlider({
   label,
   value,
   min,
   max,
+  unit,
   onChange,
   onAdjustStart,
   onAdjustEnd,
@@ -330,46 +328,65 @@ function NumberSlider({
   value: number;
   min: number;
   max: number;
+  unit?: string;
   onChange: (value: number) => void;
   onAdjustStart: () => void;
   onAdjustEnd: () => void;
 }) {
   const clampValue = (next: number) => Math.min(max, Math.max(min, next));
   return (
-    <div className="grid gap-2">
-      <div className="flex items-center justify-between">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
-        <Input
-          type="number"
+    <PropRow label={label}>
+      <div className="number-slider">
+        <span className={unit ? "number-wrap with-unit" : "number-wrap"} data-unit={unit}>
+          <Input
+            type="number"
+            min={min}
+            max={max}
+            aria-label={`${label} value`}
+            value={Math.round(value)}
+            className="number-field"
+            onFocus={onAdjustStart}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              if (Number.isFinite(next)) onChange(clampValue(next));
+            }}
+            onBlur={onAdjustEnd}
+          />
+        </span>
+        <Slider
+          aria-label={label}
           min={min}
           max={max}
-          aria-label={`${label} value`}
-          value={Math.round(value)}
-          className="h-7 w-16 px-2 text-center"
-          onFocus={onAdjustStart}
-          onChange={(event) => {
-            const next = Number(event.target.value);
-            if (Number.isFinite(next)) onChange(clampValue(next));
-          }}
+          step={1}
+          value={[value]}
+          onPointerDown={onAdjustStart}
+          onValueChange={(next) => onChange(clampValue(next[0] ?? value))}
+          onValueCommit={onAdjustEnd}
           onBlur={onAdjustEnd}
         />
       </div>
-      <Slider
-        aria-label={label}
-        min={min}
-        max={max}
-        step={1}
-        value={[value]}
-        onPointerDown={onAdjustStart}
-        onValueChange={(next) => onChange(clampValue(next[0] ?? value))}
-        onValueCommit={onAdjustEnd}
-        onBlur={onAdjustEnd}
-      />
-    </div>
+    </PropRow>
+  );
+}
+
+function StripButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label={label} onClick={onClick}>
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="left" sideOffset={8}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
 export function Inspector({
+  open,
+  onOpenChange,
   tool,
   shape,
   selectedShape,
@@ -409,6 +426,8 @@ export function Inspector({
   onFormatBegin,
   onFormatEnd,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   tool: Tool;
   shape: ShapeId;
   selectedShape: ShapeId | null;
@@ -459,32 +478,29 @@ export function Inspector({
   const bodyHeight = () => bodyRef.current?.clientHeight ?? 0;
   const windowWidth = typeof window === "undefined" ? DEFAULT_LAYOUT.width * 4 : window.innerWidth;
   const missing = view.panel === "content" && patch?.role === "text" ? patchMissingGlyphs(patch) : [];
-  const [open, setOpen] = useState(readInspectorOpen);
-  useEffect(() => {
-    try {
-      localStorage.setItem(INSPECTOR_KEY, open ? "open" : "closed");
-    } catch {
-      // Storage can be blocked in private browsing.
-    }
-  }, [open]);
   const title = showInk && view.panel === "stroke" ? brushById(stroke.brush).label : view.title;
   const dashValue = DASHES.find((item) => item.dash === stroke.dash)?.id ?? "solid";
   const opacity = Math.round(stroke.opacity * 100);
   const pageCount = new Set(objects.map((row) => row.page)).size;
   const objectsDetail =
     objects.length === 0
-      ? "Nothing inserted yet"
-      : `${objects.length} ${objects.length === 1 ? "object" : "objects"} on ${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
+      ? "Nothing added yet"
+      : `On ${pageCount} ${pageCount === 1 ? "page" : "pages"}, in the order added`;
+  const fillSolid = stroke.fill !== null;
 
   const className = ["inspector", open ? "" : "collapsed", dragging ? "resizing" : ""].filter(Boolean).join(" ");
 
   return (
-    <aside className={className} style={{ "--inspector-width": `${layout.width}px` } as React.CSSProperties} aria-label="Properties">
+    <aside
+      className={className}
+      style={{ "--inspector-width": `${layout.width}px` } as React.CSSProperties}
+      aria-label="Objects and properties"
+    >
       {open && (
         <SplitHandle
           className="inspector-handle"
           orientation="vertical"
-          label="Width of the properties column"
+          label="Width of the sidebar"
           valueNow={Math.round(layout.width)}
           valueMin={INSPECTOR_MIN_WIDTH}
           valueMax={maxInspectorWidth(windowWidth)}
@@ -494,373 +510,395 @@ export function Inspector({
           onDragging={setDragging}
         />
       )}
-      <div className="inspector-body" ref={bodyRef}>
-      <section className="inspector-pane objects" style={{ flexBasis: `${layout.split * 100}%` }} aria-label="Objects">
-      <div className="flex items-start gap-2 px-2.5 py-2.5">
-        <div className="min-w-0 flex-1 px-1.5 pt-0.5" aria-hidden={!open}>
-          <h2 className="text-sm font-semibold tracking-tight">Objects</h2>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{objectsDetail}</p>
+
+      {!open && (
+        <div className="inspector-strip">
+          <StripButton label="Show sidebar" onClick={() => onOpenChange(true)}>
+            <PanelRightOpen />
+          </StripButton>
+          <span className="strip-sep" />
+          <StripButton label="Objects" onClick={() => onOpenChange(true)}>
+            <Layers />
+          </StripButton>
+          <StripButton label="Properties" onClick={() => onOpenChange(true)}>
+            <SlidersHorizontal />
+          </StripButton>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-expanded={open}
-          aria-label={open ? "Collapse properties" : "Expand properties"}
-          onClick={() => setOpen((value) => !value)}
-        >
-          {open ? <PanelRightClose /> : <PanelRightOpen />}
-        </Button>
-      </div>
+      )}
 
-      <div className="inspector-scroll" inert={!open}>
-        <ScrollArea className="min-h-0 flex-1">
-          <ObjectList
-            objects={objects}
-            selectedId={selectedId}
-            hover={hover}
-            onHover={onHoverObject}
-            onSelect={onSelectObject}
-            onRemove={onRemoveObject}
-          />
-        </ScrollArea>
-      </div>
-      </section>
+      <div className="inspector-body" ref={bodyRef} inert={!open} aria-hidden={!open}>
+        <section className="inspector-pane objects" style={{ flexBasis: `${layout.split * 100}%` }} aria-label="Objects">
+          <PanelHead title="Objects" count={objects.length} detail={objectsDetail}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="panel-close"
+                  aria-expanded={open}
+                  aria-label="Hide sidebar"
+                  onClick={() => onOpenChange(false)}
+                >
+                  <PanelRightClose />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>
+                Hide sidebar
+              </TooltipContent>
+            </Tooltip>
+          </PanelHead>
+          <ScrollArea className="panel-scroll">
+            <ObjectList
+              objects={objects}
+              selectedId={selectedId}
+              hover={hover}
+              onHover={onHoverObject}
+              onSelect={onSelectObject}
+              onRemove={onRemoveObject}
+            />
+          </ScrollArea>
+        </section>
 
-      <SplitHandle
-        className="inspector-splitter"
-        orientation="horizontal"
-        label="Height of the object list"
-        valueNow={Math.round(layout.split * 100)}
-        valueMin={Math.round(PANE_MIN_HEIGHT_FRACTION * 100)}
-        valueMax={Math.round((1 - PANE_MIN_HEIGHT_FRACTION) * 100)}
-        size={() => layout.split * bodyHeight()}
-        onMove={(px) => {
-          const height = bodyHeight();
-          if (height > 0) setSplit(px / height);
-        }}
-        onReset={() => setSplit(DEFAULT_LAYOUT.split)}
-        onDragging={setDragging}
-      />
+        <SplitHandle
+          className="inspector-splitter"
+          orientation="horizontal"
+          label="Height of the object list"
+          valueNow={Math.round(layout.split * 100)}
+          valueMin={Math.round(PANE_MIN_HEIGHT_FRACTION * 100)}
+          valueMax={Math.round((1 - PANE_MIN_HEIGHT_FRACTION) * 100)}
+          size={() => layout.split * bodyHeight()}
+          onMove={(px) => {
+            const height = bodyHeight();
+            if (height > 0) setSplit(px / height);
+          }}
+          onReset={() => setSplit(DEFAULT_LAYOUT.split)}
+          onDragging={setDragging}
+        />
 
-      <section className="inspector-pane attributes" aria-label="Attributes" inert={!open}>
-      <div className="flex items-start gap-2 px-2.5 py-2.5">
-        <div className="min-w-0 flex-1 px-1.5 pt-0.5">
-          <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{view.detail}</p>
-        </div>
-      </div>
-
-      <div className="inspector-scroll">
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="grid gap-5 px-4 pt-1 pb-4">
-            {view.panel === "text" && (
-              <>
-                <div className="grid gap-2">
-                  <Label className="text-xs text-muted-foreground">Font</Label>
-                  <Select value={text.fontId} onValueChange={(value) => onFont(value as FontId)}>
-                    <SelectTrigger className="w-full" aria-label="Font">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FONT_OPTIONS.map((font) => (
-                        <SelectItem key={font.id} value={font.id}>
-                          {font.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <NumberSlider
-                  label="Size"
-                  value={text.fontSize}
-                  min={8}
-                  max={96}
-                  onChange={onFontSize}
-                  onAdjustStart={onAdjustStart}
-                  onAdjustEnd={onAdjustEnd}
-                />
-                <div className="grid gap-2">
-                  <Label className="text-xs text-muted-foreground">Style</Label>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <StyleToggles
-                      state={{ bold: text.bold, italic: text.italic, underline: text.underline, strike: !!text.strike }}
-                      onToggle={onToggle}
-                    />
-                    <AlignToggles
-                      value={text.align}
-                      justify={false}
-                      onAlign={(align) => {
-                        if (align !== "justify") onAlign(align);
-                      }}
-                    />
-                    <ColorControl
-                      label="Text color"
-                      appearance="text"
-                      color={text.color}
-                      onColor={onTextColor}
+        <section className="inspector-pane attributes" aria-label="Properties">
+          <PanelHead title="Properties" detail={view.panel === "empty" ? null : view.detail}>
+            {view.panel !== "empty" && (
+              <span className="panel-chip" title={title}>
+                {title}
+              </span>
+            )}
+          </PanelHead>
+          <ScrollArea className="panel-scroll">
+            <div className="panel-body">
+              {view.panel === "text" && (
+                <>
+                  <PanelSection title="Text">
+                    <PropRow label="Font">
+                      <Select value={text.fontId} onValueChange={(value) => onFont(value as FontId)}>
+                        <SelectTrigger size="sm" className="w-full" aria-label="Font">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FONT_OPTIONS.map((font) => (
+                            <SelectItem key={font.id} value={font.id}>
+                              {font.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </PropRow>
+                    <NumberSlider
+                      label="Size"
+                      value={text.fontSize}
+                      min={8}
+                      max={96}
+                      unit="pt"
+                      onChange={onFontSize}
                       onAdjustStart={onAdjustStart}
                       onAdjustEnd={onAdjustEnd}
                     />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <Label htmlFor="auto-width" className="text-sm font-normal">
-                    Auto width
-                  </Label>
-                  <Switch
-                    id="auto-width"
-                    checked={text.autoWidth}
-                    onCheckedChange={(checked) => onAutoWidth(checked)}
-                  />
-                </div>
-                {!text.autoWidth && (
-                  <NumberSlider
-                    label="Width"
-                    value={text.width}
-                    min={16}
-                    max={1600}
-                    onChange={onWidth}
-                    onAdjustStart={onAdjustStart}
-                    onAdjustEnd={onAdjustEnd}
-                  />
-                )}
-              </>
-            )}
-
-            {view.panel === "stroke" && (
-              <>
-                {showFill && (
-                  <div className="grid gap-2">
-                    <Label className="text-xs text-muted-foreground">Fill</Label>
-                    <ToggleGroup
-                      type="single"
-                      variant="outline"
-                      size="sm"
-                      className="justify-start"
-                      value={stroke.fill === null ? "none" : "solid"}
-                      onValueChange={(value) => {
-                        if (value === "none") onFill(null);
-                        if (value === "solid") onFill(stroke.fill ?? "#dbeafe");
-                      }}
-                      aria-label="Fill"
-                    >
-                      <ToggleGroupItem value="none" onMouseDown={keepFocus}>
-                        No fill
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="solid" onMouseDown={keepFocus}>
-                        Solid fill
-                      </ToggleGroupItem>
-                    </ToggleGroup>
-                    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Fill swatches">
-                      <button
-                        type="button"
-                        aria-label="Transparent fill"
-                        aria-pressed={stroke.fill === null}
-                        title="Transparent"
-                        className="size-5 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        style={{
-                          background:
-                            "linear-gradient(45deg, transparent 46%, #b91c1c 46%, #b91c1c 54%, transparent 54%), repeating-conic-gradient(#e4e4e7 0% 25%, #fff 0% 50%) 0 0 / 8px 8px",
-                          boxShadow:
-                            stroke.fill === null
-                              ? "0 0 0 2px var(--ring)"
-                              : "inset 0 0 0 1px var(--swatch-edge)",
-                        }}
-                        onMouseDown={keepFocus}
-                        onClick={() => onFill(null)}
+                    <PropRow label="Style">
+                      <StyleToggles
+                        state={{ bold: text.bold, italic: text.italic, underline: text.underline, strike: !!text.strike }}
+                        onToggle={onToggle}
                       />
-                      {SWATCHES.map((swatch) => (
-                        <button
-                          key={swatch}
-                          type="button"
-                          aria-label={`Fill ${swatch}`}
-                          aria-pressed={stroke.fill?.toLowerCase() === swatch}
-                          className="size-5 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          style={{
-                            background: swatch,
-                            boxShadow:
-                              stroke.fill?.toLowerCase() === swatch
-                                ? "0 0 0 2px var(--ring)"
-                                : "inset 0 0 0 1px var(--swatch-edge)",
-                          }}
-                          onMouseDown={keepFocus}
-                          onClick={() => onFill(swatch)}
+                    </PropRow>
+                    <PropRow label="Align">
+                      <AlignToggles
+                        value={text.align}
+                        justify={false}
+                        onAlign={(align) => {
+                          if (align !== "justify") onAlign(align);
+                        }}
+                      />
+                    </PropRow>
+                    <PropRow label="Colour">
+                      <div className="color-row">
+                        <ColorControl
+                          label="Text colour"
+                          appearance="text"
+                          size="icon-sm"
+                          color={text.color}
+                          onColor={onTextColor}
+                          onAdjustStart={onAdjustStart}
+                          onAdjustEnd={onAdjustEnd}
                         />
-                      ))}
-                    </div>
-                    {stroke.fill && (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="color"
-                          aria-label="Fill color"
-                          value={stroke.fill}
-                          className="h-8 w-10 shrink-0 cursor-pointer p-1"
-                          onPointerDown={onAdjustStart}
-                          onChange={(event) => onFill(event.target.value)}
-                          onBlur={onAdjustEnd}
-                        />
-                        <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-                          {stroke.fill}
-                        </span>
+                        <span className="color-hex">{text.color}</span>
                       </div>
-                    )}
-                    {stroke.fill && (
+                    </PropRow>
+                  </PanelSection>
+                  <PanelSection title="Box">
+                    <PropRow label="Auto width" htmlFor="auto-width">
+                      <Switch
+                        id="auto-width"
+                        size="sm"
+                        checked={text.autoWidth}
+                        onCheckedChange={(checked) => onAutoWidth(checked)}
+                      />
+                    </PropRow>
+                    {!text.autoWidth && (
                       <NumberSlider
-                        label="Opacity"
-                        value={Math.round((stroke.fillOpacity ?? 1) * 100)}
-                        min={0}
-                        max={100}
-                        onChange={(value) => onFillOpacity(value / 100)}
+                        label="Width"
+                        value={text.width}
+                        min={16}
+                        max={1600}
+                        unit="pt"
+                        onChange={onWidth}
                         onAdjustStart={onAdjustStart}
                         onAdjustEnd={onAdjustEnd}
                       />
                     )}
-                  </div>
-                )}
-                <div className="grid gap-2">
-                  <Label className="text-xs text-muted-foreground">Stroke</Label>
-                  <div className="flex items-center gap-2">
-                    <ColorControl
-                      label="Stroke color"
-                      appearance="stroke"
-                      color={stroke.color}
-                      onColor={onStrokeColor}
-                      onAdjustStart={onAdjustStart}
-                      onAdjustEnd={onAdjustEnd}
-                    />
-                    <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-                      {stroke.color}
-                    </span>
-                  </div>
-                </div>
-                <NumberSlider
-                  label="Stroke width"
-                  value={stroke.strokeWidth}
-                  min={1}
-                  max={48}
-                  onChange={onStrokeWidth}
-                  onAdjustStart={onAdjustStart}
-                  onAdjustEnd={onAdjustEnd}
-                />
-                {showInk && (
-                  <>
-                    <NumberSlider
-                      label="Opacity"
-                      value={opacity}
-                      min={5}
-                      max={100}
-                      onChange={(value) => onOpacity(value / 100)}
-                      onAdjustStart={onAdjustStart}
-                      onAdjustEnd={onAdjustEnd}
-                    />
-                    <div className="grid gap-2">
-                      <Label className="text-xs text-muted-foreground">Tip</Label>
-                      <ToggleGroup
-                        type="single"
-                        variant="outline"
-                        size="sm"
-                        className="justify-start"
-                        value={stroke.cap}
-                        onValueChange={(value) => {
-                          if (value === "round" || value === "square" || value === "butt") onCap(value);
-                        }}
-                        aria-label="Stroke tip"
-                      >
-                        <ToggleGroupItem value="round" onMouseDown={keepFocus}>
-                          Round
-                        </ToggleGroupItem>
-                        <ToggleGroupItem value="square" onMouseDown={keepFocus}>
-                          Square
-                        </ToggleGroupItem>
-                        <ToggleGroupItem value="butt" onMouseDown={keepFocus}>
-                          Flat
-                        </ToggleGroupItem>
-                      </ToggleGroup>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label className="text-xs text-muted-foreground">Stroke</Label>
-                      <ToggleGroup
-                        type="single"
-                        variant="outline"
-                        size="sm"
-                        className="justify-start"
-                        value={dashValue}
-                        onValueChange={(value) => {
-                          const preset = DASHES.find((item) => item.id === value);
-                          if (preset) onDash(preset.dash);
-                        }}
-                        aria-label="Stroke pattern"
-                      >
-                        {DASHES.map((item) => (
-                          <ToggleGroupItem key={item.id} value={item.id} onMouseDown={keepFocus}>
-                            {item.label}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
+                  </PanelSection>
+                </>
+              )}
 
-            {view.panel === "content" && patch?.role === "text" && format && (
-              <>
-                <NumberSlider
-                  label={format.selection ? "Size of the selection" : "Size"}
-                  value={format.fontSize}
-                  min={4}
-                  max={120}
-                  onChange={(fontSize) => onFormat({ fontSize })}
-                  onAdjustStart={onFormatBegin}
-                  onAdjustEnd={onFormatEnd}
-                />
-                <div className="grid gap-2">
-                  <Label className="text-xs text-muted-foreground">{format.selection ? "Style of the selection" : "Style"}</Label>
-                  <div className="flex flex-wrap items-center gap-1">
+              {view.panel === "stroke" && (
+                <>
+                  {showFill && (
+                    <PanelSection title="Fill">
+                      <PropRow label="Fill">
+                        <ToggleGroup
+                          type="single"
+                          variant="outline"
+                          size="sm"
+                          spacing={0}
+                          className="segmented"
+                          value={fillSolid ? "solid" : "none"}
+                          onValueChange={(value) => {
+                            if (value === "none") onFill(null);
+                            if (value === "solid") onFill(stroke.fill ?? "#dbeafe");
+                          }}
+                          aria-label="Fill"
+                        >
+                          <ToggleGroupItem value="none" onMouseDown={keepFocus}>
+                            None
+                          </ToggleGroupItem>
+                          <ToggleGroupItem value="solid" onMouseDown={keepFocus}>
+                            Solid
+                          </ToggleGroupItem>
+                        </ToggleGroup>
+                      </PropRow>
+                      {fillSolid && (
+                        <>
+                          <PropRow label="Colour" top>
+                            <div className="swatch-grid" role="group" aria-label="Fill swatches">
+                              {SWATCHES.map((swatch) => {
+                                const selected = stroke.fill?.toLowerCase() === swatch;
+                                return (
+                                  <button
+                                    key={swatch}
+                                    type="button"
+                                    aria-label={`Fill ${swatch}`}
+                                    aria-pressed={selected}
+                                    className={selected ? "swatch selected" : "swatch"}
+                                    style={{ background: swatch }}
+                                    onMouseDown={keepFocus}
+                                    onClick={() => onFill(swatch)}
+                                  />
+                                );
+                              })}
+                            </div>
+                            <div className="color-row">
+                              <Input
+                                type="color"
+                                aria-label="Fill colour"
+                                value={stroke.fill ?? "#dbeafe"}
+                                className="color-well"
+                                onPointerDown={onAdjustStart}
+                                onChange={(event) => onFill(event.target.value)}
+                                onBlur={onAdjustEnd}
+                              />
+                              <span className="color-hex">{stroke.fill}</span>
+                            </div>
+                          </PropRow>
+                          <NumberSlider
+                            label="Opacity"
+                            value={Math.round((stroke.fillOpacity ?? 1) * 100)}
+                            min={0}
+                            max={100}
+                            unit="%"
+                            onChange={(value) => onFillOpacity(value / 100)}
+                            onAdjustStart={onAdjustStart}
+                            onAdjustEnd={onAdjustEnd}
+                          />
+                        </>
+                      )}
+                    </PanelSection>
+                  )}
+                  <PanelSection title="Stroke">
+                    <PropRow label="Colour">
+                      <div className="color-row">
+                        <ColorControl
+                          label="Stroke colour"
+                          appearance="stroke"
+                          size="icon-sm"
+                          color={stroke.color}
+                          onColor={onStrokeColor}
+                          onAdjustStart={onAdjustStart}
+                          onAdjustEnd={onAdjustEnd}
+                        />
+                        <span className="color-hex">{stroke.color}</span>
+                      </div>
+                    </PropRow>
+                    <NumberSlider
+                      label="Width"
+                      value={stroke.strokeWidth}
+                      min={1}
+                      max={48}
+                      unit="pt"
+                      onChange={onStrokeWidth}
+                      onAdjustStart={onAdjustStart}
+                      onAdjustEnd={onAdjustEnd}
+                    />
+                    {showInk && (
+                      <>
+                        <NumberSlider
+                          label="Opacity"
+                          value={opacity}
+                          min={5}
+                          max={100}
+                          unit="%"
+                          onChange={(value) => onOpacity(value / 100)}
+                          onAdjustStart={onAdjustStart}
+                          onAdjustEnd={onAdjustEnd}
+                        />
+                        <PropRow label="Tip">
+                          <ToggleGroup
+                            type="single"
+                            variant="outline"
+                            size="sm"
+                            spacing={0}
+                            className="segmented"
+                            value={stroke.cap}
+                            onValueChange={(value) => {
+                              if (value === "round" || value === "square" || value === "butt") onCap(value);
+                            }}
+                            aria-label="Stroke tip"
+                          >
+                            <ToggleGroupItem value="round" onMouseDown={keepFocus}>
+                              Round
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="square" onMouseDown={keepFocus}>
+                              Square
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="butt" onMouseDown={keepFocus}>
+                              Flat
+                            </ToggleGroupItem>
+                          </ToggleGroup>
+                        </PropRow>
+                        <PropRow label="Pattern">
+                          <ToggleGroup
+                            type="single"
+                            variant="outline"
+                            size="sm"
+                            spacing={0}
+                            className="segmented"
+                            value={dashValue}
+                            onValueChange={(value) => {
+                              const preset = DASHES.find((item) => item.id === value);
+                              if (preset) onDash(preset.dash);
+                            }}
+                            aria-label="Stroke pattern"
+                          >
+                            {DASHES.map((item) => (
+                              <ToggleGroupItem key={item.id} value={item.id} onMouseDown={keepFocus}>
+                                {item.label}
+                              </ToggleGroupItem>
+                            ))}
+                          </ToggleGroup>
+                        </PropRow>
+                      </>
+                    )}
+                  </PanelSection>
+                </>
+              )}
+
+              {view.panel === "content" && patch?.role === "text" && format && (
+                <PanelSection title={format.selection ? "Selection" : "Text"}>
+                  <NumberSlider
+                    label="Size"
+                    value={format.fontSize}
+                    min={4}
+                    max={120}
+                    unit="pt"
+                    onChange={(fontSize) => onFormat({ fontSize })}
+                    onAdjustStart={onFormatBegin}
+                    onAdjustEnd={onFormatEnd}
+                  />
+                  <PropRow label="Style">
                     <StyleToggles
                       state={{ bold: format.bold, italic: format.italic, underline: format.underline, strike: format.strike }}
                       onToggle={(key) => onFormat({ [key]: !format[key] })}
                     />
-                    {format.wrap && <AlignToggles value={format.align} justify onAlign={(align) => onFormat({ align })} />}
-                    <ColorControl
-                      label="Text color"
-                      appearance="text"
-                      color={format.color}
-                      onColor={(color) => onFormat({ color })}
-                      onAdjustStart={onFormatBegin}
-                      onAdjustEnd={onFormatEnd}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
+                  </PropRow>
+                  {format.wrap && (
+                    <PropRow label="Align">
+                      <AlignToggles value={format.align} justify onAlign={(align) => onFormat({ align })} />
+                    </PropRow>
+                  )}
+                  <PropRow label="Colour">
+                    <div className="color-row">
+                      <ColorControl
+                        label="Text colour"
+                        appearance="text"
+                        size="icon-sm"
+                        color={format.color}
+                        onColor={(color) => onFormat({ color })}
+                        onAdjustStart={onFormatBegin}
+                        onAdjustEnd={onFormatEnd}
+                      />
+                      <span className="color-hex">{format.color}</span>
+                    </div>
+                  </PropRow>
+                </PanelSection>
+              )}
 
-            {view.panel === "content" && content?.text && (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{content.text}</p>
-            )}
+              {view.panel === "content" && content?.text && (
+                <PanelSection title="On the page">
+                  <p className="content-quote">{content.text}</p>
+                </PanelSection>
+              )}
 
-            {missing.length > 0 && (
-              <p role="status" className="flex gap-2 text-xs leading-relaxed text-muted-foreground">
-                <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                <span>{missingGlyphNote(missing, content?.kind)}</span>
-              </p>
-            )}
+              {missing.length > 0 && (
+                <p role="status" className="panel-note">
+                  <Info aria-hidden="true" />
+                  <span>{missingGlyphNote(missing, content?.kind)}</span>
+                </p>
+              )}
 
-            {view.panel === "empty" && (
-              <p className="text-sm leading-relaxed text-muted-foreground">{view.detail}</p>
-            )}
-
-            {canDelete && (
-              <Button type="button" variant="outline" className="w-full text-destructive" onClick={onDelete}>
+              {view.panel === "empty" && (
+                <PanelEmpty icon={<MousePointer2 />} title={view.title}>
+                  {view.detail}
+                </PanelEmpty>
+              )}
+            </div>
+          </ScrollArea>
+          {canDelete && (
+            <div className="panel-footer">
+              <Button type="button" variant="outline" className="delete-button" onClick={onDelete}>
                 <Trash2 />
                 Delete selection
+                <kbd className="button-kbd">{shortcut("backspace")}</kbd>
               </Button>
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-      </section>
+            </div>
+          )}
+        </section>
       </div>
     </aside>
   );
