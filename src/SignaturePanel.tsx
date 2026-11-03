@@ -5,10 +5,24 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PanelClose, PanelHead, PanelSection } from "./PanelChrome.tsx";
-import { forgetSignature, readSavedSignatures, rememberSignature, type SavedSignature } from "./savedSignatures.ts";
+import {
+  forgetSignature,
+  readSavedSignatures,
+  rememberSignature,
+  type SavedSignature,
+  type TypedSignature,
+} from "./savedSignatures.ts";
 import { SIGNATURE_STYLES, imageFileToPng, renderSignature, type SignatureStyle } from "./signatures.ts";
 
 const GROUPS = ["English", "Hindi"] as const;
+
+// How a saved tile is named for assistive technology: a typed signature by its name and style, an
+// uploaded image by its place in the list.
+function describe(item: SavedSignature, index: number): string {
+  if (item.text === undefined || item.font === undefined) return `saved signature ${index + 1}`;
+  const style = SIGNATURE_STYLES.find((candidate) => candidate.fontFamily === item.font);
+  return `saved signature "${item.text}" in ${style?.label ?? item.font}`;
+}
 
 export function SignaturePanel({
   onPlace,
@@ -20,7 +34,8 @@ export function SignaturePanel({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Images uploaded before, kept in this browser so the same signature can go on any document.
+  // Signatures placed before, typed or uploaded, kept in this browser so the same one can go on
+  // any document.
   const [saved, setSaved] = useState<SavedSignature[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -36,13 +51,24 @@ export function SignaturePanel({
   const trimmed = name.trim();
   const hindi = /[ऀ-ॿ]/.test(trimmed);
 
+  // Places a signature that was just made and keeps it for next time. When the browser refuses
+  // the write (private browsing, full storage) the signature is still placed, just not remembered.
+  const placeAndKeep = async (image: { url: string; width: number; height: number }, typed?: TypedSignature) => {
+    onPlace(image.url, image.width, image.height);
+    try {
+      setSaved(await rememberSignature(image, typed));
+    } catch {
+      // Nothing to tell the user: the placement itself worked.
+    }
+  };
+
   const placeStyle = async (style: SignatureStyle) => {
     if (!trimmed || busy) return;
     setBusy(style.id);
     setError(null);
     try {
       const image = await renderSignature(trimmed, style.fontFamily);
-      onPlace(image.url, image.width, image.height);
+      await placeAndKeep(image, { text: trimmed, font: style.fontFamily });
     } catch {
       setError("Could not draw that signature");
     } finally {
@@ -56,14 +82,7 @@ export function SignaturePanel({
     setError(null);
     try {
       const image = await imageFileToPng(file);
-      onPlace(image.url, image.width, image.height);
-      // Kept for next time; when the browser refuses the write (private browsing, full
-      // storage) the signature is still placed, just not remembered.
-      try {
-        setSaved(await rememberSignature(image));
-      } catch {
-        // Nothing to tell the user: the upload itself worked.
-      }
+      await placeAndKeep(image);
     } catch {
       setError("Use a PNG, JPEG, or WebP image");
     } finally {
@@ -123,14 +142,16 @@ export function SignaturePanel({
         <div className="panel-body">
           {saved.length > 0 && (
             <PanelSection title="Saved">
-              <p className="saved-signature-note">Uploaded images stay here, in this browser, for any document.</p>
+              <p className="saved-signature-note">
+                Signatures you have placed stay here, in this browser, for any document.
+              </p>
               <div className="saved-signature-list" role="list" aria-label="Saved signatures">
                 {saved.map((item, index) => (
                   <div key={item.id} className="saved-signature" role="listitem">
                     <button
                       type="button"
                       className="saved-signature-place"
-                      aria-label={`Place saved signature ${index + 1}`}
+                      aria-label={`Place ${describe(item, index)}`}
                       disabled={busy !== null}
                       onClick={() => onPlace(item.src, item.width, item.height)}
                     >
@@ -141,7 +162,7 @@ export function SignaturePanel({
                         <button
                           type="button"
                           className="saved-signature-forget"
-                          aria-label={`Forget saved signature ${index + 1}`}
+                          aria-label={`Forget ${describe(item, index)}`}
                           onClick={() => void forget(item.id)}
                         >
                           <X />
