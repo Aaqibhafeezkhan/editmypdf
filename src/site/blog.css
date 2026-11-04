@@ -610,6 +610,27 @@
   text-transform: uppercase;
 }
 
+/* ---- Post body: image figures --------------------------------------------
+   Infographics from public/blog, drawn on their own light paper in both themes, edge to edge in
+   the figure's frame with the caption below. */
+
+.prose .bp-figure {
+  padding: 0;
+  overflow: hidden;
+}
+
+.bp-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.prose .bp-figure figcaption {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-5) var(--sp-4);
+  border-top: 1px solid var(--rule);
+}
+
 /* ---- Post body: drawn figures --------------------------------------------
    Small diagrams written as HTML in the posts: miniature pages, a content stream with its
    edits marked, a glyph grid, a line of kerned words, a flow of tiles. */

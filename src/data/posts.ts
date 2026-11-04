@@ -17,6 +17,10 @@ export type Post = {
   // The card cover: a short glyph set in the display face (an operator, a symbol, a pair of
   // letters) on a tinted page in one of the palette hues. Drawn by PostCard.tsx, no image files.
   cover: { glyph: string; hue: Hue };
+  // Search phrases the post is written for, added to the tags in the keywords meta and JSON-LD.
+  keywords?: string[];
+  // The link-preview card, a file in public/; without one the site card is used.
+  image?: { src: string; alt: string; width: number; height: number };
   body: string;
 };
 
@@ -576,7 +580,301 @@ Nothing is re-justified, re-kerned or re-wrapped because you clicked. Only what 
 For those jobs the [comparison pages](/compare) are honest about which tool to use instead.
 `;
 
+const EDIT_FREE = `
+You need to change one date in a PDF. One. Single. Date. :sweat:
+
+So you search "edit PDF online free", click the first result, and twenty seconds later you are being asked to create an account, accept a cookie banner the length of a novel and upload your file to a server you have never heard of. All for one date.
+
+There is a better way. This guide shows you how to edit a PDF for free, in your browser, **without uploading it anywhere**, and explains why that last part matters more than most "free PDF editor" lists admit. :lock:
+
+## The short version
+
+::: steps
+- **Open Edit My PDF.** [Open it](/app) in Chrome, Edge, Firefox or Safari. No account, no install.
+- **Drop your PDF onto the page.** It opens from your disk and stays there.
+- **Click the line you want to change.** Type your fix. The line opens in the page's own font, size and colour.
+- **Download.** You get a real PDF with real, selectable text. No watermark.
+:::
+
+That's it. If that is all you needed, go and fix your date. :wave: If you are curious why "no upload" is the headline feature, read on.
+
+![Edit a PDF in four steps: open your PDF, click any line, type your change, download. No sign-up, no upload, no watermark, about a minute, zero accounts created.](/blog/four-steps.webp#1600x1726 "Four steps, about a minute, zero accounts. The whole job happens in your browser tab.")
+
+## Why "free" PDF editors usually aren't
+
+Running servers costs money. When a website processes your PDF on its own machines, somebody pays for the electricity, the storage and the engineers, and "free" has to be recovered somewhere. Usually it's recovered from you, in one of these currencies:
+
+::: cards
+- {{badge-check}} **Watermarks.** Your contract, now with a logo stamped across it. Very professional.
+- {{timer}} **Task limits.** Two free edits a day, then a friendly pop-up suggests a subscription.
+- {{lock}} **Sign-up walls.** Edit for free, then create an account to download what you edited.
+- {{upload}} **Your file itself.** It travels to their server and stays there for a while.
+:::
+
+![A bingo card of free PDF editor catches: create an account to download, a watermark on every page, a daily task limit, your file kept for hours on a server, a file size cap, new text in the wrong font, an upgrade pop-up, and deletion within a reasonable period. Edit My PDF scores zero squares.](/blog/bingo.webp#1600x1699 "Free PDF editor bingo. Most tools can fill a row before you have changed a word.")
+
+The first three are annoying. The fourth is the one worth thinking about. :thinking:
+
+## Your PDF's road trip
+
+Here is what usually happens when you "edit a PDF online":
+
+1. Your browser uploads the **entire file** to the company's server.
+2. The server opens it, applies your changes and stores the result.
+3. You download the new file.
+4. The original and the result stay on that server for a while.
+
+How long is "a while"? We read the published policies of a dozen popular online PDF tools for our [comparison pages](/compare). The answers range from **one hour**, to **two hours**, to **24 hours**, to "within a reasonable period", to **"until you delete it"**. Some tools also send document content to third-party AI services for their AI features.
+
+None of that is necessarily sinister. Most of these companies are doing their best. But think about what goes into PDFs: bank statements, payslips, tax forms, medical letters, contracts, passport scans. Every upload is one more copy of your private life, sitting on one more computer you do not control, protected by one more company's security team. :grimace:
+
+![Two routes for one PDF edit. A typical online editor uploads the file to its server, keeps it for one hour to indefinitely, then sends it back. Edit My PDF opens, edits and rebuilds the file inside your browser tab, then saves it to your Downloads: zero kilometres travelled.](/blog/road-trip.webp#1600x1574 "Same edit, two routes. Only one of them needs your file to leave home.")
+
+## How Edit My PDF does it without a server
+
+Edit My PDF has no server to upload to. Literally: the project has no backend code at all. When you open the site, your browser downloads the app itself (some JavaScript, fonts and icons), and from that moment everything happens inside your tab.
+
+::: cards
+- {{file-text}} **Reading.** pdf.js, the same engine Firefox uses to show PDFs, opens your file inside the tab.
+- {{pen-line}} **Editing.** Your changes are a list kept in your browser's memory, next to the file.
+- {{hard-drive}} **Saving.** The file and your edits go into your browser's own storage on your disk, so a refresh does not lose your work.
+- {{download}} **Downloading.** pdf-lib builds the new PDF in the tab, and your browser saves it like any other download.
+:::
+
+::: plain :bulb: So who can see my PDF?
+You can. That's the list. The website that serves the app sees that someone loaded the app, the same way every website sees a visit. It never receives your document, its name or your edits, because the app never sends them.
+:::
+
+If you want the deep-dive, our post on [how Edit My PDF is built](/blog/nothing-leaves-your-browser) goes through it piece by piece, and the [privacy page](/privacy) lists exactly what the site does and does not collect.
+
+## It edits the text that is already there
+
+Plenty of "PDF editors" let you put a white box over the old words and type new ones on top in Arial. From across the room it looks fine. Up close, your carefully typeset invoice now has one line in a different font, slightly too big, slightly too low. :eyeroll:
+
+Edit My PDF does the harder thing. When you click a line, it opens **in the PDF's own embedded font**, at its exact size, colour, letter spacing and word spacing. When you download, your edit is written back as real text in a subset of that same font, so it can still be selected, searched and copied.
+
+::: pair Cover-up editors | Edit My PDF
+- A white box hides the old text
+- New text in a substitute font
+- Spacing that never quite matches
+---
+- The original text is replaced
+- The page's own font, size and colour
+- Real, searchable text in the export
+:::
+
+## What else you can do (for free, still offline-ish)
+
+::: cards
+- {{type}} **Fix text.** Typos, dates, names, prices, whole paragraphs. Bold and italic runs keep their style.
+- {{pen-line}} **Sign.** Type your name in a handwriting style or upload a photo of your signature. More on that in [how to sign a PDF without uploading it](/blog/sign-pdf-online-free-without-uploading).
+- {{paintbrush}} **Mark up.** Pencil, rectangles, ellipses, lines and arrows, plus emoji when a document needs a :thumbsup:.
+- {{history}} **Undo anything.** Every change is undoable, and the documents screen keeps your recent files in this browser.
+:::
+
+## What it won't do (honesty corner)
+
+We would rather tell you now than have you find out at 11:58pm before a deadline. :pray:
+
+::: bad The things a browser-only editor skips
+**No OCR**, so a scanned page is a picture and its words cannot be retyped. **No conversion** to Word or Excel. **No merging, splitting or compressing**, and **no form filling** yet. Your documents are kept in this browser only, so they do not sync to your other devices. If you need those, our [comparisons](/compare) say honestly which tools do them.
+:::
+
+## Frequently asked questions
+
+### Is it really free?
+
+Yes. There is no paid plan, no trial and no watermark. Edit My PDF is open source under the MIT licence, and because it needs no servers to run your edits, there is no processing bill for anyone to recover.
+
+### Do I need to sign up or install anything?
+
+No. Open the page and drop a PDF in. Nothing to install, no email address, no password to forget.
+
+### Can I edit a PDF without Adobe Acrobat?
+
+Yes. For changing existing text, adding a signature and marking up pages, a browser editor like Edit My PDF does the job. You'll still want a full desktop suite for things like OCR or preflight checks for print.
+
+### Is it safe to edit confidential PDFs?
+
+The file never leaves your computer, which removes the biggest risk: a copy of your document on somebody else's server. Your own computer still matters, of course. A dodgy browser extension can read any page you have open, so be choosy about those. :innocent:
+
+### Does it work on a Mac, Windows or a Chromebook?
+
+It runs in current Chrome, Edge, Firefox and Safari, so Windows, macOS, Linux and ChromeOS are all fine. Phones work too, though the panels are happier on a laptop or tablet screen.
+
+## Go fix that date :rocket:
+
+You came here to change one line in a PDF. [Open Edit My PDF](/app), drop the file in, click the line and type. Your PDF stays home the whole time, the way it should have all along. :house:
+`;
+
+const SIGN_FREE = `
+Somebody has emailed you a PDF with the words "please sign and return". :envelope:
+
+Ten years ago that meant: print it, sign it, find a scanner, discover the scanner is out of toner, take a photo with your phone instead, email back a slightly crooked JPEG and hope for the best.
+
+Today you can sign a PDF online for free in about a minute. But most "sign PDF online" tools want you to upload the document first, and the documents we sign are, almost by definition, **the most personal files we own**. So this guide shows you how to add a signature to a PDF without the file ever leaving your computer. :lock:
+
+## How to sign a PDF in 60 seconds
+
+::: steps
+- **Open your PDF.** Go to [Edit My PDF](/app) and drop the file onto the page. It opens from your disk; nothing is uploaded.
+- **Choose Sign.** It sits in the tool rail on the left, or press <kbd>G</kbd>.
+- **Make your signature.** Type your name and pick a handwriting style, or upload a photo or scan of your real signature (PNG, JPEG or WebP).
+- **Place it.** Click where it goes, then drag to move it and pull a corner to resize.
+- **Download.** The signed PDF lands in your Downloads folder. Send it back and enjoy the rest of your day. :coffee:
+:::
+
+![Sign a PDF in 60 seconds: open the PDF at 0:00, choose Sign at 0:10, type or upload your signature at 0:20, place it at 0:40, download at 0:55. Your saved signature lives only in this browser's storage.](/blog/sign-in-60.webp#1600x1256 "From inbox to signed in about a minute. No printer, no scanner, no upload.")
+
+::: tip :sparkles: Tip: it remembers you (locally)
+After you place a signature, Edit My PDF keeps it in this browser's own storage, so next time it is one click away. It is never sent anywhere, because there is nowhere to send it. Clear your browser's data and it is gone.
+:::
+
+## Why signing deserves extra privacy
+
+Think about the last few things you signed. A rental agreement. An offer letter. A loan application. A medical consent form. An NDA.
+
+Now think about what was **in** them. :thinking:
+
+![Anatomy of a lease agreement: full legal name, home address, date of birth, phone and email, income and salary, bank details, ID or passport number and your signature, all in one PDF.](/blog/whats-inside.webp#1600x1501 "One lease agreement, eight things an identity thief would love. Sensitivity: five flames.")
+
+A typical document you are asked to sign can contain your full name, home address, date of birth, salary, bank account details, ID numbers, and then, as the cherry on top, a picture of your signature. That is not a file. That is a starter kit. :grimace:
+
+When you upload that document to a free online signing tool, a copy of all of it lives on a server for a while. Published retention windows for popular online PDF tools range from an hour to "until you delete it", and signed documents are often kept **longer** than other files, because e-signature services keep records. Again: these companies are mostly not villains. But the safest copy of your data is the one that was never made.
+
+::: plain :bulb: The core idea
+Edit My PDF opens, signs and rebuilds your PDF entirely inside your browser tab. There is no server behind the editor, so there is no copy to leak, to keep, to back up or to forget about. Your PDF goes from your disk, to your screen, to your Downloads folder.
+:::
+
+## Electronic signature vs digital signature (in plain words)
+
+These two terms get mixed up constantly, and the difference matters. :pin:
+
+::: pair Electronic signature | Digital signature
+A picture or typed version of your signature placed on the document. This is what you get when you "sign" a PDF in most free tools, **including Edit My PDF**. It is what most everyday paperwork asks for: leases, permission slips, invoices, timesheets, HR forms.
+---
+A cryptographic seal tied to a certificate that proves who signed and that nothing changed afterwards. It needs a certificate from a trust provider and is used for some legal, government and financial filings. Edit My PDF **does not** create these.
+:::
+
+::: warn Check what the sender needs
+If a document says it needs a "certified", "qualified" or "digital" signature, ask the sender what they accept. For a normal "please sign and return", a typed or drawn signature is what they mean. We are an editor, not your lawyer. :innocent:
+:::
+
+## Typed or uploaded: which signature should you use?
+
+::: cards
+- {{type}} **Typed.** Type your name and choose one of the handwriting styles. Ten seconds, looks neat, and nobody needs to know your actual signature looks like a seismograph reading.
+- {{image}} **Uploaded.** Sign a sheet of white paper, take a well-lit photo or scan it, and upload it. Looks exactly like you, because it is you.
+:::
+
+Either way, the signature image stays in your browser. Edit My PDF never sees it, because Edit My PDF has no "it" on the other end to see anything.
+
+## "Trust us" is not a privacy policy. Here's how to check
+
+Every PDF website says your files are safe. You do not have to take anyone's word for it, ours included. Your browser can show you every request a page makes, and an upload is hard to hide: it is a request about as big as your file.
+
+![A 60-second test: open the developer tools and the Network tab, use the PDF tool, then look for a request as big as your PDF. If you find one, your file went on a trip. If nothing carries your file, it stayed home.](/blog/network-test.webp#1600x1390 "The Network-tab test. Works on any PDF tool, takes a minute.")
+
+::: steps
+- **Open the developer tools.** Press <kbd>⌥ ⌘ I</kbd> on a Mac or <kbd>Ctrl ⇧ I</kbd> on Windows, Linux and ChromeOS, then pick the **Network** tab.
+- **Use the tool.** Open a PDF, sign it, download it.
+- **Read the list.** Sort by size. If one request is about as big as your PDF, that was your PDF leaving the building. :airplane:
+:::
+
+With Edit My PDF you will see the app loading its own files and nothing that carries your document. That's not a promise in a policy. It's just how the thing is built.
+
+## What else can you do while you're there?
+
+::: cards
+- {{type}} **Fix a typo before you sign.** Click any line and retype it in the page's own font. Wrong date? Misspelled name? Sorted.
+- {{pen-line}} **Initial every page.** Place the same saved signature as many times as you need.
+- {{paintbrush}} **Tick boxes and add notes.** Use the pencil, shapes and text to fill in the bits that aren't proper form fields.
+- {{badge-check}} **No watermark, ever.** Your signed contract won't advertise anyone.
+:::
+
+::: bad What it doesn't do
+No certificate-based digital signatures, no sending the document out for other people to sign, no audit trails and no fillable form fields yet. For multi-party signing workflows you want a dedicated e-signature service. For "sign this and send it back", you don't.
+:::
+
+## Frequently asked questions
+
+### Is it free to sign a PDF with Edit My PDF?
+
+Completely. No account, no trial, no limit on how many documents you sign, and no watermark.
+
+### Is my signature stored anywhere?
+
+Only in your own browser's storage on your own computer, so you can reuse it. It is never uploaded. Clearing your browser data removes it.
+
+### Can I sign a PDF on a Mac or Windows without Adobe?
+
+Yes. Edit My PDF runs in Chrome, Edge, Firefox and Safari, so it works the same on Windows, macOS, Linux and Chromebooks, without installing Acrobat or anything else.
+
+### Is a typed signature legally valid?
+
+In many countries an electronic signature, typed or drawn, is accepted for everyday agreements, but the rules depend on where you are and what you are signing. When it matters, ask the person who sent the document what they accept.
+
+### Can I sign on my phone?
+
+The editor runs in mobile Safari and Chrome and understands touch for drawing, dragging and pinch zoom. It is more comfortable on a laptop or tablet, but a phone will do in a pinch. :ok:
+
+## Sign it where it already is :house:
+
+The document is already on your computer. Your signature is already on your computer. There's no good reason for either to take a trip to somebody else's. [Open Edit My PDF](/app), sign, download, done. :clap:
+`;
+
 export const POSTS: Post[] = [
+  {
+    slug: "edit-pdf-online-free-without-uploading",
+    title: "How to edit a PDF online for free, without uploading it",
+    description:
+      "Edit the text in a PDF for free, with no sign-up, no watermark and no upload. A four-step guide, and why your PDF shouldn't take a road trip to someone else's server.",
+    date: "2026-11-04",
+    tags: ["how-to", "privacy"],
+    keywords: [
+      "edit pdf online free",
+      "free pdf editor",
+      "pdf editor no sign up",
+      "edit pdf without uploading",
+      "edit text in pdf",
+      "pdf editor no watermark",
+      "private pdf editor",
+      "edit pdf without adobe",
+    ],
+    cover: { glyph: "0 km", hue: "teal" },
+    image: {
+      src: "/blog/edit-pdf-free-card.png",
+      alt: "How to edit a PDF online for free, without uploading it. No upload, no sign-up, no watermark.",
+      width: 1200,
+      height: 630,
+    },
+    body: EDIT_FREE,
+  },
+  {
+    slug: "sign-pdf-online-free-without-uploading",
+    title: "How to sign a PDF online for free, without uploading it",
+    description:
+      "Add a typed or uploaded signature to a PDF in about a minute, free, with no account and no upload. Plus electronic vs digital signatures, and how to check a tool's privacy yourself.",
+    date: "2026-11-04",
+    tags: ["how-to", "privacy", "signatures"],
+    keywords: [
+      "sign pdf online free",
+      "add signature to pdf",
+      "electronic signature free",
+      "sign pdf without uploading",
+      "how to sign a pdf",
+      "sign pdf without adobe",
+      "e-sign pdf",
+    ],
+    cover: { glyph: "J.D.", hue: "violet" },
+    image: {
+      src: "/blog/sign-pdf-free-card.png",
+      alt: "How to sign a PDF online for free, without uploading it. No upload, no sign-up, no watermark.",
+      width: 1200,
+      height: 630,
+    },
+    body: SIGN_FREE,
+  },
   {
     slug: "exporting-real-text",
     title: "Exporting edits as real text, in the page's own font",
