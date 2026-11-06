@@ -105,10 +105,18 @@ export function ToolDock({
     ...group,
     ids: group.ids.filter((id) => SHAPE_LABEL[id].toLowerCase().includes(shapeNeedle)),
   })).filter((group) => group.ids.length > 0);
-  const emojiGroups = EMOJI_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => item.name.toLowerCase().includes(emojiNeedle)),
-  })).filter((group) => group.items.length > 0);
+  const emojiGroups = EMOJI_GROUPS.map((group) => {
+    const groupMatches = group.title.toLowerCase().includes(emojiNeedle);
+    return {
+      ...group,
+      items: groupMatches
+        ? group.items
+        : group.items.filter((item) =>
+            item.name.toLowerCase().includes(emojiNeedle) ||
+            item.keywords?.some((keyword) => keyword.toLowerCase().includes(emojiNeedle)),
+          ),
+    };
+  }).filter((group) => group.items.length > 0);
   const heading = drawing ? "Pencil" : emojis ? "Emoji" : "Shapes";
   const detail = drawing
     ? "Pen, colour and stroke for the next line"
