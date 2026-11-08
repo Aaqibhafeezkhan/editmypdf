@@ -17,9 +17,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 if (!process.features?.typescript) {
-  console.error(
-    "This script imports TypeScript; run it with Node 23.6 or later, or `node --experimental-strip-types scripts/blog-cards.mjs`.",
-  );
+  console.error("This script imports TypeScript; run it with Node 23.6 or later, or `node --experimental-strip-types scripts/blog-cards.mjs`.");
   process.exit(1);
 }
 const { POSTS, formatDate } = await import("../src/data/posts.ts");
@@ -38,13 +36,9 @@ const CHROME_CANDIDATES = [
   "/usr/bin/chromium",
   "/usr/bin/chromium-browser",
 ];
-const CHROME =
-  process.env.CHROME ||
-  CHROME_CANDIDATES.find((candidate) => existsSync(candidate));
+const CHROME = process.env.CHROME || CHROME_CANDIDATES.find((candidate) => existsSync(candidate));
 if (!CHROME) {
-  console.error(
-    "No Chromium binary found; set CHROME to a path or a command, e.g. CHROME=chromium.",
-  );
+  console.error("No Chromium binary found; set CHROME to a path or a command, e.g. CHROME=chromium.");
   process.exit(1);
 }
 
@@ -67,8 +61,7 @@ const PAGE_EDGE = "#d3d0c8";
 const BAD = "oklch(0.55 0.2 25)";
 const GOOD = "oklch(0.55 0.15 150)";
 
-const fontFile = (pkg, file) =>
-  pathToFileURL(path.join(root, "node_modules", pkg, "files", file)).href;
+const fontFile = (pkg, file) => pathToFileURL(path.join(root, "node_modules", pkg, "files", file)).href;
 const FONTS = `
 @font-face { font-family: "Instrument Serif"; font-style: normal; font-weight: 400; src: url("${fontFile("@fontsource/instrument-serif", "instrument-serif-latin-400-normal.woff2")}") format("woff2"); }
 @font-face { font-family: "Instrument Serif"; font-style: italic; font-weight: 400; src: url("${fontFile("@fontsource/instrument-serif", "instrument-serif-latin-400-italic.woff2")}") format("woff2"); }
@@ -82,16 +75,14 @@ const MONO = '"Geist Mono Variable", ui-monospace, monospace';
 /* ---- Drawing helpers (SVG) ---------------------------------------------------------------- */
 
 // A text line on a miniature page: a rounded bar.
-const ln = (x, y, w, h = 6, fill = LINE) =>
-  `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${fill}"/>`;
+const ln = (x, y, w, h = 6, fill = LINE) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${fill}"/>`;
 // A white page with a soft shadow; `inner` is drawn in its own coordinates.
 const page = (x, y, w, h, inner) =>
   `<g transform="translate(${x} ${y})"><rect width="${w}" height="${h}" rx="8" fill="#fff" stroke="${PAGE_EDGE}" filter="url(#shadow)"/>${inner}</g>`;
 // The inner markup of a Lucide icon from the blog's set; a misspelled name fails here, not on the card.
 function iconMarkup(name) {
   const markup = ICONS[name];
-  if (!markup)
-    throw new Error(`No icon named "${name}" in src/site/blogIcons.ts.`);
+  if (!markup) throw new Error(`No icon named "${name}" in src/site/blogIcons.ts.`);
   return markup;
 }
 // A Lucide icon from the blog's set, as a nested svg.
@@ -112,26 +103,16 @@ const mono = (x, y, size, text, fill = "var(--tone-ink)") =>
 const dashed = (d, stroke = "var(--tone)", width = 2) =>
   `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${width}" stroke-dasharray="4 7" stroke-linecap="round"/>`;
 // The usual block of body lines on a page.
-const body = (x, y, widths, gap = 16, h = 6) =>
-  widths.map((w, i) => ln(x, y + i * gap, w, h)).join("");
+const body = (x, y, widths, gap = 16, h = 6) => widths.map((w, i) => ln(x, y + i * gap, w, h)).join("");
 
 /* ---- The scenes, one per post, each in a 480×420 box ------------------------------------ */
 
 const SCENES = {
   "scans-cjk-text-and-colour-profiles": {
-    pills: [
-      ["image", "Scanned pages"],
-      ["languages", "CJK text"],
-      ["palette", "ICC colour"],
-    ],
+    pills: [["image", "Scanned pages"], ["languages", "CJK text"], ["palette", "ICC colour"]],
     svg: `
 <defs><linearGradient id="photo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#dfe4ee"/><stop offset=".55" stop-color="#9aa6bf"/><stop offset="1" stop-color="#4f5d7c"/></linearGradient></defs>
-${page(
-  40,
-  30,
-  260,
-  360,
-  `
+${page(40, 30, 260, 360, `
   ${ln(24, 28, 110, 9, LINE_DARK)}
   <rect x="24" y="52" width="212" height="104" rx="6" fill="url(#photo)"/>
   <circle cx="200" cy="80" r="11" fill="#fff" fill-opacity=".9"/>
@@ -140,8 +121,7 @@ ${page(
   ${body(24, 214, [212, 180], 16)}
   <rect x="24" y="254" width="212" height="46" rx="6" fill="#c8102e"/>
   ${body(24, 318, [212, 150], 16)}
-`,
-)}
+`)}
 ${badge(300, 30)}
 ${dashed("M300 110 L340 110")}${tile(342, 80, "image")}
 ${dashed("M300 224 L340 224")}${tile(342, 194, "languages")}
@@ -149,26 +129,16 @@ ${dashed("M300 338 L340 338")}${tile(342, 308, "palette")}
 `,
   },
   "edit-pdf-online-free-without-uploading": {
-    pills: [
-      ["cloud-off", "No upload"],
-      ["ban", "No sign-up"],
-      ["check", "No watermark"],
-    ],
+    pills: [["cloud-off", "No upload"], ["ban", "No sign-up"], ["check", "No watermark"]],
     svg: `
-${page(
-  40,
-  70,
-  240,
-  320,
-  `
+${page(40, 70, 240, 320, `
   ${ln(22, 26, 100, 9, LINE_DARK)}
   ${body(22, 54, [196, 170, 188], 16)}
   <rect x="22" y="104" width="150" height="10" rx="5" fill="var(--tone)"/>
   <rect x="176" y="100" width="2" height="18" fill="var(--tone-ink)"/>
   ${body(22, 132, [196, 160, 190, 120], 16)}
   ${body(22, 214, [196, 184, 150], 16)}
-`,
-)}
+`)}
 ${dashed("M280 150 C 330 150, 340 90, 400 72", INK_2, 2.5)}
 <g transform="translate(378 40)"><rect width="64" height="64" rx="18" fill="#fff" stroke="${PAGE_EDGE}"/>${icon("cloud-off", 16, 16, 32, BAD, 2)}</g>
 ${badge(442, 40, false, 14)}
@@ -177,18 +147,9 @@ ${display(300, 300, 96, "0 km")}
 `,
   },
   "sign-pdf-online-free-without-uploading": {
-    pills: [
-      ["timer", "About a minute"],
-      ["pen-line", "Typed or drawn"],
-      ["cloud-off", "No upload"],
-    ],
+    pills: [["timer", "About a minute"], ["pen-line", "Typed or drawn"], ["cloud-off", "No upload"]],
     svg: `
-${page(
-  50,
-  30,
-  260,
-  360,
-  `
+${page(50, 30, 260, 360, `
   ${ln(24, 28, 120, 9, LINE_DARK)}
   ${body(24, 56, [212, 196, 204, 150], 16)}
   ${ln(24, 140, 60, 6, LINE_DARK)}${ln(92, 140, 144, 6)}
@@ -197,31 +158,21 @@ ${page(
   <text x="24" y="306" font-family='${SANS}' font-size="11" fill="${INK_2}">Signature</text>
   <text x="26" y="282" font-family='${SERIF}' font-size="16" fill="${INK_2}">×</text>
   <path d="M60 268 C 70 226, 92 222, 84 252 C 78 274, 62 282, 70 266 C 84 240, 118 230, 126 252 C 132 268, 112 284, 124 274 C 136 262, 150 236, 170 240 C 190 244, 176 280, 196 262 C 206 252, 218 250, 230 258" fill="none" stroke="var(--tone)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
-`,
-)}
+`)}
 ${tile(330, 290, "pen-line", 64)}
 ${badge(310, 30)}
 `,
   },
   "exporting-real-text": {
-    pills: [
-      ["type", "Real text, not a picture"],
-      ["package", "The page's font, subset"],
-    ],
+    pills: [["type", "Real text, not a picture"], ["package", "The page's font, subset"]],
     svg: `
-${page(
-  30,
-  50,
-  230,
-  320,
-  `
+${page(30, 50, 230, 320, `
   ${ln(22, 26, 90, 9, LINE_DARK)}
   ${body(22, 54, [186, 160], 16)}
   <text x="22" y="110" font-family='${SANS}' font-weight="600" font-size="18" fill="var(--tone-ink)">Revenue grew</text>
   ${body(22, 124, [186, 170, 140], 16)}
   ${body(22, 190, [186, 176, 150, 110], 16)}
-`,
-)}
+`)}
 <g transform="translate(290 70)">
 ${Array.from({ length: 32 }, (_, i) => {
   const lit = [3, 10, 14, 17, 22, 28].includes(i);
@@ -238,18 +189,9 @@ ${Array.from({ length: 6 }, (_, i) => `<rect x="${(i % 3) * 22}" y="${Math.floor
 `,
   },
   "what-the-editor-leaves-alone": {
-    pills: [
-      ["table", "Tables"],
-      ["eye-off", "Covered text"],
-      ["type", "Type 3 fonts"],
-    ],
+    pills: [["table", "Tables"], ["eye-off", "Covered text"], ["type", "Type 3 fonts"]],
     svg: `
-${page(
-  50,
-  30,
-  280,
-  360,
-  `
+${page(50, 30, 280, 360, `
   ${ln(24, 28, 120, 9, LINE_DARK)}
   ${body(24, 56, [232, 200], 16)}
   <g transform="translate(24 100)">
@@ -266,37 +208,18 @@ ${page(
   </g>
   ${display(230, 252, 22, "Ø")}
   ${body(24, 300, [232, 176, 120], 16)}
-`,
-)}
+`)}
 ${tile(344, 320, "hand", 64)}
 `,
   },
   "mixed-face-paragraphs": {
-    pills: [
-      ["bold", "Bold, italic and regular"],
-      ["blocks", "Edited as one block"],
-    ],
+    pills: [["bold", "Bold, italic and regular"], ["blocks", "Edited as one block"]],
     svg: `
-${page(
-  40,
-  30,
-  300,
-  360,
-  `
+${page(40, 30, 300, 360, `
   ${ln(24, 28, 130, 9, LINE_DARK)}
   <g transform="translate(24 56)">
     <rect x="-10" y="-10" width="272" height="124" rx="6" fill="none" stroke="var(--tone)" stroke-width="1.5"/>
-    ${[
-      [-10, -10],
-      [262, -10],
-      [-10, 114],
-      [262, 114],
-    ]
-      .map(
-        ([x, y]) =>
-          `<rect x="${x - 4}" y="${y - 4}" width="8" height="8" rx="2" fill="#fff" stroke="var(--tone)" stroke-width="1.5"/>`,
-      )
-      .join("")}
+    ${[[-10, -10], [262, -10], [-10, 114], [262, 114]].map(([x, y]) => `<rect x="${x - 4}" y="${y - 4}" width="8" height="8" rx="2" fill="#fff" stroke="var(--tone)" stroke-width="1.5"/>`).join("")}
     ${ln(0, 0, 92, 8, INK_1)}${ln(100, 1, 152, 6)}
     ${ln(0, 20, 252, 6)}
     ${ln(0, 40, 70, 6)}<g transform="skewX(-14)">${ln(94, 40, 86, 6, LINE_DARK)}</g>${ln(176, 40, 76, 6)}
@@ -306,23 +229,14 @@ ${page(
   </g>
   ${body(24, 206, [252, 236, 248, 140], 16)}
   ${body(24, 290, [252, 200], 16)}
-`,
-)}
+`)}
 <text x="330" y="372" font-family='${SERIF}' font-size="110" fill="var(--tone-ink)" letter-spacing="-0.03em"><tspan font-weight="700">A</tspan><tspan font-style="italic">a</tspan></text>
 `,
   },
   "exactly-as-the-page-prints-it": {
-    pills: [
-      ["ruler", "Every line at its printed width"],
-      ["baseline", "On the page's baseline"],
-    ],
+    pills: [["ruler", "Every line at its printed width"], ["baseline", "On the page's baseline"]],
     svg: `
-${page(
-  40,
-  30,
-  280,
-  340,
-  `
+${page(40, 30, 280, 340, `
   ${ln(24, 28, 120, 9, LINE_DARK)}
   ${body(24, 56, [232, 214], 16)}
   <g transform="translate(24 96)">
@@ -338,18 +252,13 @@ ${page(
     <line x1="0" y1="0" x2="232" y2="0" stroke="var(--tone)" stroke-width="1.5"/>
     ${Array.from({ length: 30 }, (_, i) => `<line x1="${i * 8}" y1="0" x2="${i * 8}" y2="${i % 5 === 0 ? 10 : 5}" stroke="var(--tone)" stroke-width="1"/>`).join("")}
   </g>
-`,
-)}
+`)}
 <g transform="translate(340 300)"><rect width="88" height="44" rx="12" fill="#fff" stroke="${PAGE_EDGE}"/>${mono(18, 30, 22, "Tw")}</g>
 ${badge(320, 30)}
 `,
   },
   "nothing-leaves-your-browser": {
-    pills: [
-      ["server-off", "No server"],
-      ["lock", "Nothing uploaded"],
-      ["search", "Check it yourself"],
-    ],
+    pills: [["server-off", "No server"], ["lock", "Nothing uploaded"], ["search", "Check it yourself"]],
     svg: `
 <g transform="translate(30 50)">
   <rect width="330" height="300" rx="14" fill="#fff" stroke="${PAGE_EDGE}" filter="url(#shadow)"/>
@@ -374,17 +283,9 @@ ${display(392, 300, 72, "{ }")}
 `,
   },
   "why-editing-pdf-text-is-hard": {
-    pills: [
-      ["pilcrow", "No paragraphs in a PDF"],
-      ["type", "Only placed glyphs"],
-    ],
+    pills: [["pilcrow", "No paragraphs in a PDF"], ["type", "Only placed glyphs"]],
     svg: `
-${page(
-  40,
-  30,
-  300,
-  360,
-  `
+${page(40, 30, 300, 360, `
   ${ln(24, 28, 120, 9, LINE_DARK)}
   ${body(24, 56, [252, 230], 16)}
   <g transform="translate(24 96)" font-family='${SERIF}' font-size="22" fill="${INK_1}">
@@ -397,8 +298,7 @@ ${page(
   ${body(24, 170, [252, 240, 226, 150], 16)}
   ${body(24, 252, [252, 236, 200], 16)}
   ${body(24, 318, [180], 16)}
-`,
-)}
+`)}
 ${display(354, 376, 118, "¶")}
 `,
   },
@@ -406,8 +306,7 @@ ${display(354, 376, 118, "¶")}
 
 /* ---- Pages ---------------------------------------------------------------------------------- */
 
-const esc = (s) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // The brand mark, as src/site/Logo.tsx and public/og.svg draw it.
 const MARK = `<svg width="44" height="44" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#1e59cd"/><path d="M11 6.5h7.25L23 11.25V23.5a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2v-15a2 2 0 0 1 2-2Z" fill="#fff"/><path d="M18.25 6.5v4.75H23Z" fill="#9fbcf0"/><g fill="#1e59cd"><rect x="11.75" y="14.5" width="6.5" height="1.9" rx=".95"/><rect x="11.75" y="18.4" width="7" height="1.9" rx=".95"/><rect x="11.75" y="22.3" width="3.5" height="1.9" rx=".95"/></g><g transform="translate(19.74 20.26) rotate(45)"><rect x="-2" y="-8" width="4" height="11" rx="2" fill="#d75928"/><path d="M-2 2.6h4L0 6.2Z" fill="#3b2a22"/></g></svg>`;
@@ -420,10 +319,7 @@ const DEFS = `<defs>
 
 function sceneOf(post) {
   const scene = SCENES[post.slug];
-  if (!scene)
-    throw new Error(
-      `No scene for ${post.slug}; add one to SCENES in scripts/blog-cards.mjs.`,
-    );
+  if (!scene) throw new Error(`No scene for ${post.slug}; add one to SCENES in scripts/blog-cards.mjs.`);
   return scene;
 }
 
@@ -458,10 +354,7 @@ body { position: relative; background: ${PAPER}; color: ${INK_0}; font-family: $
 
 function ogHtml(post) {
   const pills = sceneOf(post)
-    .pills.map(
-      ([name, text]) =>
-        `<span class="pill"><svg viewBox="0 0 24 24">${iconMarkup(name)}</svg>${esc(text)}</span>`,
-    )
+    .pills.map(([name, text]) => `<span class="pill"><svg viewBox="0 0 24 24">${iconMarkup(name)}</svg>${esc(text)}</span>`)
     .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><style>${styles(post)}</style></head><body>
 <div class="dots"></div>
@@ -502,24 +395,13 @@ async function withChrome(work) {
   const profile = mkdtempSync(path.join(tmpdir(), "blog-cards-"));
   const chrome = spawn(
     CHROME,
-    [
-      "--headless=new",
-      "--remote-debugging-port=0",
-      `--user-data-dir=${profile}`,
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--hide-scrollbars",
-      "--disable-gpu",
-      "--allow-file-access-from-files",
-      "about:blank",
-    ],
+    ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "--disable-gpu", "--allow-file-access-from-files", "about:blank"],
     { stdio: ["ignore", "ignore", "pipe"] },
   );
   chrome.stderr.on("data", () => {});
+  // A browser that cannot start (a wrong CHROME, say) is reported, not waited for.
   const startFailure = new Promise((_, reject) =>
-    chrome.once("error", (error) =>
-      reject(new Error(`Could not start ${CHROME}: ${error.message}`)),
-    ),
+    chrome.once("error", (error) => reject(new Error(`Could not start ${CHROME}: ${error.message}`))),
   );
   startFailure.catch(() => {});
   try {
@@ -527,9 +409,7 @@ async function withChrome(work) {
     let url;
     for (let i = 0; i < 200 && !url; i++) {
       if (existsSync(portFile)) {
-        const [port, wsPath] = readFileSync(portFile, "utf8")
-          .trim()
-          .split("\n");
+        const [port, wsPath] = readFileSync(portFile, "utf8").trim().split("\n");
         if (port && wsPath) url = `ws://127.0.0.1:${port}${wsPath}`;
       }
       if (!url) await Promise.race([sleep(50), startFailure]);
@@ -543,14 +423,14 @@ async function withChrome(work) {
     let nextId = 1;
     const pending = new Map();
     const listeners = [];
-    // A connection that drops mid-run fails every waiting call instead of hanging the script.
+    // A connection that drops mid-run fails every waiting call and event wait instead of hanging.
     const fail = (reason) => {
       for (const { reject } of pending.values()) reject(new Error(reason));
       pending.clear();
+      for (const { reject } of listeners.splice(0)) reject(new Error(reason));
     };
     ws.onerror = () => fail("The DevTools connection failed.");
-    ws.onclose = () =>
-      fail("The DevTools connection closed before the cards were rendered.");
+    ws.onclose = () => fail("The DevTools connection closed before the cards were rendered.");
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
       if (message.id && pending.has(message.id)) {
@@ -561,10 +441,7 @@ async function withChrome(work) {
         return;
       }
       for (let i = listeners.length - 1; i >= 0; i--) {
-        if (
-          listeners[i].method === message.method &&
-          listeners[i].sessionId === message.sessionId
-        ) {
+        if (listeners[i].method === message.method && listeners[i].sessionId === message.sessionId) {
           listeners.splice(i, 1)[0].resolve(message.params);
         }
       }
@@ -573,59 +450,27 @@ async function withChrome(work) {
       new Promise((resolve, reject) => {
         const id = nextId++;
         pending.set(id, { resolve, reject });
-        ws.send(
-          JSON.stringify({
-            id,
-            method,
-            params,
-            ...(sessionId ? { sessionId } : {}),
-          }),
-        );
+        ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
       });
-    const waitFor = (method, sessionId) =>
-      new Promise((resolve) => listeners.push({ method, sessionId, resolve }));
-    const { targetId } = await send("Target.createTarget", {
-      url: "about:blank",
-    });
-    const { sessionId } = await send("Target.attachToTarget", {
-      targetId,
-      flatten: true,
-    });
+    const waitFor = (method, sessionId) => new Promise((resolve, reject) => listeners.push({ method, sessionId, resolve, reject }));
+    const { targetId } = await send("Target.createTarget", { url: "about:blank" });
+    const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
     await send("Page.enable", {}, sessionId);
     await send("Runtime.enable", {}, sessionId);
     const evaluate = async (expression) => {
-      const { result, exceptionDetails } = await send(
-        "Runtime.evaluate",
-        { expression, returnByValue: true, awaitPromise: true },
-        sessionId,
-      );
-      if (exceptionDetails)
-        throw new Error(
-          exceptionDetails.exception?.description ?? exceptionDetails.text,
-        );
+      const { result, exceptionDetails } = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }, sessionId);
+      if (exceptionDetails) throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text);
       return result.value;
     };
     await work({
       async shoot(fileUrl, { width, height, format, quality }) {
-        await send(
-          "Emulation.setDeviceMetricsOverride",
-          { width, height, deviceScaleFactor: 1, mobile: false },
-          sessionId,
-        );
+        await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
         const loaded = waitFor("Page.loadEventFired", sessionId);
         await send("Page.navigate", { url: fileUrl }, sessionId);
         await loaded;
         await evaluate("document.fonts.ready.then(() => window.__fit())");
         await sleep(150);
-        const shot = await send(
-          "Page.captureScreenshot",
-          {
-            format,
-            ...(format === "webp" ? { quality } : {}),
-            captureBeyondViewport: false,
-          },
-          sessionId,
-        );
+        const shot = await send("Page.captureScreenshot", { format, ...(format === "webp" ? { quality } : {}), captureBeyondViewport: false }, sessionId);
         return Buffer.from(shot.data, "base64");
       },
     });
@@ -645,9 +490,7 @@ async function withChrome(work) {
 
 /* ---- Main ----------------------------------------------------------------------------------- */
 
-const posts = POSTS.filter(
-  (post) => only.length === 0 || only.includes(post.slug),
-);
+const posts = POSTS.filter((post) => only.length === 0 || only.includes(post.slug));
 if (posts.length === 0) {
   console.error(`No post matches ${only.join(", ")}.`);
   process.exit(1);
@@ -661,22 +504,11 @@ try {
       const card = path.join(work, `${post.slug}-card.html`);
       await writeFile(og, ogHtml(post));
       await writeFile(card, cardHtml(post));
-      const png = await shoot(pathToFileURL(og).href, {
-        width: 1200,
-        height: 630,
-        format: "png",
-      });
-      const webp = await shoot(pathToFileURL(card).href, {
-        width: 1200,
-        height: 600,
-        format: "webp",
-        quality: 82,
-      });
+      const png = await shoot(pathToFileURL(og).href, { width: 1200, height: 630, format: "png" });
+      const webp = await shoot(pathToFileURL(card).href, { width: 1200, height: 600, format: "webp", quality: 82 });
       await writeFile(path.join(outDir, `${post.slug}.png`), png);
       await writeFile(path.join(outDir, `${post.slug}.webp`), webp);
-      console.log(
-        `${post.slug}: ${(png.length / 1024).toFixed(0)} KB png, ${(webp.length / 1024).toFixed(0)} KB webp`,
-      );
+      console.log(`${post.slug}: ${(png.length / 1024).toFixed(0)} KB png, ${(webp.length / 1024).toFixed(0)} KB webp`);
     }
   });
 } catch (error) {
