@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
 import { POSTS } from "./src/data/posts.ts";
 import { canonicalPath, PUBLIC_ROUTES } from "./src/data/routes.ts";
 
@@ -22,6 +22,22 @@ function feed(origin: string): string {
       `  <item>\n    <title>${escapeXml(post.title)}</title>\n    <link>${origin}${canonicalPath(`/blog/${post.slug}`)}</link>\n    <guid isPermaLink="true">${origin}${canonicalPath(`/blog/${post.slug}`)}</guid>\n    <pubDate>${new Date(`${post.date}T09:00:00Z`).toUTCString()}</pubDate>\n    <description>${escapeXml(post.description)}</description>\n  </item>`,
   );
   return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n<channel>\n  <title>Edit My PDF blog</title>\n  <link>${origin}${canonicalPath("/blog")}</link>\n  <description>Engineering notes on editing PDF text in the browser.</description>\n  <language>en</language>\n${items.join("\n")}\n</channel>\n</rss>\n`;
+}
+
+// Development only: answers a request for a path under the base path with the file `lookup` returns
+// for the part below the base, and leaves every other request to Vite. The query string is ignored.
+function serveUnderBase(server: ViteDevServer, lookup: (name: string) => { type: string; body: string | Buffer } | undefined) {
+  const base = server.config.base;
+  server.middlewares.use((request, response, next) => {
+    const [pathname = ""] = (request.url ?? "").split("?");
+    const file = pathname.startsWith(base) ? lookup(pathname.slice(base.length)) : undefined;
+    if (!file) {
+      next();
+      return;
+    }
+    response.setHeader("Content-Type", file.type);
+    response.end(file.body);
+  });
 }
 
 // Crawlers' files: sitemap.xml, feed.xml and robots.txt, served in development and written into the
@@ -89,15 +105,9 @@ function siteFiles(siteUrl: string): Plugin {
       if (!siteUrl) origin = base.replace(/\/$/, "");
     },
     configureServer(server) {
-      server.middlewares.use((request, response, next) => {
-        const name = request.url?.startsWith(base) ? request.url.slice(base.length) : undefined;
-        const file = name ? files[name] : undefined;
-        if (!file) {
-          next();
-          return;
-        }
-        response.setHeader("Content-Type", file.type);
-        response.end(file.body());
+      serveUnderBase(server, (name) => {
+        const file = Object.hasOwn(files, name) ? files[name] : undefined;
+        return file ? { type: file.type, body: file.body() } : undefined;
       });
     },
     generateBundle() {
@@ -152,8 +162,9 @@ function searchVerification(content: string | undefined): Plugin {
 // file names to: the WebAssembly decoders for JPEG 2000 and JBIG2 images and for ICC colour (wasm/),
 // the predefined CMaps that CJK fonts use (cmaps/), the CMYK profile (iccs/) and the standard 14
 // fonts for PDFs that do not embed theirs (standard_fonts/). This copies them from pdfjs-dist into
-// the build under one folder named after a hash of their contents, so they cache for ever and move
-// when pdf.js is updated, and serves them from node_modules in development. src/pdf.ts reads the
+// the build under one folder, beside the other hashed assets, named after a hash of their contents,
+// so they cache for ever and move when pdf.js is updated, and serves them from node_modules in
+// development. src/pdf.ts reads the
 // folder's address from the virtual module "virtual:pdfjs-resources" and hands it to pdf.js; nothing
 // is fetched from a CDN, so every request stays on the site's own origin. The files are not imported
 // by any chunk: pdf.js fetches each one the first time a document needs it.
@@ -171,21 +182,24 @@ const PDFJS_RESOURCE_TYPES: Record<string, string> = {
 function pdfjsResources(): Plugin {
   const virtualId = "virtual:pdfjs-resources";
   const resolvedId = `\0${virtualId}`;
-  const packageDir = path.dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json"));
+  // The package folder, found from the entry point (build/pdf.mjs) rather than from package.json,
+  // which an exports map could hide one day.
+  const packageDir = path.resolve(path.dirname(createRequire(import.meta.url).resolve("pdfjs-dist")), "..");
   const files = PDFJS_RESOURCE_DIRS.flatMap((dir) =>
-    readdirSync(path.join(packageDir, dir))
-      .filter((name) => !PDFJS_RESOURCE_SKIP.test(name))
-      .sort()
-      .map((name) => `${dir}/${name}`),
+    readdirSync(path.join(packageDir, dir), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && !PDFJS_RESOURCE_SKIP.test(entry.name))
+      .map((entry) => `${dir}/${entry.name}`)
+      .sort(),
   );
   const hash = createHash("sha256");
   for (const file of files) hash.update(file).update(readFileSync(path.join(packageDir, file)));
-  const folder = `assets/pdfjs-${hash.digest("hex").slice(0, 8)}/`;
-  let base = "/";
+  const digest = hash.digest("hex").slice(0, 8);
+  // "assets/pdfjs-<digest>/" by default; set once the config is final, in case assetsDir is changed.
+  let folder = "";
   return {
     name: "pdfjs-resources",
     configResolved(config) {
-      base = config.base;
+      folder = `${config.build.assetsDir.replace(/\/+$/, "")}/pdfjs-${digest}/`;
     },
     resolveId(id) {
       return id === virtualId ? resolvedId : undefined;
@@ -194,16 +208,13 @@ function pdfjsResources(): Plugin {
       return id === resolvedId ? `export const PDFJS_RESOURCES = ${JSON.stringify(folder)};` : undefined;
     },
     configureServer(server) {
-      const prefix = `${base}${folder}`;
-      server.middlewares.use((request, response, next) => {
-        const url = (request.url ?? "").split("?")[0];
-        const name = url.startsWith(prefix) ? url.slice(prefix.length) : "";
-        if (!files.includes(name)) {
-          next();
-          return;
-        }
-        response.setHeader("Content-Type", PDFJS_RESOURCE_TYPES[path.extname(name)] ?? "application/octet-stream");
-        response.end(readFileSync(path.join(packageDir, name)));
+      serveUnderBase(server, (name) => {
+        const file = name.startsWith(folder) ? name.slice(folder.length) : "";
+        if (!files.includes(file)) return undefined;
+        return {
+          type: PDFJS_RESOURCE_TYPES[path.extname(file)] ?? "application/octet-stream",
+          body: readFileSync(path.join(packageDir, file)),
+        };
       });
     },
     generateBundle() {
