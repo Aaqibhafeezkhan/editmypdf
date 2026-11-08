@@ -1,4 +1,6 @@
-import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
@@ -146,6 +148,74 @@ function searchVerification(content: string | undefined): Plugin {
   };
 }
 
+// pdf.js loads some of its resources while a document is open, from directory addresses it appends
+// file names to: the WebAssembly decoders for JPEG 2000 and JBIG2 images and for ICC colour (wasm/),
+// the predefined CMaps that CJK fonts use (cmaps/), the CMYK profile (iccs/) and the standard 14
+// fonts for PDFs that do not embed theirs (standard_fonts/). This copies them from pdfjs-dist into
+// the build under one folder named after a hash of their contents, so they cache for ever and move
+// when pdf.js is updated, and serves them from node_modules in development. src/pdf.ts reads the
+// folder's address from the virtual module "virtual:pdfjs-resources" and hands it to pdf.js; nothing
+// is fetched from a CDN, so every request stays on the site's own origin. The files are not imported
+// by any chunk: pdf.js fetches each one the first time a document needs it.
+const PDFJS_RESOURCE_DIRS = ["wasm", "cmaps", "iccs", "standard_fonts"];
+// The QuickJS sandbox runs form scripts in pdf.js's own viewer, which this app does not use.
+const PDFJS_RESOURCE_SKIP = /^quickjs-/;
+const PDFJS_RESOURCE_TYPES: Record<string, string> = {
+  ".wasm": "application/wasm",
+  ".js": "text/javascript",
+  ".bcmap": "application/octet-stream",
+  ".icc": "application/vnd.iccprofile",
+  ".pfb": "application/x-font-type1",
+  ".ttf": "font/ttf",
+};
+function pdfjsResources(): Plugin {
+  const virtualId = "virtual:pdfjs-resources";
+  const resolvedId = `\0${virtualId}`;
+  const packageDir = path.dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json"));
+  const files = PDFJS_RESOURCE_DIRS.flatMap((dir) =>
+    readdirSync(path.join(packageDir, dir))
+      .filter((name) => !PDFJS_RESOURCE_SKIP.test(name))
+      .sort()
+      .map((name) => `${dir}/${name}`),
+  );
+  const hash = createHash("sha256");
+  for (const file of files) hash.update(file).update(readFileSync(path.join(packageDir, file)));
+  const folder = `assets/pdfjs-${hash.digest("hex").slice(0, 8)}/`;
+  let base = "/";
+  return {
+    name: "pdfjs-resources",
+    configResolved(config) {
+      base = config.base;
+    },
+    resolveId(id) {
+      return id === virtualId ? resolvedId : undefined;
+    },
+    load(id) {
+      return id === resolvedId ? `export const PDFJS_RESOURCES = ${JSON.stringify(folder)};` : undefined;
+    },
+    configureServer(server) {
+      const prefix = `${base}${folder}`;
+      server.middlewares.use((request, response, next) => {
+        const url = (request.url ?? "").split("?")[0];
+        const name = url.startsWith(prefix) ? url.slice(prefix.length) : "";
+        if (!files.includes(name)) {
+          next();
+          return;
+        }
+        response.setHeader("Content-Type", PDFJS_RESOURCE_TYPES[path.extname(name)] ?? "application/octet-stream");
+        response.end(readFileSync(path.join(packageDir, name)));
+      });
+    },
+    generateBundle() {
+      // The prerender's server bundle (scripts/prerender.mjs) renders no documents.
+      if (this.environment.config.consumer !== "client") return;
+      for (const file of files) {
+        this.emitFile({ type: "asset", fileName: `${folder}${file}`, source: readFileSync(path.join(packageDir, file)) });
+      }
+    },
+  };
+}
+
 // The path the site is served under: "/" (the default) or "/<repo>/" for a GitHub Pages project
 // site. Read from VITE_BASE at build time; either "/repo" or "/repo/" is accepted.
 function basePath(value: string | undefined): string {
@@ -158,7 +228,14 @@ export default defineConfig(({ mode }) => {
   const siteUrl = (env.VITE_SITE_URL ?? "").replace(/\/$/, "");
   return {
     base: basePath(env.VITE_BASE),
-    plugins: [react(), tailwindcss(), siteFiles(siteUrl), searchVerification(env.VITE_GOOGLE_SITE_VERIFICATION), prerenderedPages()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      pdfjsResources(),
+      siteFiles(siteUrl),
+      searchVerification(env.VITE_GOOGLE_SITE_VERIFICATION),
+      prerenderedPages(),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(root, "src"),
