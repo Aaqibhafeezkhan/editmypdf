@@ -6,11 +6,12 @@ type Fontkit = Parameters<PDFDocument["registerFontkit"]>[0];
 type Subset = ReturnType<ReturnType<Fontkit["create"]>["createSubset"]>;
 type SubsetStream = ReturnType<Subset["encodeStream"]>;
 
-// fontkit's CFF subsetter writes the font's length into the header's offSize byte (CFFSubset.encode
-// sets `offSize: this.cff.length`). Anything outside 1–4 there makes Chrome's OpenType sanitizer
+// fontkit's CFF subsetter fills the header's offSize byte with a value that is not an offset size
+// (CFFSubset.encode sets `offSize: this.cff.length`; 16 and 11 in the fonts checked). Anything
+// outside 1–4 there makes the OpenType sanitizer that Chrome and Firefox run on every web font
 // refuse the font ("CFF: Bad offSize") and pdf.js stop recognising it as CFF, so an exported edit
 // in a CFF-based face (a Type1C or CIDFontType0C font, or a standard font pdf.js converted from
-// Type1) is drawn in a fallback face by every Chromium viewer, this editor included. The byte is
+// Type1) is drawn in a fallback face by browser-based readers, this editor included. The byte is
 // informational, each INDEX carries its own offset size, so this fontkit hands pdf-lib the same
 // subsets with that byte set to 4. TrueType subsets begin with 00 01 00 00 or "true" and pass
 // through untouched.
