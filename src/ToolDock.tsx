@@ -105,16 +105,15 @@ export function ToolDock({
     ...group,
     ids: group.ids.filter((id) => SHAPE_LABEL[id].toLowerCase().includes(shapeNeedle)),
   })).filter((group) => group.ids.length > 0);
+  const atWordStart = (text: string) => ` ${text.toLowerCase()}`.includes(` ${emojiNeedle}`);
   const emojiGroups = EMOJI_GROUPS.map((group) => {
-    const groupMatches = group.title.toLowerCase().includes(emojiNeedle);
+    const title = group.title.toLowerCase();
+    const groupMatches = emojiNeedle !== "" && (title === emojiNeedle || title === `${emojiNeedle}s`);
     return {
       ...group,
       items: groupMatches
         ? group.items
-        : group.items.filter((item) =>
-            item.name.toLowerCase().includes(emojiNeedle) ||
-            item.keywords?.some((keyword) => keyword.toLowerCase().includes(emojiNeedle)),
-          ),
+        : group.items.filter((item) => atWordStart(item.name) || item.keywords?.some(atWordStart)),
     };
   }).filter((group) => group.items.length > 0);
   const heading = drawing ? "Pencil" : emojis ? "Emoji" : "Shapes";
