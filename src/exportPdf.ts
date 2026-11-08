@@ -1,4 +1,5 @@
 import fontkit from "@pdf-lib/fontkit";
+import { soundFontkit } from "./soundFontkit.ts";
 import {
   beginText,
   degrees,
@@ -657,7 +658,7 @@ export async function exportAnnotatedPdf(
   pages: PDFPageProxy[] = [],
 ): Promise<Uint8Array> {
   const document = await PDFDocument.load(originalBytes.slice(0));
-  document.registerFontkit(fontkit);
+  document.registerFontkit(soundFontkit);
   const annotations = await refreshPatchFaces(marks, pages);
   // The text each edit replaces comes out of its page before anything is drawn on it.
   const strips = stripPatchedText(document, annotations, pages);
