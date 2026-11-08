@@ -33,8 +33,8 @@ export function Blog() {
         </p>
       </div>
       <div className="post-grid">
-        {POSTS.map((post) => (
-          <PostCard key={post.slug} post={post} heading="h2" />
+        {POSTS.map((post, index) => (
+          <PostCard key={post.slug} post={post} heading="h2" eager={index < 3} />
         ))}
       </div>
     </section>

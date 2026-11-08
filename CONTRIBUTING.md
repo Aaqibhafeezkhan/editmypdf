@@ -55,7 +55,7 @@ rest of the reasoning; they are written from this code and are a good map of it.
 Facts on the site come from the data files, not from the pages:
 
 - `src/data/posts.ts` holds the blog posts as Markdown. After adding or retitling a post, run `node scripts/blog-cards.mjs`
-  (it needs a Chromium binary; set `CHROME` if none is found) to draw its link-preview card and its
+  (Node 23.6 or later, and a Chromium binary; set `CHROME` to a path or command if none is found) to draw its link-preview card and its
   card picture into `public/blog/cards/`, and point the post's `image` and `thumbnail` at them.
 - `src/data/competitors.ts` holds every comparison fact, with the date checked and the sources read.
   Update `checkedAt` and `sources` when you change a price or a limit.

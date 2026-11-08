@@ -979,7 +979,7 @@ html[data-appearance="dark"] .post-cover-image {
 .bp-text {
   display: block;
   color: #2f2e2a;
-  font: 600 11px/1.25 var(--ff-sans), sans-serif;
+  font: 600 11px/1.25 var(--ff-sans);
   letter-spacing: 0.02em;
 }
 

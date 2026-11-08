@@ -9,7 +9,16 @@ import "./blog.css";
 // picture as its link preview, without the title, which the card sets below), otherwise a page on
 // a tinted ground with the post's glyph set large in the display face. The drawn fallback is SVG,
 // so it is crisp at any size and takes its colours from the theme.
-export function PostCover({ post, className = "post-cover" }: { post: Post; className?: string }) {
+export function PostCover({
+  post,
+  className = "post-cover",
+  loading = "lazy",
+}: {
+  post: Post;
+  className?: string;
+  // "eager" for the cards in view when a page opens, so their pictures start with the page.
+  loading?: "eager" | "lazy";
+}) {
   const { glyph, hue } = post.cover;
   if (post.thumbnail) {
     return (
@@ -19,7 +28,7 @@ export function PostCover({ post, className = "post-cover" }: { post: Post; clas
         alt=""
         width={1200}
         height={600}
-        loading="lazy"
+        loading={loading}
         decoding="async"
       />
     );
@@ -65,10 +74,18 @@ export function PostCover({ post, className = "post-cover" }: { post: Post; clas
 }
 
 // One blog post as a card: cover, date and reading time, title, excerpt, tags.
-export function PostCard({ post, heading: Heading = "h3" }: { post: Post; heading?: "h2" | "h3" }) {
+export function PostCard({
+  post,
+  heading: Heading = "h3",
+  eager = false,
+}: {
+  post: Post;
+  heading?: "h2" | "h3";
+  eager?: boolean;
+}) {
   return (
     <Link to={ROUTES.post(post.slug)} className="post-card">
-      <PostCover post={post} />
+      <PostCover post={post} loading={eager ? "eager" : "lazy"} />
       <div className="post-card-body">
         <div className="card-meta">
           <time dateTime={post.date}>{formatDate(post.date)}</time>

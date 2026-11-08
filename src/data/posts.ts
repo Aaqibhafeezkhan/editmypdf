@@ -347,7 +347,7 @@ ${tile("server-off", "No server", "nothing to upload to, nothing to leak from", 
 
 If "web worker" and "IndexedDB" are new words: a web worker is a background thread inside your tab, which is how rendering a page doesn't freeze the interface, and IndexedDB is a small database every browser keeps on your own disk, one per website. Both live on your computer. Neither is a service.
 
-There's no upload endpoint because there's no backend. The repository has no server code at all. The only \`fetch\` call in the application's own code loads the emoji images from the app's files when you export an emoji.
+There's no upload endpoint because there's no backend. The repository has no server code at all. The app's own code calls \`fetch\` in three places, and each one loads a file of the site's own: the sample PDF on the documents screen, a supplement font when a page needs one, and an emoji image when you export an emoji.
 
 ## What the app does ask the network for
 
@@ -369,7 +369,7 @@ No OCR and no conversion. Recognising text in a scan, or turning a PDF into a Wo
 - **Read the list.** You'll see requests for the app's own files and nothing else. No request carries your PDF.
 :::
 
-If you read code, the source is public. The reader is \`src/pdf.ts\`, the writer is \`src/exportPdf.ts\` and storage is \`src/session.ts\`. Search \`src\` for \`fetch\` and you'll find the emoji loader and not much else.
+If you read code, the source is public. The reader is \`src/pdf.ts\`, the writer is \`src/exportPdf.ts\` and storage is \`src/session.ts\`. Search \`src\` for \`fetch\` and you'll find those three loaders and nothing that sends a document anywhere.
 
 ## What I can't promise
 
