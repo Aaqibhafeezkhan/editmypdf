@@ -14,13 +14,16 @@ export type Post = {
   // ISO date, used for ordering and display.
   date: string;
   tags: string[];
-  // The card cover: a short glyph set in the display face (an operator, a symbol, a pair of
-  // letters) on a tinted page in one of the palette hues. Drawn by PostCard.tsx, no image files.
+  // The post's hue, one of the palette hues, and the glyph PostCard.tsx sets large in the display
+  // face (an operator, a symbol, a pair of letters) when a post has no thumbnail yet.
   cover: { glyph: string; hue: Hue };
   // Search phrases the post is written for, added to the tags in the keywords meta and JSON-LD.
   keywords?: string[];
-  // The link-preview card, a file in public/; without one the site card is used.
+  // The link-preview card (og:image), 1200×630, and the picture on the post's card, 1200×600:
+  // the same scene, drawn for the post by scripts/blog-cards.mjs into public/blog/cards/.
+  // Without an image the site card is used; without a thumbnail the glyph cover is drawn.
   image?: { src: string; alt: string; width: number; height: number };
+  thumbnail?: string;
   body: string;
 };
 
@@ -953,6 +956,13 @@ export const POSTS: Post[] = [
       "pdf.js wasmUrl cMapUrl standardFontDataUrl",
     ],
     cover: { glyph: "JP2", hue: "accent" },
+    image: {
+      src: "/blog/cards/scans-cjk-text-and-colour-profiles.png",
+      alt: "A page with a scanned picture, a line of Japanese text and a colour block, with icons for images, languages and colour beside it.",
+      width: 1200,
+      height: 630,
+    },
+    thumbnail: "/blog/cards/scans-cjk-text-and-colour-profiles.webp",
     body: RELEASE_RESOURCES,
   },
   {
@@ -974,11 +984,12 @@ export const POSTS: Post[] = [
     ],
     cover: { glyph: "0 km", hue: "teal" },
     image: {
-      src: "/blog/edit-pdf-free-card.png",
-      alt: "How to edit a PDF online for free, without uploading it. No upload, no sign-up, no watermark.",
+      src: "/blog/cards/edit-pdf-online-free-without-uploading.png",
+      alt: "A page with one edited line, a crossed-out upload cloud, and the words 0 km travelled by your file.",
       width: 1200,
       height: 630,
     },
+    thumbnail: "/blog/cards/edit-pdf-online-free-without-uploading.webp",
     body: EDIT_FREE,
   },
   {
@@ -999,11 +1010,12 @@ export const POSTS: Post[] = [
     ],
     cover: { glyph: "J.D.", hue: "violet" },
     image: {
-      src: "/blog/sign-pdf-free-card.png",
-      alt: "How to sign a PDF online for free, without uploading it. No upload, no sign-up, no watermark.",
+      src: "/blog/cards/sign-pdf-online-free-without-uploading.png",
+      alt: "A page with a signature drawn above its signature line, and a pen icon.",
       width: 1200,
       height: 630,
     },
+    thumbnail: "/blog/cards/sign-pdf-online-free-without-uploading.webp",
     body: SIGN_FREE,
   },
   {
@@ -1014,6 +1026,13 @@ export const POSTS: Post[] = [
     date: "2026-10-28",
     tags: ["export", "fonts", "pdf-lib"],
     cover: { glyph: "Tj", hue: "accent" },
+    image: {
+      src: "/blog/cards/exporting-real-text.png",
+      alt: "A page with a line of real text beside a font's glyph grid reduced to the few glyphs an edit uses, and the Tj operator.",
+      width: 1200,
+      height: 630,
+    },
+    thumbnail: "/blog/cards/exporting-real-text.webp",
     body: EXPORT,
   },
   {
@@ -1024,6 +1043,13 @@ export const POSTS: Post[] = [
     date: "2026-10-21",
     tags: ["limits", "design"],
     cover: { glyph: "Ø", hue: "coral" },
+    image: {
+      src: "/blog/cards/what-the-editor-leaves-alone.png",
+      alt: "A page whose table and a covered text block are outlined with dashes and marked with a slashed zero, beside a raised-hand icon.",
+      width: 1200,
+      height: 630,
+    },
+    thumbnail: "/blog/cards/what-the-editor-leaves-alone.webp",
     body: LEAVES_ALONE,
   },
   {
@@ -1034,6 +1060,13 @@ export const POSTS: Post[] = [
     date: "2026-10-14",
     tags: ["editor", "fonts"],
     cover: { glyph: "Aa", hue: "violet" },
+    image: {
+      src: "/blog/cards/mixed-face-paragraphs.png",
+      alt: "A paragraph selected as one block, with bold and italic runs inside it, and the letters Aa.",
+      width: 1200,
+      height: 630,
+    },
+    thumbnail: "/blog/cards/mixed-face-paragraphs.webp",
     body: MIXED,
   },
   {
@@ -1044,6 +1077,13 @@ export const POSTS: Post[] = [
     date: "2026-10-07",
     tags: ["fidelity", "layout"],
     cover: { glyph: "Tw", hue: "teal" },
+    image: {
+      src: "/blog/cards/exactly-as-the-page-prints-it.png",
+      alt: "A page with one line outlined exactly at its printed width on its baseline, a ruler along the bottom, and the Tw operator.",
+      width: 1200,
+      height: 630,
+    },
+    thumbnail: "/blog/cards/exactly-as-the-page-prints-it.webp",
     body: EXACT,
   },
   {
@@ -1054,6 +1094,13 @@ export const POSTS: Post[] = [
     date: "2026-09-30",
     tags: ["privacy", "architecture"],
     cover: { glyph: "{ }", hue: "teal" },
+    image: {
+      src: "/blog/cards/nothing-leaves-your-browser.png",
+      alt: "A browser window at editmypdf.dev holding a page whose edit loops back inside it, a crossed-out server beside it, and a pair of braces.",
+      width: 1200,
+      height: 630,
+    },
+    thumbnail: "/blog/cards/nothing-leaves-your-browser.webp",
     body: PRIVACY_POST,
   },
   {
@@ -1064,6 +1111,13 @@ export const POSTS: Post[] = [
     date: "2026-09-16",
     tags: ["fonts", "pdf"],
     cover: { glyph: "¶", hue: "violet" },
+    image: {
+      src: "/blog/cards/why-editing-pdf-text-is-hard.png",
+      alt: "A page where the letters of Revenue grew sit in separate boxes with a kerning value between the words, and a pilcrow.",
+      width: 1200,
+      height: 630,
+    },
+    thumbnail: "/blog/cards/why-editing-pdf-text-is-hard.webp",
     body: WHY_HARD,
   },
 ];

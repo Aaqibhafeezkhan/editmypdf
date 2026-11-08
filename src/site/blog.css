@@ -112,6 +112,16 @@
   border-bottom: 1px solid var(--rule);
 }
 
+/* The drawn picture: the same ground as the fallback cover, shown a little dimmer on dark pages. */
+.post-cover-image {
+  object-fit: cover;
+  background: var(--paper-2);
+}
+
+html[data-appearance="dark"] .post-cover-image {
+  filter: brightness(0.88) saturate(0.95);
+}
+
 .post-cover-ground {
   fill: color-mix(in oklab, var(--tone) 16%, var(--paper-2));
 }

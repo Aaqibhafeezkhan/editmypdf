@@ -1,14 +1,29 @@
 import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { formatDate, type Post } from "../data/posts.ts";
-import { ROUTES } from "../data/product.ts";
+import { publicUrl, ROUTES } from "../data/product.ts";
 import { readingTime } from "./markdown.ts";
 import "./blog.css";
 
-// The cover drawn for a post: a page on a tinted ground with the post's glyph set large in the
-// display face. It is SVG, so it is crisp at any size and takes its colours from the theme.
+// A post's cover: the scene drawn for it by scripts/blog-cards.mjs when it has one (the same
+// picture as its link preview, without the title, which the card sets below), otherwise a page on
+// a tinted ground with the post's glyph set large in the display face. The drawn fallback is SVG,
+// so it is crisp at any size and takes its colours from the theme.
 export function PostCover({ post, className = "post-cover" }: { post: Post; className?: string }) {
   const { glyph, hue } = post.cover;
+  if (post.thumbnail) {
+    return (
+      <img
+        className={`${className} post-cover-image`}
+        src={publicUrl(post.thumbnail)}
+        alt=""
+        width={1200}
+        height={600}
+        loading="lazy"
+        decoding="async"
+      />
+    );
+  }
   // "Aa" shows the mixed faces the post is about.
   const letters =
     glyph === "Aa" ? (
