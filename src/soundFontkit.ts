@@ -17,6 +17,8 @@ type SubsetStream = ReturnType<Subset["encodeStream"]>;
 export const soundFontkit: Fontkit = {
   create(buffer, postscriptName) {
     const font = fontkit.create(buffer, postscriptName);
+    // A font collection has no subsetter; pdf-lib reports that itself when it tries to use it.
+    if (typeof font.createSubset !== "function") return font;
     const createSubset = font.createSubset.bind(font);
     font.createSubset = () => soundSubset(createSubset());
     return font;
@@ -29,8 +31,10 @@ function soundSubset(subset: Subset): Subset {
   return subset;
 }
 
-// pdf-lib reads the subset through "data" events and joins the chunks; the header sits at the
-// start of the first chunk.
+// pdf-lib reads a subset through the "data" events of `subset.encodeStream()` and joins the chunks
+// (CustomFontSubsetEmbedder.serializeFont in pdf-lib 1.17); the header sits at the start of the
+// first chunk. Should a pdf-lib upgrade take the bytes another way, this hook would no longer run,
+// so a CFF subset in an export failing Chrome's sanitizer again is the sign to look here.
 function soundStream(stream: SubsetStream): SubsetStream {
   let first = true;
   const sound: SubsetStream = {
@@ -49,7 +53,7 @@ function soundStream(stream: SubsetStream): SubsetStream {
 }
 
 // A bare CFF begins 01 00 04 <offSize>, and the offset size has to be 1 to 4.
-export function soundCffHeader(bytes: Uint8Array): Uint8Array {
+function soundCffHeader(bytes: Uint8Array): Uint8Array {
   if (bytes.length < 4 || bytes[0] !== 1 || bytes[1] !== 0 || bytes[2] !== 4) return bytes;
   if (bytes[3] >= 1 && bytes[3] <= 4) return bytes;
   const fixed = new Uint8Array(bytes);

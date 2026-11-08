@@ -164,10 +164,10 @@ function searchVerification(content: string | undefined): Plugin {
 // fonts for PDFs that do not embed theirs (standard_fonts/). This copies them from pdfjs-dist into
 // the build under one folder, beside the other hashed assets, named after a hash of their contents,
 // so they cache for ever and move when pdf.js is updated, and serves them from node_modules in
-// development. src/pdf.ts reads the
-// folder's address from the virtual module "virtual:pdfjs-resources" and hands it to pdf.js; nothing
-// is fetched from a CDN, so every request stays on the site's own origin. The files are not imported
-// by any chunk: pdf.js fetches each one the first time a document needs it.
+// development. src/pdf.ts reads the folder's address from the virtual module
+// "virtual:pdfjs-resources" and hands it to pdf.js; nothing is fetched from a CDN, so every request
+// stays on the site's own origin. The files are not imported by any chunk: pdf.js fetches each one
+// the first time a document needs it.
 const PDFJS_RESOURCE_DIRS = ["wasm", "cmaps", "iccs", "standard_fonts"];
 // The QuickJS sandbox runs form scripts in pdf.js's own viewer, which this app does not use.
 const PDFJS_RESOURCE_SKIP = /^quickjs-/;
@@ -205,7 +205,10 @@ function pdfjsResources(): Plugin {
       return id === virtualId ? resolvedId : undefined;
     },
     load(id) {
-      return id === resolvedId ? `export const PDFJS_RESOURCES = ${JSON.stringify(folder)};` : undefined;
+      if (id !== resolvedId) return undefined;
+      // An empty folder would send pdf.js to the wrong addresses without a word, so fail here instead.
+      if (!folder) throw new Error("pdfjs-resources: the resource folder is not known yet; configResolved has not run.");
+      return `export const PDFJS_RESOURCES = ${JSON.stringify(folder)};`;
     },
     configureServer(server) {
       serveUnderBase(server, (name) => {
