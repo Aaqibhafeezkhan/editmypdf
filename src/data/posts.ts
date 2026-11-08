@@ -823,7 +823,138 @@ The editor runs in mobile Safari and Chrome and understands touch for drawing, d
 The document is already on your computer. Your signature is already on your computer. There's no good reason for either to take a trip to somebody else's. [Open Edit My PDF](/app), sign, download, done. :clap:
 `;
 
+const RELEASE_RESOURCES = `
+Edit My PDF now opens three kinds of PDF it used to show only in part: scanned documents, pages with Chinese, Japanese or Korean text, and files that carry their own colour profile. Nothing about the privacy promise changed to make this happen. Every file the editor needs still comes from our own site, and nothing you open leaves your browser. :sparkles:
+
+## What you will notice
+
+::: cards
+- {{image}} **Scans show their pages.** Scanned PDFs often store each page as a JPEG 2000 or JBIG2 image, the formats of fax machines and document scanners. Those pages used to come up blank. They now appear.
+- {{languages}} **Chinese, Japanese and Korean text appears.** A PDF can set these languages in a font it does not include, trusting the reader to know the character map. The editor now has the maps, so the text shows.
+- {{palette}} **Colours follow the file.** Some PDFs include an ICC profile, a note that says exactly what their colours mean. The editor now honours it instead of taking a close guess.
+- {{type}} **Bullets and symbols use the right face.** Text set in the classic Symbol or ZapfDingbats fonts, common for bullet points in older documents, draws with a proper stand-in.
+:::
+
+You do not have to do anything. Open a PDF as usual, and if it is one of these kinds, it simply looks right.
+
+<figure>
+<div class="bp-dg" aria-hidden="true">
+<div class="bp-pg"><div class="bp-ba"><div class="bp-mini-page bp-narrow"><i class="bp-ln bp-w6 bp-head"></i><span class="bp-pic bp-missing"></span><i class="bp-ln bp-w9"></i><i class="bp-ln bp-w7"></i></div><span class="bp-dg-arrow">→</span><div class="bp-mini-page bp-narrow"><i class="bp-ln bp-w6 bp-head"></i><span class="bp-pic"></span><i class="bp-ln bp-w9"></i><i class="bp-ln bp-w7"></i></div></div><span class="bp-dg-label">A scanned page: blank before, the page itself now</span></div>
+<div class="bp-pg"><div class="bp-ba"><div class="bp-mini-page bp-narrow"><i class="bp-ln bp-w6 bp-head"></i><i class="bp-ln bp-w9"></i><i class="bp-ln bp-w8 bp-ghost"></i><i class="bp-ln bp-w7"></i></div><span class="bp-dg-arrow">→</span><div class="bp-mini-page bp-narrow"><i class="bp-ln bp-w6 bp-head"></i><i class="bp-ln bp-w9"></i><span class="bp-text">日本語テスト</span><i class="bp-ln bp-w7"></i></div></div><span class="bp-dg-label">Japanese text: a gap before, the words now</span></div>
+<div class="bp-pg"><div class="bp-ba"><div class="bp-mini-page bp-narrow"><i class="bp-ln bp-w6 bp-head"></i><span class="bp-swatch" style="--sw: #d98a6a"></span><i class="bp-ln bp-w9"></i><i class="bp-ln bp-w6"></i></div><span class="bp-dg-arrow">→</span><div class="bp-mini-page bp-narrow"><i class="bp-ln bp-w6 bp-head"></i><span class="bp-swatch" style="--sw: #c8102e"></span><i class="bp-ln bp-w9"></i><i class="bp-ln bp-w6"></i></div></div><span class="bp-dg-label">A colour profile: a close guess before, the file's own colour now</span></div>
+</div>
+<figcaption>The three kinds of page this release changes, before and after. The documents themselves are untouched; the editor simply reads them in full.</figcaption>
+</figure>
+
+## How a PDF reader works, in plain words
+
+Edit My PDF reads PDF files with **pdf.js**, the open-source reader built into Firefox. pdf.js comes in two parts. There is the engine, which the editor has always carried. And there is a set of helper files the engine loads only when a document needs them:
+
+- two **picture decoders**, for JPEG 2000 and JBIG2 images, compiled to WebAssembly;
+- a **colour engine**, also WebAssembly, and a profile that describes printing inks;
+- **168 character maps** for Chinese, Japanese and Korean fonts;
+- **fourteen stand-in fonts** for PDFs that name a font without including it.
+
+::: plain :bulb: WebAssembly, in one sentence
+**WebAssembly** is a way to run programs written in languages like C inside a browser tab, fast and safely. The JPEG 2000 decoder is ordinary C code, compiled once into a file that any browser can run.
+:::
+
+The engine has to be told where those helper files live. Until now the editor shipped the engine alone, so a scanned page had no decoder to call on, a Japanese line had no map, and the colour engine stayed switched off. As of this release the helper files travel with the app, and the engine knows exactly where to find them.
+
+## Why we did not point at someone else's server
+
+The quick way to add these files takes one line: point pdf.js at a public CDN, a server that hosts them for anyone who asks. Most examples you will find online do exactly that.
+
+We did not, because it would quietly break the promise this editor is built on. Edit My PDF makes no request to anybody else's server while you work. A CDN would learn that someone, at some address, opened a PDF with a Japanese font at a certain time. That is not your document, but it is not nothing, and it is exactly the kind of thing we said we would never send. We also want the editor to work offline one day, which means every file it needs has to be part of the app itself. :lock:
+
+<figure>
+<div class="bp-dg bp-flow" aria-hidden="true">
+${tile("file-text", "Your PDF", "opened from your disk")}
+<span class="bp-flow-arrow">→</span>
+${tile("cpu", "Your browser tab", "pdf.js reads it with helper files that ship with the app")}
+<span class="bp-flow-arrow">→</span>
+${tile("eye", "Your screen", "scans, Asian-language text and colours as intended")}
+${tile("cloud-off", "A public CDN", "never asked: the helper files come from editmypdf.dev", "bp-flow-tile bp-off")}
+</div>
+<figcaption>Where a document goes when you open it. The new helper files live with the app, so the path is the same as before: your disk, your tab, your screen.</figcaption>
+</figure>
+
+## How the helper files ship with the app
+
+The work happens when the site is built, not when you use it. Every build:
+
+::: steps
+- **Copies the helper files out of pdf.js.** The decoders, the colour engine and its ink profile, the 168 character maps and the 14 stand-in fonts come straight from the pdf.js package we already depend on.
+- **Puts them in a folder with a fingerprint in its name.** The folder's name ends in a short code worked out from the files' contents. When pdf.js is updated, the contents change, the code changes, and no browser can confuse the old files with the new.
+- **Tells the engine the address.** Whenever the editor opens a document, it hands pdf.js the folder's address on our own site. Every request stays on editmypdf.dev.
+:::
+
+The folder weighs about 3.5 megabytes, but almost nobody downloads it. pdf.js fetches a file only the first time a document needs it. A PDF with its own fonts embedded, ordinary JPEG pictures and screen colours fetches nothing at all. The app you load grew by 181 bytes, the size of the note that says where the folder is.
+
+::: plain :bulb: Why put a fingerprint in the name?
+Browsers keep copies of files they have downloaded so they do not have to fetch them again. That is great until a file changes and the browser keeps using its old copy. A fingerprint of the contents in the folder's name solves it: a changed file has a changed address, and the old copy is never asked for again.
+:::
+
+There is also a new rule in our code checker. The editor opens PDFs through exactly one door, and the checker refuses any code that tries to go around it, so every part of the app, down to the little thumbnails on the documents screen, gets the same helper files.
+
+## How we tested it
+
+Most PDFs never touch these files, so testing with ordinary documents proves nothing. We built four tiny PDFs, each about a kilobyte, each asking one question:
+
+- a **gradient picture** saved as JPEG 2000;
+- **black shapes** saved as JBIG2;
+- a **colour profile with red and blue swapped**, so a square that is red in the file turns blue only if the colour engine is really running;
+- a line of **Japanese text** in a font the file does not include, plus bullet points in the Symbol font.
+
+Before this release: blank, blank, red, missing. Now: gradient, shapes, blue, 日本語テスト. The browser's console, which used to list a warning for each, is quiet. :target:
+
+## Also fixed: a one-byte font bug in exports
+
+While checking the Symbol bullets we found something older. When you edit text and download the result, the editor writes a slimmed-down copy of each font into your new PDF, holding just the characters your edit needs. For one family of fonts, the kind built on compact outlines, the library that does the slimming was writing a wrong value into a single byte of the font's header.
+
+Most PDF readers never look at that byte. Browsers do: Chrome and Firefox run every font through a checker called the OpenType Sanitizer before drawing with it, and the checker refused those fonts. Edits in such fonts opened in a fallback face in any browser-based reader, this editor included.
+
+<figure>
+<div class="bp-dg" aria-hidden="true">
+<div class="bp-pg"><div class="bp-glyph-grid bp-bytes"><b>01</b><b>00</b><b>04</b><b class="bp-bad">16</b></div><span class="bp-dg-label">Before: the fourth byte of an exported font's header, which must be 1 to 4, held a number that was neither</span></div>
+<span class="bp-dg-arrow">→</span>
+<div class="bp-pg"><div class="bp-glyph-grid bp-bytes"><b>01</b><b>00</b><b>04</b><b class="bp-on">04</b></div><span class="bp-dg-label">Now: the editor sets it to 4 on the way out, and browsers accept the font</span></div>
+</div>
+<figcaption>The whole bug, in four bytes. Everything else about the font was fine.</figcaption>
+</figure>
+
+::: good {{check}} Fixed in the same release
+The editor now checks that byte on the way out and sets it to a valid value. A test with an ordinary font of that kind, edited and exported, confirmed the problem was general and that the fix clears it: the exported fonts pass the sanitizer, load in the browser and open in the editor with the right glyphs.
+:::
+
+## What this means for your documents
+
+Scans from a copier, forms from a government site, a paper in Japanese or Korean, a brochure with print-ready colours: these are everyday PDFs, and they now open as their makers intended. The helper files are part of the app, so they will keep working when the app runs offline, which is where we are heading next.
+
+If you read code, the build step that ships the helper files is in \`vite.config.ts\`, the one door is \`openDocument\` in \`src/pdf.ts\`, and the byte repair is \`src/soundFontkit.ts\`.
+`;
+
 export const POSTS: Post[] = [
+  {
+    slug: "scans-cjk-text-and-colour-profiles",
+    title: "Now open as intended: scans, Chinese, Japanese and Korean text, and colour profiles",
+    description:
+      "Edit My PDF now shows scanned pages, text in Chinese, Japanese and Korean fonts, and ICC colour exactly as the file intends, and still no request leaves our site. What changed, how it works, and the one-byte font bug fixed along the way.",
+    date: "2026-11-09",
+    tags: ["release", "pdf", "privacy"],
+    keywords: [
+      "pdf editor scanned pdf blank page",
+      "jpeg 2000 pdf",
+      "jbig2 pdf",
+      "pdf japanese text missing",
+      "pdf cjk font",
+      "icc colour profile pdf",
+      "private pdf editor no cdn",
+      "pdf.js wasmUrl cMapUrl standardFontDataUrl",
+    ],
+    cover: { glyph: "JP2", hue: "accent" },
+    body: RELEASE_RESOURCES,
+  },
   {
     slug: "edit-pdf-online-free-without-uploading",
     title: "How to edit a PDF online for free, without uploading it",
